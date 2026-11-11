@@ -1,5 +1,7 @@
 package com.keevo.identity.api;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -27,4 +29,11 @@ public interface OwnerRecipientResolver {
      * @return the primary active owner's phone in canonical {@code +<digits>} form, or empty
      */
     Optional<String> resolveOwnerWhatsAppPhone(String tenantSchemaName);
+
+    /**
+     * Story 19.11b — the same rule for many tenants (platform screens): schema name → canonical phone; a schema
+     * without a recipient is absent from the map; null / blank names are ignored. Implementations answer in ONE
+     * query whatever the number of tenants (abstract on purpose: no per-schema fallback can slip back in).
+     */
+    Map<String, String> resolveOwnerWhatsAppPhones(Collection<String> tenantSchemaNames);
 }

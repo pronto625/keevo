@@ -14,9 +14,12 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * UserRepositoryAdapter — Adapter bridging the domain {@link UserRepository} port
@@ -60,6 +63,19 @@ public class UserRepositoryAdapter implements UserRepository {
               AND u.is_active = true
             ORDER BY (u.phone_number ~ '^\\+[0-9]+$') IS TRUE DESC, m.created_at ASC, u.id ASC
             LIMIT 1
+            """;
+    /** Story 19.11b — {@link #OWNER_BY_SCHEMA_SQL} for a set of schemas, one row (the first in that order) each. */
+    private static final String PRIMARY_OWNERS_BY_SCHEMAS_SQL = """
+            SELECT DISTINCT ON (t.schema_name) t.schema_name AS tenant_schema,
+                   u.id, u.phone_number, u.password_hash, u.role, u.is_active,
+                   u.created_at, u.failed_attempts, u.locked_until,
+                   u.email, u.username, u.first_name, u.last_name, u.email_verified_at, u.phone_verified_at
+            FROM public.users u
+            JOIN public.user_tenant_memberships m ON u.id = m.user_id
+            JOIN public.tenants t ON t.id = m.tenant_id
+            WHERE t.schema_name = ANY (string_to_array(?, ',')) AND m.role = 'OWNER' AND m.is_active = true
+              AND u.is_active = true
+            ORDER BY t.schema_name, (u.phone_number ~ '^\\+[0-9]+$') IS TRUE DESC, m.created_at ASC, u.id ASC
             """;
     private static final String OWNERS_BY_SCHEMA_SQL = """
             SELECT u.id, u.phone_number, u.password_hash, u.role, u.is_active,
@@ -224,6 +240,22 @@ public class UserRepositoryAdapter implements UserRepository {
                 (rs, rowNum) -> mapUserRow(rs),
                 schemaName);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    @Override
+    public Map<String, User> findPrimaryOwnersByTenantSchemaNames(Collection<String> schemaNames) {
+        // Schema names never contain a comma (kv_ + [a-z0-9]); anything else cannot match a tenant anyway.
+        String names = schemaNames == null ? "" : schemaNames.stream()
+                .filter(n -> n != null && !n.isBlank() && n.indexOf(',') < 0)
+                .distinct()
+                .collect(Collectors.joining(","));
+        if (names.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, User> owners = new HashMap<>();
+        jdbcTemplate.query(PRIMARY_OWNERS_BY_SCHEMAS_SQL,
+                rs -> { owners.put(rs.getString("tenant_schema"), mapUserRow(rs)); }, names);
+        return owners;
     }
 
     @Override

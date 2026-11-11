@@ -23,11 +23,15 @@ import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.keevo.admin.crosstenant.CrossTenantSql;
 import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
+import org.springframework.jdbc.core.RowMapper;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Bucket;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Totals;
 
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.*;
@@ -49,8 +53,17 @@ class AdminOperationsServiceTest {
 
     @Mock JdbcTemplate jdbc;
     @Mock PlatformRevenuePort revenue;
+    @Mock CrossTenantSql crossTenant;
 
     AdminOperationsService service;
+
+    /**
+     * 19.11b: the per-tenant figures come from {@link CrossTenantSql#query} (mocked): it answers, for each tenant it
+     * receives, the row recorded by {@link #stubRows} for its schema (none for a schema in {@link #brokenSchemas},
+     * as the real retry skips a failing tenant). The SQL itself runs on PostgreSQL in the integration test.
+     */
+    private final Map<String, Map<String, Object>> figuresBySchema = new HashMap<>();
+    private final Set<String> brokenSchemas = new HashSet<>();
 
     /** 20.13: per-schema revenue answered by the port (recorded by {@link #stubRows} from gmv / order_count rows). */
     private final Map<String, Totals> revenueBySchema = new HashMap<>();
@@ -58,8 +71,24 @@ class AdminOperationsServiceTest {
     private RuntimeException revenueFailure;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
-        service = new AdminOperationsService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC), revenue);
+        service = new AdminOperationsService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC), revenue, crossTenant);
+        lenient().when(crossTenant.withPresence(anyList())).thenAnswer(inv -> ((List<TenantBranch>) inv.getArgument(0))
+                .stream().map(t -> t.withTables(EnumSet.allOf(TenantTable.class))).toList());
+        lenient().doAnswer(inv -> {
+            List<TenantBranch> tenants = inv.getArgument(0);
+            RowMapper<?> mapper = inv.getArgument(3);
+            List<Object> out = new ArrayList<>();
+            for (TenantBranch t : tenants) {
+                Map<String, Object> row = figuresBySchema.get(t.schemaName());
+                if (row == null || brokenSchemas.contains(t.schemaName())) continue;
+                Map<String, Object> withId = new HashMap<>(row);
+                withId.put("tenant_id", t.id());
+                out.add(mapper.mapRow(resultSet(withId), out.size()));
+            }
+            return out;
+        }).when(crossTenant).query(anyList(), any(), any(), any());
         lenient().when(revenue.totals(any(), any(), any(), any())).thenAnswer(inv -> {
             if (revenueFailure != null) throw revenueFailure;
             List<TenantBranch> tenants = inv.getArgument(0);
@@ -91,7 +120,7 @@ class AdminOperationsServiceTest {
     @DisplayName("TODAY uses the WAT calendar day even when UTC is still the previous day")
     void windowToday_usesWatCalendarDay() {
         service = new AdminOperationsService(jdbc,
-                Clock.fixed(Instant.parse("2026-10-12T23:30:00Z"), ZoneOffset.UTC), revenue); // 00:30 WAT on the 13th
+                Clock.fixed(Instant.parse("2026-10-12T23:30:00Z"), ZoneOffset.UTC), revenue, crossTenant); // 00:30 WAT on the 13th
 
         AdminOperationsService.Window w = service.resolveWindow(new OperationsPeriodQuery("TODAY", null, null));
 
@@ -214,7 +243,7 @@ class AdminOperationsServiceTest {
     @DisplayName("connection / resource failures are rethrown (endpoint fails, no all-zero 200)")
     void resourceFailures_areRethrown(RuntimeException failure) {
         stubTenants(tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null));
-        lenient().when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class))).thenThrow(failure);
+        lenient().doThrow(failure).when(crossTenant).query(anyList(), any(), any(), any());
         revenueFailure = failure;
 
         assertThatThrownBy(() -> service.getOverview(new OperationsPeriodQuery("7D", null, null))).isSameAs(failure);
@@ -232,9 +261,23 @@ class AdminOperationsServiceTest {
 
         service.listTenantActivity(new OperationsPeriodQuery("7D", null, null), 0, 25);
 
-        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(jdbc).queryForList(sql.capture(), any(Object[].class));
-        assertThat(sql.getValue()).contains("kv_aaaaaa.stores WHERE is_active = true AND type = 'STORE'");
+        assertThat(branchSql(FULL)).contains("kv_aaaaaa.stores WHERE is_active = true AND type = 'STORE'")
+                .contains("kv_aaaaaa.subscriptions ORDER BY created_at DESC LIMIT 1")
+                .contains("kv_aaaaaa.sales").contains("kv_aaaaaa.audit_log").contains("kv_aaaaaa.sync_operations_log");
+    }
+
+    @Test
+    @DisplayName("19.11b: a missing module table reads NULL / 0 instead of failing the tenant")
+    void figures_missingTablesAreNull() {
+        stubTenants(tenant("t1", "A", "kv_aaaaaa", "FREE", null));
+
+        service.listInactiveTenants();
+
+        String sql = branchSql(new TenantBranch(FULL.id(), "A", "kv_aaaaaa", "ACTIVE", null,
+                EnumSet.of(TenantTable.STORES)));
+        assertThat(sql).doesNotContain(".sales").doesNotContain("audit_log").doesNotContain("sync_operations_log")
+                .doesNotContain("subscriptions").contains("CAST(NULL AS text)");
+        assertThat(outer("U")).contains("WHERE last_activity_at IS NULL OR last_activity_at < CAST('2026-09-29T10:00Z'");
     }
 
     @Test
@@ -337,7 +380,7 @@ class AdminOperationsServiceTest {
     }
 
     @Test
-    @DisplayName("tenant activity paginates 25 rows per page by default")
+    @DisplayName("tenant activity paginates 25 rows per page by default; only the page tenants are read")
     void tenantActivity_paginates() {
         List<Map<String, Object>> tenants = new ArrayList<>();
         for (int i = 0; i < 30; i++) {
@@ -354,6 +397,7 @@ class AdminOperationsServiceTest {
         assertThat(page1.totalElements()).isEqualTo(30);
         assertThat(page1.totalPages()).isEqualTo(2);
         assertThat(page1.number()).isEqualTo(1);
+        assertThat(queriedTenants()).containsExactly("id25", "id26", "id27", "id28", "id29");
     }
 
     @Test
@@ -380,18 +424,23 @@ class AdminOperationsServiceTest {
     }
 
     @Test
-    @DisplayName("tenant activity skips a tenant whose schema query fails")
-    void tenantActivity_skipsBrokenTenant() {
+    @DisplayName("19.11b: a tenant whose schema could not be read stays listed, with its public plan and no figures")
+    void tenantActivity_keepsUnreadableTenant() {
         stubTenants(
-                tenant("t1", "A", "kv_aaaaaa", "FREE", null),
+                tenant("t1", "A", "kv_aaaaaa", "PREMIUM", null),
                 tenant("t2", "B", "kv_bbbbbb", "FREE", null));
-        when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class)))
-                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("relation does not exist")));
+        stubRows("kv_aaaaaa.sales", activityRow(0L, 0L, null, null, 1L, "FREE"));
+        brokenSchemas.add("kv_aaaaaa");
         stubRows("kv_bbbbbb.sales", activityRow(10L, 1L, null, null, 1L, "FREE"));
 
         TenantActivityPage page = service.listTenantActivity(new OperationsPeriodQuery("7D", null, null), 0, 25);
 
-        assertThat(page.content()).extracting(TenantActivity::tenantId).containsExactly("t2");
+        assertThat(page.content()).extracting(TenantActivity::tenantId).containsExactly("t2", "t1");
+        assertThat(page.totalElements()).isEqualTo(2);
+        TenantActivity unreadable = page.content().get(1);
+        assertThat(unreadable.plan()).isEqualTo("PREMIUM");
+        assertThat(unreadable.storeCount()).isZero();
+        assertThat(unreadable.lastActivityAt()).isNull();
     }
 
     // ── listInactiveTenants ───────────────────────────────────────────────────
@@ -443,8 +492,8 @@ class AdminOperationsServiceTest {
         stubTenants(
                 tenant("t1", "A", "kv_aaaaaa", "FREE", null),
                 tenant("t2", "B", "kv_bbbbbb", "FREE", null));
-        when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class)))
-                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("relation does not exist")));
+        stubRows("kv_aaaaaa.sales", inactiveRow(null, null, "FREE"));
+        brokenSchemas.add("kv_aaaaaa");
         stubRows("kv_bbbbbb.sales", inactiveRow(null, null, "FREE"));
 
         assertThat(service.listInactiveTenants()).extracting(InactiveTenant::tenantId).containsExactly("t2");
@@ -461,9 +510,50 @@ class AdminOperationsServiceTest {
         when(jdbc.queryForList(contains("FROM public.tenants"))).thenReturn(List.of(tenants));
     }
 
+    private static final TenantBranch FULL = new TenantBranch("11111111-1111-1111-1111-111111111111", "A",
+            "kv_aaaaaa", "ACTIVE", null, EnumSet.allOf(TenantTable.class));
+
+    /** The branch SQL the last cross-tenant statement would write for {@code tenant}. */
+    private String branchSql(TenantBranch tenant) {
+        ArgumentCaptor<CrossTenantSql.BranchSql> writer = ArgumentCaptor.forClass(CrossTenantSql.BranchSql.class);
+        verify(crossTenant, atLeastOnce()).query(anyList(), writer.capture(), any(), any());
+        return writer.getValue().sql(tenant, new ArrayList<>());
+    }
+
+    @SuppressWarnings("unchecked")
+    private String outer(String union) {
+        ArgumentCaptor<java.util.function.UnaryOperator<String>> outer =
+                ArgumentCaptor.forClass(java.util.function.UnaryOperator.class);
+        verify(crossTenant, atLeastOnce()).query(anyList(), any(), outer.capture(), any());
+        return outer.getValue().apply(union);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> queriedTenants() {
+        ArgumentCaptor<List<TenantBranch>> tenants = ArgumentCaptor.forClass(List.class);
+        verify(crossTenant, atLeastOnce()).query(tenants.capture(), any(), any(), any());
+        return tenants.getValue().stream().map(TenantBranch::id).toList();
+    }
+
+    private static ResultSet resultSet(Map<String, Object> row) throws SQLException {
+        ResultSet rs = mock(ResultSet.class);
+        lenient().when(rs.getString(anyString())).thenAnswer(i -> {
+            Object v = row.get(i.<String>getArgument(0));
+            return v == null ? null : v.toString();
+        });
+        lenient().when(rs.getLong(anyString())).thenAnswer(i -> {
+            Object v = row.get(i.<String>getArgument(0));
+            return v instanceof Number n ? n.longValue() : 0L;
+        });
+        lenient().when(rs.getTimestamp(anyString())).thenAnswer(i -> (Timestamp) row.get(i.<String>getArgument(0)));
+        return rs;
+    }
+
     @SafeVarargs
     private void stubRows(String sqlFragment, Map<String, Object>... rows) {
-        lenient().when(jdbc.queryForList(contains(sqlFragment), any(Object[].class))).thenReturn(List.of(rows));
+        if (sqlFragment.endsWith(".sales") && rows.length == 1) {
+            figuresBySchema.put(sqlFragment.substring(0, sqlFragment.length() - ".sales".length()), rows[0]);
+        }
         if (sqlFragment.endsWith(".sales") && rows.length == 1 && rows[0].containsKey("gmv")) {
             revenueBySchema.put(sqlFragment.substring(0, sqlFragment.length() - ".sales".length()),
                     new Totals(((Number) rows[0].get("gmv")).longValue(),

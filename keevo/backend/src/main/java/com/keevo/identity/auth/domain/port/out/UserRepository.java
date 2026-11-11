@@ -8,6 +8,7 @@ import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -94,6 +95,16 @@ public interface UserRepository {
      * Used by transfer notification fan-out where multiple owners can exist.
      */
     List<User> findOwnersByTenantSchemaName(String schemaName);
+
+    /**
+     * Story 19.11b — {@link #findOwnerByTenantSchemaName(String)} for many tenants in ONE query: the primary active
+     * owner of each given schema (same rule and order), keyed by schema name; schemas without one are absent.
+     *
+     * <p>Do not call this to pick WhatsApp recipients: use
+     * {@link OwnerRecipientResolver#resolveOwnerWhatsAppPhones(Collection)} (enforced by
+     * {@code OwnerRecipientResolutionArchTest}).
+     */
+    Map<String, User> findPrimaryOwnersByTenantSchemaNames(Collection<String> schemaNames);
 
     /**
      * Story 1.7 — Two-step login: load all active memberships for a user together with

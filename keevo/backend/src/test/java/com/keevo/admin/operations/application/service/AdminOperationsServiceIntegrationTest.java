@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Story 9.7 — the SQL of {@link AdminOperationsService} on a real PostgreSQL (Flyway-migrated public +
  * provisioned tenant schemas): COMPLETED-only GMV, COALESCE(occurred_at, created_at), WAT day grouping,
- * MAX(sale, audit) last activity, plan from the tenant subscriptions table, broken schema skipped.
+ * MAX(sale, audit) last activity, plan from the tenant subscriptions table, unreadable schema without figures.
  *
  * <p>Runs outside the test transaction ({@code NOT_SUPPORTED}), as in production. Other test classes may
  * share the database, so assertions target the tenants seeded here.
@@ -120,7 +120,11 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
                 jdbc.queryForObject("SELECT COUNT(*) FROM \"" + activeSchema + "\".stores WHERE is_active AND type = 'STORE'",
                         Integer.class));
         assertThat(active.storeCount()).isGreaterThan(0);
-        assertThat(find(rows, brokenTenant)).isEmpty();
+        // 19.11b: a tenant whose schema cannot be read stays listed (it is still an account), with no figures.
+        TenantActivity broken = find(rows, brokenTenant).orElseThrow();
+        assertThat(broken.storeCount()).isZero();
+        assertThat(broken.lastActivityAt()).isNull();
+        assertThat(broken.plan()).isEqualTo("FREE");
     }
 
     @Test

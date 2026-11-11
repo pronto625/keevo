@@ -30,7 +30,34 @@ public enum TenantTable {
     PRODUCT_DETAIL("products", "description", "buy_price", "minimum_threshold", "created_at"),
     EXPENSES("expenses", "id", "store_id", "category", "amount", "expense_date", "label", "note", "payment_method",
             "created_at", "archived_at"),
-    EXPENSE_DETAIL("expenses", "updated_at", "created_by");
+    EXPENSE_DETAIL("expenses", "updated_at", "created_by"),
+    // Story 19.11b — the tables read by the analytics / operations / admin catalogue screens (optional modules
+    // included). Each spec lists only the columns its branch reads, so an older schema missing an unrelated column
+    // keeps its figures.
+    /** Sales as read by the activity / overview / top stores figures. */
+    SALES_CORE("sales", "store_id", "status", "occurred_at", "created_at", "total_amount"),
+    /** The products table itself (admin catalogue summary total). */
+    PRODUCTS_TABLE("products", "id"),
+    /** Products count (overview: non-archived). */
+    PRODUCTS_ARCHIVED("products", "archived"),
+    /** Admin catalogue list rows. */
+    PRODUCTS_LIST("products", "id", "name", "price", "stock_quantity", "status", "updated_at"),
+    /** Admin catalogue: the category join. */
+    PRODUCTS_CATEGORY("products", "category_id"),
+    /** Admin catalogue summary: active / draft counts. */
+    PRODUCTS_STATUS("products", "status", "archived"),
+    /** Admin catalogue summary: low / out of stock counts (17.12). */
+    PRODUCTS_STOCK("products", "stock_quantity", "track_stock"),
+    /** Admin catalogue summary: created this week. */
+    PRODUCTS_CREATED("products", "created_at"),
+    INVENTORY_SESSIONS("inventory_sessions", "started_at"),
+    STOCK_TRANSFERS("stock_transfers", "occurred_at"),
+    REPORTS("reports", "delivery_status", "last_attempt_at", "created_at"),
+    TENANT_PREFERENCES("tenant_preferences", "stock_alert_enabled"),
+    NOTIFICATION_COOLDOWNS("notification_cooldowns", "cooldown_type", "last_sent_at"),
+    SYNC_OPERATIONS_LOG("sync_operations_log", "processed_at"),
+    SUBSCRIPTIONS("subscriptions", "plan_type", "created_at"),
+    AUDIT_LOG("audit_log", "user_id", "source", "occurred_at");
 
     private final String table;
     private final List<String> columns;

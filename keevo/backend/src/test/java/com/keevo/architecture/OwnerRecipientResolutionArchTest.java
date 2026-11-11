@@ -27,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class OwnerRecipientResolutionArchTest {
 
     private static final String METHOD = "findOwnerByTenantSchemaName";
+    /** Story 19.11b — the batch form of the same lookup is guarded the same way. */
+    private static final java.util.Set<String> METHODS = java.util.Set.of(METHOD, "findPrimaryOwnersByTenantSchemaNames");
 
     /** Any access (call, method reference) to findOwnerByTenantSchemaName on a UserRepository subtype. */
     private static final DescribedPredicate<JavaAccess<?>> FIND_OWNER_ACCESS =
@@ -34,7 +36,7 @@ class OwnerRecipientResolutionArchTest {
                 @Override
                 public boolean test(JavaAccess<?> access) {
                     AccessTarget target = access.getTarget();
-                    return METHOD.equals(target.getName())
+                    return METHODS.contains(target.getName())
                             && target.getOwner().isAssignableTo(UserRepository.class);
                 }
             };
@@ -68,6 +70,20 @@ class OwnerRecipientResolutionArchTest {
         JavaClasses fixture = new ClassFileImporter().importClasses(AdapterReceiverFixture.class);
 
         assertThatThrownBy(() -> rule().check(fixture)).isInstanceOf(AssertionError.class);
+    }
+
+    @Test
+    void ruleCatchesBatchLookup() {
+        JavaClasses fixture = new ClassFileImporter().importClasses(BatchLookupFixture.class);
+
+        assertThatThrownBy(() -> rule().check(fixture)).isInstanceOf(AssertionError.class);
+    }
+
+    @SuppressWarnings("unused")
+    static class BatchLookupFixture {
+        Object lookup(UserRepository repository) {
+            return repository.findPrimaryOwnersByTenantSchemaNames(java.util.List.of("kv_a"));
+        }
     }
 
     @SuppressWarnings("unused")

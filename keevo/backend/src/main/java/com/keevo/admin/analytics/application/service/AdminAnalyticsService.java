@@ -2,7 +2,9 @@ package com.keevo.admin.analytics.application.service;
 
 import com.keevo.admin.analytics.domain.model.*;
 import com.keevo.admin.analytics.domain.port.in.*;
+import com.keevo.admin.crosstenant.CrossTenantSql;
 import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.domain.exception.DomainException;
@@ -10,10 +12,6 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.RecoverableDataAccessException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -25,7 +23,6 @@ import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.*;
-import java.util.function.Supplier;
 
 /**
  * AdminAnalyticsService — platform usage analytics for the super admin (Story 9-4, FR80).
@@ -47,10 +44,13 @@ import java.util.function.Supplier;
  *   <li>Geography = the owner phone's calling code (V1 proxy: stores have no structured city).</li>
  * </ul>
  *
- * <p>Cross-schema reads use raw JdbcTemplate with schema-qualified SQL; schema names come from
- * {@code public.tenants.schema_name} and are gated by {@link TenantSchema#isValid} before interpolation.
- * Not {@code @Transactional}: a tenant whose query fails on its own schema / SQL / data error is skipped
- * without aborting the others; connection / resource failures are rethrown (9-7 rule).
+ * <p>Cross-schema reads (Story 19.11b, FUS-NFR11): never one statement per tenant. The tenants come from one
+ * {@code public.tenants} query, their table presence from one catalogue query ({@link CrossTenantSql#withPresence}),
+ * and the per-tenant figures from chunked {@code UNION ALL} statements ({@link CrossTenantSql#query}, 100 tenants
+ * per statement) aggregated or top-K-limited in SQL; a table absent from a schema (module never used) is never a
+ * branch / reads as 0 or false. Schema names are gated by {@link TenantSchema} before interpolation. Not
+ * {@code @Transactional}: a chunk failing on a tenant's own schema / SQL / data error is retried tenant by tenant
+ * and only that tenant is skipped; connection / resource failures are rethrown (9-7 rule).
  */
 @Service
 public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGrowthUseCase, GetGeographyUseCase,
@@ -107,13 +107,15 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
     private final Clock clock;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final PlatformRevenuePort revenue;
+    private final CrossTenantSql crossTenant;
 
     public AdminAnalyticsService(JdbcTemplate jdbc, Clock clock, OwnerRecipientResolver ownerRecipientResolver,
-                                 PlatformRevenuePort revenue) {
+                                 PlatformRevenuePort revenue, CrossTenantSql crossTenant) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.revenue = revenue;
+        this.crossTenant = crossTenant;
     }
 
     // ── Overview ──────────────────────────────────────────────────────────────
@@ -130,30 +132,45 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         List<TenantRef> tenants = current(loadTenants());
         OffsetDateTime activeSince = startOf(windowStart);
         OffsetDateTime tomorrow = startOf(today.plusDays(1));
+        // 19.11b: table presence once, then the store / product counts of every tenant in chunked unions.
+        List<TenantBranch> present = crossTenant.withPresence(branches(queryable(tenants)));
         long stores = 0, activeStores = 0, products = 0;
-        List<TenantRef> queried = new ArrayList<>();
-        for (TenantRef tenant : queryable(tenants)) {
-            String s = tenant.schemaName();
-            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // queryable() filters; re-checked at use
-            Map<String, Object> row = safeSingleRow(tenant,
-                    "SELECT (SELECT COUNT(*) FROM " + s + ".stores WHERE is_active = true AND type = 'STORE') AS store_count, "
-                    + "(SELECT COUNT(*) FROM " + s + ".stores st WHERE st.is_active = true AND st.type = 'STORE' "
-                    + "AND EXISTS (SELECT 1 FROM " + s + ".sales sa WHERE sa.store_id = st.id AND sa.status = 'COMPLETED' "
-                    + "AND COALESCE(sa.occurred_at, sa.created_at) >= ? "
-                    + "AND COALESCE(sa.occurred_at, sa.created_at) < ?)) AS active_store_count, "
-                    + "(SELECT COUNT(*) FROM " + s + ".products WHERE archived = false) AS product_count",
-                    activeSince, tomorrow);
-            if (row == null) continue;
-            queried.add(tenant);
-            stores += asLong(row.get("store_count"));
-            activeStores += asLong(row.get("active_store_count"));
-            products += asLong(row.get("product_count"));
+        for (long[] chunk : crossTenant.query(
+                present.stream().filter(t -> t.has(TenantTable.STORES) || t.has(TenantTable.PRODUCTS_ARCHIVED)).toList(),
+                (tenant, params) -> overviewBranch(tenant, params, activeSince, tomorrow),
+                union -> "SELECT COALESCE(SUM(store_count), 0), COALESCE(SUM(active_store_count), 0), "
+                        + "COALESCE(SUM(product_count), 0) FROM (" + union + ") u",
+                (rs, n) -> new long[]{rs.getLong(1), rs.getLong(2), rs.getLong(3)})) {
+            stores += chunk[0];
+            activeStores += chunk[1];
+            products += chunk[2];
         }
-        // 20.13 (R4): GMV and document count from the single revenue source — one statement for all tenants.
-        PlatformRevenuePort.Totals all = revenue.totals(branches(queried), null, null, PlatformRevenuePort.Bucket.TENANT)
+        // 20.13 (R4): GMV and document count from the single revenue source — chunked statements for all tenants.
+        PlatformRevenuePort.Totals all = revenue.totals(present, null, null, PlatformRevenuePort.Bucket.TENANT)
                 .values().stream().reduce(PlatformRevenuePort.Totals.ZERO, PlatformRevenuePort.Totals::plus);
         return new AnalyticsOverview(dau, mau, ratio, tenants.size(), stores, activeStores, products,
                 all.documents(), all.revenue());
+    }
+
+    /** One tenant's store / active store / product counts; a table absent from its schema counts 0. */
+    private static String overviewBranch(TenantBranch tenant, List<Object> params, OffsetDateTime activeSince,
+                                         OffsetDateTime tomorrow) {
+        String s = TenantSchema.validate(tenant.schemaName());
+        String stores = tenant.has(TenantTable.STORES)
+                ? "(SELECT COUNT(*) FROM " + s + ".stores WHERE is_active = true AND type = 'STORE')" : "0";
+        String active = "0";
+        if (tenant.has(TenantTable.STORES, TenantTable.SALES_CORE)) {
+            active = "(SELECT COUNT(*) FROM " + s + ".stores st WHERE st.is_active = true AND st.type = 'STORE' "
+                    + "AND EXISTS (SELECT 1 FROM " + s + ".sales sa WHERE sa.store_id = st.id AND sa.status = 'COMPLETED' "
+                    + "AND COALESCE(sa.occurred_at, sa.created_at) >= ? "
+                    + "AND COALESCE(sa.occurred_at, sa.created_at) < ?))";
+            params.add(activeSince);
+            params.add(tomorrow);
+        }
+        String products = tenant.has(TenantTable.PRODUCTS_ARCHIVED)
+                ? "(SELECT COUNT(*) FROM " + s + ".products WHERE archived = false)" : "0";
+        return "SELECT CAST(" + stores + " AS bigint) AS store_count, CAST(" + active + " AS bigint) AS active_store_count, "
+                + "CAST(" + products + " AS bigint) AS product_count";
     }
 
     private long countDistinctUsers(LocalDate from, LocalDate to) {
@@ -223,12 +240,14 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
 
     @Override
     public List<CountryCount> getGeography() {
+        // 19.11b: every owner phone in one public query (identity api), never one lookup per tenant. That query reads
+        // public tables only: a failure there is a database failure and fails the screen (no per-tenant skip left).
+        List<TenantRef> tenants = queryable(current(loadTenants()));
+        Map<String, String> phones = ownerRecipientResolver.resolveOwnerWhatsAppPhones(
+                tenants.stream().map(TenantRef::schemaName).toList());
         Map<String, Long> byCountry = new HashMap<>();
-        for (TenantRef tenant : queryable(current(loadTenants()))) {
-            Optional<String> phone = safeCall(tenant,
-                    () -> ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenant.schemaName()));
-            if (phone == null) continue; // tenant skipped (its own data error)
-            byCountry.merge(countryOf(phone.orElse(null)), 1L, Long::sum);
+        for (TenantRef tenant : tenants) {
+            byCountry.merge(countryOf(phones.get(tenant.schemaName())), 1L, Long::sum);
         }
         return byCountry.entrySet().stream()
                 .map(e -> new CountryCount(e.getKey(), e.getValue()))
@@ -322,34 +341,54 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         // Never count sales dated after today (device clocks ahead), whatever the requested range.
         LocalDate endExclusive = toDay.isAfter(today()) ? today().plusDays(1) : toDay.plusDays(1);
 
-        List<TopStore> stores = new ArrayList<>();
-        for (TenantRef tenant : queryable(current(loadTenants()))) {
-            String s = tenant.schemaName();
-            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // queryable() filters; re-checked at use
-            String saleTime = "COALESCE(sa.occurred_at, sa.created_at)";
-            List<Map<String, Object>> rows = safeRows(tenant,
-                    "SELECT st.name AS store_name, "
-                    + "COALESCE(SUM(sa.total_amount) FILTER (WHERE " + saleTime + " >= ?), 0) AS gmv, "
-                    + "COUNT(*) FILTER (WHERE " + saleTime + " >= ?) AS transactions, "
-                    + "COALESCE(SUM(sa.total_amount) FILTER (WHERE " + saleTime + " < ?), 0) AS previous_gmv "
-                    + "FROM " + s + ".sales sa JOIN " + s + ".stores st ON st.id = sa.store_id AND st.type = 'STORE' "
-                    + "WHERE sa.status = 'COMPLETED' AND " + saleTime + " >= ? AND " + saleTime + " < ? "
-                    + "GROUP BY st.id, st.name",
-                    curStart, curStart, curStart, startOf(previousFrom), startOf(endExclusive));
-            for (Map<String, Object> row : rows) {
-                long transactions = asLong(row.get("transactions"));
-                if (transactions == 0) continue;
-                long gmv = asLong(row.get("gmv"));
-                long previous = asLong(row.get("previous_gmv"));
-                stores.add(new TopStore(
-                        (String) row.get("store_name"), tenantName(tenant), gmv, transactions,
-                        Math.round((double) gmv / transactions), growthPercent(gmv, previous)));
-            }
-        }
-        stores.sort(Comparator.comparingLong(TopStore::gmv).reversed()
-                .thenComparing(TopStore::storeName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)));
-        return new TopStoresReport(fromDay, toDay,
-                List.copyOf(stores.subList(0, Math.min(TOP_STORES_LIMIT, stores.size()))));
+        // 19.11b: per chunk of tenants, one statement returning its top stores; the chunks are merged here.
+        List<TenantRef> tenants = queryable(current(loadTenants()));
+        Map<String, TenantRef> byId = new HashMap<>();
+        tenants.forEach(t -> byId.put(t.id(), t));
+        OffsetDateTime previousStart = startOf(previousFrom);
+        OffsetDateTime end = startOf(endExclusive);
+        String saleTime = "COALESCE(sa.occurred_at, sa.created_at)";
+        List<RankedStore> ranked = new ArrayList<>(crossTenant.query(
+                crossTenant.withPresence(branches(tenants)).stream()
+                        .filter(t -> t.has(TenantTable.SALES_CORE, TenantTable.STORES)).toList(),
+                (tenant, params) -> {
+                    String s = TenantSchema.validate(tenant.schemaName());
+                    params.addAll(List.of(curStart, curStart, curStart, previousStart, end));
+                    return "SELECT " + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, st.id::text AS store_id, "
+                            + "st.name AS store_name, "
+                            + "COALESCE(SUM(sa.total_amount) FILTER (WHERE " + saleTime + " >= ?), 0) AS gmv, "
+                            + "COUNT(*) FILTER (WHERE " + saleTime + " >= ?) AS transactions, "
+                            + "COALESCE(SUM(sa.total_amount) FILTER (WHERE " + saleTime + " < ?), 0) AS previous_gmv "
+                            + "FROM " + s + ".sales sa JOIN " + s + ".stores st ON st.id = sa.store_id AND st.type = 'STORE' "
+                            + "WHERE sa.status = 'COMPLETED' AND " + saleTime + " >= ? AND " + saleTime + " < ? "
+                            + "GROUP BY st.id, st.name";
+                },
+                union -> "SELECT * FROM (" + union + ") u WHERE transactions > 0 "
+                        + "ORDER BY gmv DESC, lower(store_name) COLLATE \"C\" NULLS LAST, tenant_id, store_id "
+                        + "LIMIT " + TOP_STORES_LIMIT,
+                (rs, n) -> {
+                    long gmv = rs.getLong("gmv");
+                    long transactions = rs.getLong("transactions");
+                    String tenantId = rs.getString("tenant_id");
+                    TenantRef tenant = byId.get(tenantId);
+                    return new RankedStore(new TopStore(rs.getString("store_name"),
+                            tenant == null ? UNNAMED_TENANT : tenantName(tenant), gmv, transactions,
+                            Math.round((double) gmv / transactions), growthPercent(gmv, rs.getLong("previous_gmv"))),
+                            tenantId, rs.getString("store_id"));
+                }));
+        // The chunk tops are merged in the SQL order (same tie-break), so the global top 20 is deterministic.
+        ranked.sort(RankedStore.ORDER);
+        return new TopStoresReport(fromDay, toDay, ranked.stream().limit(TOP_STORES_LIMIT).map(RankedStore::store).toList());
+    }
+
+    /** A top store with the keys of its SQL order: gmv desc, lower(name) (C collation), tenant, store. */
+    private record RankedStore(TopStore store, String tenantId, String storeId) {
+        static final Comparator<RankedStore> ORDER = Comparator
+                .comparingLong((RankedStore r) -> r.store().gmv()).reversed()
+                .thenComparing(r -> r.store().storeName() == null ? null : r.store().storeName().toLowerCase(Locale.ROOT),
+                        Comparator.nullsLast(Comparator.<String>naturalOrder()))
+                .thenComparing(RankedStore::tenantId, Comparator.nullsLast(Comparator.<String>naturalOrder()))
+                .thenComparing(RankedStore::storeId, Comparator.nullsLast(Comparator.<String>naturalOrder()));
     }
 
     /** (current − previous) / previous in %, 1 decimal; null when previous = 0 (« Nouveau »). */
@@ -413,32 +452,25 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
             if (id != null) activeIds.add(id.toString());
         }
 
+        // 19.11b: one row per active tenant inside chunked unions, counted in SQL; a feature whose table is
+        // absent from the schema (module never used) is simply not used. A schema without any table is skipped.
+        List<TenantBranch> active = crossTenant.withPresence(branches(queryable(current(loadTenants())).stream()
+                        .filter(t -> activeIds.contains(t.id())).toList()))
+                .stream().filter(t -> !t.tables().isEmpty()).toList();
         long[] using = new long[FEATURES.size()];
         long activeTenants = 0;
-        for (TenantRef tenant : queryable(current(loadTenants()))) {
-            if (!activeIds.contains(tenant.id())) continue;
-            String s = tenant.schemaName();
-            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // queryable() filters; re-checked at use
-            Map<String, Object> row = safeSingleRow(tenant,
-                    "SELECT EXISTS (SELECT 1 FROM " + s + ".sales WHERE status = 'COMPLETED' AND "
-                    + SALE_TIME + " >= ? AND " + SALE_TIME + " < ?) AS sales, "
-                    + "EXISTS (SELECT 1 FROM " + s + ".inventory_sessions WHERE started_at >= ? AND started_at < ?) AS inventory, "
-                    + "EXISTS (SELECT 1 FROM " + s + ".stock_transfers WHERE occurred_at >= ? AND occurred_at < ?) AS transfers, "
-                    + "EXISTS (SELECT 1 FROM " + s + ".reports WHERE delivery_status = 'SENT' AND "
-                    + "COALESCE(last_attempt_at, created_at) >= ? AND COALESCE(last_attempt_at, created_at) < ?) AS whatsapp_reports, "
-                    // Stock alerts: preference enabled AND a stock alert actually sent in the window
-                    // (notification_cooldowns keeps the last send per product/store).
-                    + "(COALESCE((SELECT bool_or(stock_alert_enabled) FROM " + s + ".tenant_preferences), false) "
-                    + "AND EXISTS (SELECT 1 FROM " + s + ".notification_cooldowns WHERE cooldown_type = 'STOCK_ALERT' "
-                    + "AND last_sent_at >= ? AND last_sent_at < ?)) AS stock_alerts, "
-                    + "EXISTS (SELECT 1 FROM " + s + ".sync_operations_log WHERE processed_at >= ? AND processed_at < ?) AS offline_sync",
-                    start, end, start, end, start, end, start, end, start, end, start, end);
-            if (row == null) continue;
-            activeTenants++;
-            String[] columns = {"sales", "inventory", "transfers", "whatsapp_reports", "stock_alerts", "offline_sync"};
-            for (int i = 0; i < columns.length; i++) {
-                if (Boolean.TRUE.equals(row.get(columns[i]))) using[i]++;
-            }
+        for (long[] chunk : crossTenant.query(active, (tenant, params) -> adoptionBranch(tenant, params, start, end),
+                union -> "SELECT COUNT(*), COUNT(*) FILTER (WHERE sales), COUNT(*) FILTER (WHERE inventory), "
+                        + "COUNT(*) FILTER (WHERE transfers), COUNT(*) FILTER (WHERE whatsapp_reports), "
+                        + "COUNT(*) FILTER (WHERE stock_alerts), COUNT(*) FILTER (WHERE offline_sync) "
+                        + "FROM (" + union + ") u",
+                (rs, n) -> {
+                    long[] row = new long[FEATURES.size() + 1];
+                    for (int i = 0; i < row.length; i++) row[i] = rs.getLong(i + 1);
+                    return row;
+                })) {
+            activeTenants += chunk[0];
+            for (int i = 0; i < using.length; i++) using[i] += chunk[i + 1];
         }
 
         List<FeatureAdoption> features = new ArrayList<>();
@@ -447,6 +479,52 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
             features.add(new FeatureAdoption(FEATURES.get(i), using[i], rate));
         }
         return new AdoptionReport(activeTenants, features);
+    }
+
+    /** One active tenant's feature flags (FEATURES order); a feature whose table is absent reads false. */
+    private static String adoptionBranch(TenantBranch tenant, List<Object> params, OffsetDateTime start,
+                                         OffsetDateTime end) {
+        String s = TenantSchema.validate(tenant.schemaName());
+        String sales = "false", inventory = "false", transfers = "false", reports = "false", alerts = "false",
+                sync = "false";
+        if (tenant.has(TenantTable.SALES_CORE)) {
+            sales = "EXISTS (SELECT 1 FROM " + s + ".sales WHERE status = 'COMPLETED' AND "
+                    + SALE_TIME + " >= ? AND " + SALE_TIME + " < ?)";
+            params.add(start);
+            params.add(end);
+        }
+        if (tenant.has(TenantTable.INVENTORY_SESSIONS)) {
+            inventory = "EXISTS (SELECT 1 FROM " + s + ".inventory_sessions WHERE started_at >= ? AND started_at < ?)";
+            params.add(start);
+            params.add(end);
+        }
+        if (tenant.has(TenantTable.STOCK_TRANSFERS)) {
+            transfers = "EXISTS (SELECT 1 FROM " + s + ".stock_transfers WHERE occurred_at >= ? AND occurred_at < ?)";
+            params.add(start);
+            params.add(end);
+        }
+        if (tenant.has(TenantTable.REPORTS)) {
+            reports = "EXISTS (SELECT 1 FROM " + s + ".reports WHERE delivery_status = 'SENT' AND "
+                    + "COALESCE(last_attempt_at, created_at) >= ? AND COALESCE(last_attempt_at, created_at) < ?)";
+            params.add(start);
+            params.add(end);
+        }
+        if (tenant.has(TenantTable.TENANT_PREFERENCES, TenantTable.NOTIFICATION_COOLDOWNS)) {
+            // Stock alerts: preference enabled AND a stock alert actually sent in the window
+            // (notification_cooldowns keeps the last send per product/store).
+            alerts = "(COALESCE((SELECT bool_or(stock_alert_enabled) FROM " + s + ".tenant_preferences), false) "
+                    + "AND EXISTS (SELECT 1 FROM " + s + ".notification_cooldowns WHERE cooldown_type = 'STOCK_ALERT' "
+                    + "AND last_sent_at >= ? AND last_sent_at < ?))";
+            params.add(start);
+            params.add(end);
+        }
+        if (tenant.has(TenantTable.SYNC_OPERATIONS_LOG)) {
+            sync = "EXISTS (SELECT 1 FROM " + s + ".sync_operations_log WHERE processed_at >= ? AND processed_at < ?)";
+            params.add(start);
+            params.add(end);
+        }
+        return "SELECT " + sales + " AS sales, " + inventory + " AS inventory, " + transfers + " AS transfers, "
+                + reports + " AS whatsapp_reports, " + alerts + " AS stock_alerts, " + sync + " AS offline_sync";
     }
 
     /** Optional integer query parameter in 1..max (null/blank → default), else 422 VALIDATION_ERROR. */
@@ -492,10 +570,6 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         return tenants.stream().filter(t -> !t.deleted()).toList();
     }
 
-    private static void skipInvalid(TenantRef tenant) {
-        log.warn("Platform analytics: tenant {} skipped (invalid schema name)", tenant.id());
-    }
-
     /** Tenants whose schema name may be interpolated in SQL. */
     private static List<TenantRef> queryable(List<TenantRef> tenants) {
         return tenants.stream()
@@ -506,30 +580,6 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
                     return false;
                 })
                 .toList();
-    }
-
-    private Map<String, Object> safeSingleRow(TenantRef tenant, String sql, Object... args) {
-        List<Map<String, Object>> rows = safeCall(tenant, () -> jdbc.queryForList(sql, args));
-        return rows == null || rows.isEmpty() ? null : rows.get(0);
-    }
-
-    private List<Map<String, Object>> safeRows(TenantRef tenant, String sql, Object... args) {
-        List<Map<String, Object>> rows = safeCall(tenant, () -> jdbc.queryForList(sql, args));
-        return rows == null ? List.of() : rows;
-    }
-
-    /** Result of a per-tenant call, or null when it failed on the tenant's own schema / SQL / data error;
-     *  connection / resource failures are rethrown (never an all-zero 200). */
-    private static <T> T safeCall(TenantRef tenant, Supplier<T> call) {
-        try {
-            return call.get();
-        } catch (DataAccessResourceFailureException | TransientDataAccessException
-                 | RecoverableDataAccessException e) {
-            throw e;
-        } catch (DataAccessException e) {
-            log.warn("Platform analytics: tenant {} skipped ({})", tenant.id(), e.getClass().getSimpleName());
-            return null;
-        }
     }
 
     private LocalDate today() {

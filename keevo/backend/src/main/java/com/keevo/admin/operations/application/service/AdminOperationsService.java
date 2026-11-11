@@ -1,7 +1,9 @@
 package com.keevo.admin.operations.application.service;
 
 import com.keevo.admin.TenantLastActivitySql;
+import com.keevo.admin.crosstenant.CrossTenantSql;
 import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
 import com.keevo.admin.operations.domain.model.*;
 import com.keevo.admin.operations.domain.port.in.*;
@@ -10,10 +12,6 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.RecoverableDataAccessException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -38,11 +36,13 @@ import java.util.*;
  *   <li>Only {@code public.tenants} with {@code status = 'ACTIVE'}, never the KV-ADMIN system tenant.</li>
  * </ul>
  *
- * <p>Uses raw JdbcTemplate with schema-qualified SQL, one aggregated query per tenant schema per endpoint.
- * Schema names come from {@code public.tenants.schema_name} and are gated by {@link TenantSchema#isValid}
- * before interpolation. Deliberately NOT {@code @Transactional}: each statement runs on its own, so a tenant
- * whose schema query fails (missing table, broken schema) is skipped without aborting the queries of the
- * other tenants (PostgreSQL aborts a whole transaction after a failed statement).
+ * <p>Story 19.11b (FUS-NFR11): never one statement per tenant. Tenants come from one {@code public.tenants} query,
+ * their table presence from one catalogue query ({@link CrossTenantSql#withPresence}) and the per-tenant figures
+ * (last activity, store count, plan) from chunked {@code UNION ALL} statements ({@link CrossTenantSql#query}); the
+ * activity table sorts every tenant on the revenue totals and enriches only the tenants of the requested page.
+ * Schema names are gated by {@link TenantSchema} before interpolation; a table absent from a schema reads as
+ * {@code NULL} / 0. Deliberately NOT {@code @Transactional}: a chunk failing on one tenant's schema is retried tenant
+ * by tenant and only that tenant loses its figures; connection / resource failures fail the request.
  */
 @Service
 public class AdminOperationsService implements GetOperationsOverviewUseCase, GetGmvTrendUseCase,
@@ -65,11 +65,14 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final PlatformRevenuePort revenue;
+    private final CrossTenantSql crossTenant;
 
-    public AdminOperationsService(JdbcTemplate jdbc, Clock clock, PlatformRevenuePort revenue) {
+    public AdminOperationsService(JdbcTemplate jdbc, Clock clock, PlatformRevenuePort revenue,
+                                  CrossTenantSql crossTenant) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.revenue = revenue;
+        this.crossTenant = crossTenant;
     }
 
     // ── GetOperationsOverviewUseCase ──────────────────────────────────────────
@@ -138,36 +141,35 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
             throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "La taille de page doit être comprise entre 1 et " + MAX_PAGE_SIZE);
         }
 
-        List<TenantActivity> rows = new ArrayList<>();
         List<TenantRef> tenants = loadActiveTenants();
-        // 20.13 (R4): GMV and orders from the single revenue source, one statement for all tenants.
+        // 20.13 (R4): GMV and orders from the single revenue source, chunked statements for all tenants.
         Map<String, PlatformRevenuePort.Totals> byTenant =
                 revenue.totals(branches(tenants), window.start(), window.end(), PlatformRevenuePort.Bucket.TENANT);
-        for (TenantRef tenant : tenants) {
-            String s = tenant.schemaName();
-            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // loadActiveTenants() filters; re-checked at use
-            Map<String, Object> row = safeSingleRow(tenant,
-                    "SELECT " + TenantLastActivitySql.expression(s) + " AS last_activity_at, "
-                    + "(SELECT COUNT(*) FROM " + s + ".stores WHERE is_active = true AND type = 'STORE') AS store_count, "
-                    + "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1) AS plan",
-                    TenantLastActivitySql.args(tenant.id()));
-            if (row == null) continue;
-            PlatformRevenuePort.Totals totals = byTenant.getOrDefault(tenant.id(), PlatformRevenuePort.Totals.ZERO);
-            rows.add(new TenantActivity(
-                    tenant.id(), tenant.name(), planOf(row, tenant),
-                    totals.revenue(), totals.documents(),
-                    asInstant(row.get("last_activity_at")),
-                    (int) asLong(row.get("store_count"))));
-        }
+        // 19.11b: the order needs only public data + revenue, so every tenant is ranked here and only the tenants
+        // of the requested page are read in their schemas (one presence query + one union of ≤ 100 branches).
+        List<TenantRef> ranked = new ArrayList<>(tenants);
+        Comparator<TenantRef> byGmv = Comparator.comparingLong(
+                (TenantRef t) -> byTenant.getOrDefault(t.id(), PlatformRevenuePort.Totals.ZERO).revenue()).reversed();
+        // Tenant id last: equal GMV and name keep one order across requests (no row repeated or lost between pages).
+        ranked.sort(byGmv.thenComparing(TenantRef::name, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER))
+                .thenComparing(TenantRef::id));
 
-        rows.sort(Comparator.comparingLong(TenantActivity::gmv).reversed()
-                .thenComparing(TenantActivity::tenantName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)));
-
-        int total = rows.size();
+        int total = ranked.size();
         int fromIndex = (int) Math.min((long) pageNumber * size, total);
         int toIndex = Math.min(fromIndex + size, total);
         int totalPages = (total + size - 1) / size;
-        return new TenantActivityPage(List.copyOf(rows.subList(fromIndex, toIndex)), total, totalPages, pageNumber);
+        List<TenantRef> pageTenants = ranked.subList(fromIndex, toIndex);
+        Map<String, TenantFigures> figures = figures(pageTenants, null);
+
+        List<TenantActivity> rows = new ArrayList<>(pageTenants.size());
+        for (TenantRef tenant : pageTenants) {
+            TenantFigures f = figures.getOrDefault(tenant.id(), TenantFigures.NONE);
+            PlatformRevenuePort.Totals totals = byTenant.getOrDefault(tenant.id(), PlatformRevenuePort.Totals.ZERO);
+            rows.add(new TenantActivity(
+                    tenant.id(), tenant.name(), f.plan() != null ? f.plan() : tenant.planType(),
+                    totals.revenue(), totals.documents(), f.lastActivity(), f.storeCount()));
+        }
+        return new TenantActivityPage(List.copyOf(rows), total, totalPages, pageNumber);
     }
 
     // ── ListInactiveTenantsUseCase ────────────────────────────────────────────
@@ -178,18 +180,17 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         Instant threshold = now.minus(INACTIVITY_DAYS, ChronoUnit.DAYS);
         List<InactiveTenant> result = new ArrayList<>();
 
-        for (TenantRef tenant : loadActiveTenants()) {
-            String s = tenant.schemaName();
-            if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // loadActiveTenants() filters; re-checked at use
-            Map<String, Object> row = safeSingleRow(tenant,
-                    "SELECT " + TenantLastActivitySql.expression(s) + " AS last_activity_at, "
-                    + "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1) AS plan",
-                    TenantLastActivitySql.args(tenant.id()));
-            if (row == null) continue;
-            Instant last = asInstant(row.get("last_activity_at"));
-            if (last != null && !last.isBefore(threshold)) continue;
+        // 19.11b: last activity of every tenant in chunked unions; only the inactive ones come back.
+        List<TenantRef> tenants = loadActiveTenants();
+        Map<String, TenantFigures> figures = figures(tenants, threshold);
+        for (TenantRef tenant : tenants) {
+            TenantFigures f = figures.get(tenant.id());
+            if (f == null) continue; // active within the threshold, or its schema could not be read
+            Instant last = f.lastActivity();
+            if (last != null && !last.isBefore(threshold)) continue; // filtered in SQL; re-checked here
             Long days = last == null ? null : Math.max(0, ChronoUnit.DAYS.between(last, now));
-            result.add(new InactiveTenant(tenant.id(), tenant.name(), planOf(row, tenant), last, days));
+            result.add(new InactiveTenant(tenant.id(), tenant.name(), f.plan() != null ? f.plan() : tenant.planType(),
+                    last, days));
         }
 
         // Never active first, then the longest dormant, then by name.
@@ -197,6 +198,43 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
                         Comparator.nullsFirst(Comparator.<Long>reverseOrder()))
                 .thenComparing(InactiveTenant::tenantName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)));
         return result;
+    }
+
+    /** One tenant's figures read in its schema; {@code NONE} when the schema could not be read. */
+    private record TenantFigures(Instant lastActivity, int storeCount, String plan) {
+        static final TenantFigures NONE = new TenantFigures(null, 0, null);
+    }
+
+    /**
+     * Last activity, active STORE count and current plan of {@code tenants}, keyed by tenant id: one presence query
+     * then ⌈T/100⌉ union statements. With {@code inactiveBefore}, only the tenants never active or last active
+     * before it are returned (filtered in SQL). A tenant without any table (schema missing) is absent.
+     */
+    private Map<String, TenantFigures> figures(List<TenantRef> tenants, Instant inactiveBefore) {
+        Map<String, TenantFigures> out = new HashMap<>();
+        if (tenants.isEmpty()) return out;
+        List<TenantBranch> present = crossTenant.withPresence(branches(tenants)).stream()
+                .filter(t -> !t.tables().isEmpty()).toList();
+        String filter = inactiveBefore == null ? ""
+                : " WHERE last_activity_at IS NULL OR last_activity_at < CAST('"
+                + inactiveBefore.truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC) + "' AS timestamptz)";
+        crossTenant.query(present, (tenant, params) -> {
+            String s = TenantSchema.validate(tenant.schemaName());
+            String activity = TenantLastActivitySql.expression(tenant, params);
+            String stores = tenant.has(TenantTable.STORES)
+                    ? "(SELECT COUNT(*) FROM " + s + ".stores WHERE is_active = true AND type = 'STORE')" : "0";
+            String plan = tenant.has(TenantTable.SUBSCRIPTIONS)
+                    ? "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1)"
+                    : "CAST(NULL AS text)";
+            return "SELECT " + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, " + activity
+                    + " AS last_activity_at, CAST(" + stores + " AS bigint) AS store_count, CAST(" + plan
+                    + " AS text) AS plan";
+        }, union -> "SELECT * FROM (" + union + ") u" + filter, (rs, n) -> {
+            Timestamp last = rs.getTimestamp("last_activity_at");
+            return Map.entry(rs.getString("tenant_id"), new TenantFigures(last == null ? null : last.toInstant(),
+                    (int) rs.getLong("store_count"), rs.getString("plan")));
+        }).forEach(e -> out.put(e.getKey(), e.getValue()));
+        return out;
     }
 
     // ── Period resolution ─────────────────────────────────────────────────────
@@ -267,10 +305,6 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
                 .toList();
     }
 
-    private static void skipInvalid(TenantRef tenant) {
-        log.warn("Operations monitoring: tenant {} skipped (invalid schema name)", tenant.id());
-    }
-
     private List<TenantRef> loadActiveTenants() {
         return jdbc.queryForList(
                         "SELECT id::text AS id, schema_name, name, plan_type, created_at FROM public.tenants "
@@ -286,39 +320,6 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
                     return false;
                 })
                 .toList();
-    }
-
-    /** First row of a per-tenant query, or null when the tenant's schema query fails (tenant skipped);
-     *  connection / resource failures are rethrown. */
-    private Map<String, Object> safeSingleRow(TenantRef tenant, String sql, Object... args) {
-        List<Map<String, Object>> rows = safeRowsOrNull(tenant, sql, args);
-        return rows == null || rows.isEmpty() ? null : rows.get(0);
-    }
-
-    private List<Map<String, Object>> safeRowsOrNull(TenantRef tenant, String sql, Object... args) {
-        try {
-            return jdbc.queryForList(sql, args);
-        } catch (DataAccessResourceFailureException | TransientDataAccessException
-                 | RecoverableDataAccessException e) {
-            // Database outage / pool exhaustion (incl. CannotGetJdbcConnectionException): fail the request
-            // instead of answering 200 with zeros.
-            throw e;
-        } catch (DataAccessException e) {
-            // Schema / SQL / data error of this tenant only (missing table, broken schema…): skip it.
-            // Tenant id only — never the schema name or SQL in logs.
-            log.warn("Operations monitoring: tenant {} skipped ({})", tenant.id(), e.getClass().getSimpleName());
-            return null;
-        }
-    }
-
-    /** Plan from the tenant-schema subscriptions table (source of truth), else public.tenants.plan_type. */
-    private static String planOf(Map<String, Object> row, TenantRef tenant) {
-        Object plan = row.get("plan");
-        return plan != null ? plan.toString() : tenant.planType();
-    }
-
-    private static long asLong(Object value) {
-        return value instanceof Number n ? n.longValue() : 0L;
     }
 
     private static Instant asInstant(Object value) {

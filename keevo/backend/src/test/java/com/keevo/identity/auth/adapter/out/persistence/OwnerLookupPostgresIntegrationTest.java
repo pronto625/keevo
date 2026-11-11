@@ -238,6 +238,42 @@ class OwnerLookupPostgresIntegrationTest extends PostgresIntegrationTest {
         assertThat(mapped.getPasswordHash()).isNull();
     }
 
+    // ── Story 19.11b — batch lookup (platform geography screen) ───────────────
+
+    @Test
+    @DisplayName("19.11b — batch: same owner as the single lookup for every tenant, in one query")
+    void batch_sameRuleAsSingleLookup() {
+        // A: phone-less oldest owner, then an inactive user, then the expected owner.
+        String a = insertTenant();
+        String expectedA = randomPhone();
+        membership(insertEmailOnlyUser(), a, "OWNER", true, T0);
+        membership(insertUser(randomPhone(), false), a, "OWNER", true, T0.plusSeconds(30));
+        membership(insertUser(expectedA, true), a, "OWNER", true, T0.plusSeconds(60));
+        // B: inactive membership first, then the expected owner; an EMPLOYEE older than both.
+        String b = insertTenant();
+        String expectedB = randomPhone();
+        membership(insertUser(randomPhone(), true), b, "EMPLOYEE", true, T0.minusSeconds(60));
+        membership(insertUser(randomPhone(), true), b, "OWNER", false, T0);
+        membership(insertUser(expectedB, true), b, "OWNER", true, T0.plusSeconds(60));
+        // C: only a phone-less owner → no recipient. D: no owner at all.
+        String c = insertTenant();
+        membership(insertEmailOnlyUser(), c, "OWNER", true, T0);
+        String d = insertTenant();
+
+        var phones = resolver.resolveOwnerWhatsAppPhones(java.util.Arrays.asList(a, b, c, d, null, " ", "kv_x,kv_y"));
+
+        assertThat(phones).containsOnly(java.util.Map.entry(a, expectedA), java.util.Map.entry(b, expectedB));
+        for (String schema : java.util.List.of(a, b, c, d)) {
+            assertThat(java.util.Optional.ofNullable(phones.get(schema)))
+                    .isEqualTo(resolver.resolveOwnerWhatsAppPhone(schema));
+            assertThat(java.util.Optional.ofNullable(
+                    userRepository.findPrimaryOwnersByTenantSchemaNames(java.util.List.of(schema)).get(schema))
+                    .map(User::getId))
+                    .isEqualTo(userRepository.findOwnerByTenantSchemaName(schema).map(User::getId));
+        }
+        assertThat(resolver.resolveOwnerWhatsAppPhones(java.util.List.of())).isEmpty();
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private String insertTenant() {
