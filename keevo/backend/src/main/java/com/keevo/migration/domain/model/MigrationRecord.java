@@ -30,8 +30,19 @@ public record MigrationRecord(String targetTable, UUID targetId, String sourceTa
     public static final String CATEGORIES = "categories";
     public static final String PRODUCTS = "products";
     public static final String CLIENTS = "clients";
+    /** Target tables written by 24.4. */
+    public static final String INVOICES = "invoices";
+    public static final String INVOICE_ITEMS = "invoice_items";
+    public static final String INVOICE_PAYMENTS = "invoice_payments";
+    public static final String INVOICING_SETTINGS = "invoicing_settings";
+    public static final String EXPENSES = "expenses";
 
-    /** Bref source tables. */
+    /** Bref source tables (24.4: invoice, invoice_item, invoice_payment, expense). */
+    public static final String BREF_INVOICE = "invoice";
+    public static final String BREF_INVOICE_ITEM = "invoice_item";
+    public static final String BREF_INVOICE_PAYMENT = "invoice_payment";
+    public static final String BREF_EXPENSE = "expense";
+
     public static final String BREF_USER = "user";
     public static final String BREF_SHOP = "shop";
     public static final String BREF_PRODUCT = "product";

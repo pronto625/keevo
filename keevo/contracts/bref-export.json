@@ -1,5 +1,5 @@
 {
-  "description": "Story 24.2 / 24.3 / 24.5 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
+  "description": "Story 24.2 / 24.3 / 24.4 / 24.5 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
   "formatVersion": 1,
   "transport": {
     "file": "owner-<owner uuid>.json in the folder keevo.migration.bref.export-dir (Keevo server)",
@@ -65,8 +65,35 @@
         "createdAt": "instant", "updatedAt": "instant"
       }
     },
-    "invoices": "24.4 — array of invoice rows, each with items[] and payments[]",
-    "expenses": "24.4 — array of expense rows",
+    "invoices": {
+      "description": "24.4 — EVERY invoice (sale or quote) whose shopId is one of the owner's shops (any case), cancelled and soft-deleted ones included, each with its lines (items, in the order api-bref saved them) and its payments (instalments)",
+      "fields": {
+        "id": "uuid", "userId": "string (creator's user uuid)", "shopId": "string (the shop uuid as stored)",
+        "type": "\"sale\"|\"quote\"", "status": "\"pending\"|\"partial\"|\"overdue\"|\"paid\"|\"cancelled\"",
+        "customerName": "string", "customerPhone": "string|null", "customerEmail": "string|null",
+        "customerNui": "string|null", "customerRccm": "string|null", "customerAddress": "string|null",
+        "customerContactName": "string|null", "customerWebsite": "string|null",
+        "subtotal": "decimal", "tax": "decimal", "discount": "decimal", "deliveryFee": "decimal", "total": "decimal",
+        "paymentMethod": "\"cash\"|\"mobile_money\"|\"bank_transfer\"|\"card\"|\"other\"|null",
+        "initialPayment": "decimal (the acompte received at creation / validation)", "dueDate": "instant|null",
+        "notes": "string|null", "date": "string|null (civil date YYYY-MM-DD as stored)", "publicToken": "uuid|null",
+        "publicTokenExpiresAt": "instant|null", "cancelledAt": "instant|null", "cancelledBy": "string|null",
+        "cancellationReason": "string|null", "validatedAt": "instant|null (a quote validated into this sale)",
+        "createdAt": "instant", "updatedAt": "instant", "deletedAt": "instant|null",
+        "items": "array of {id: uuid, invoiceId: uuid (optional, the parent's), reference: string, name: string, description: string|null, quantity: decimal (3 decimals), unitPrice: decimal, total: decimal}",
+        "payments": "array of {id: uuid, invoiceId: uuid (optional, the parent's), amount: decimal, dueDate: string (YYYY-MM-DD), isPaid: boolean, paidDate: string|null (YYYY-MM-DD), notes: string|null, createdAt: instant, updatedAt: instant}"
+      }
+    },
+    "expenses": {
+      "description": "24.4 — EVERY expense whose shopId is one of the owner's shops (any case), soft-deleted ones included",
+      "fields": {
+        "id": "uuid", "ownerId": "string", "shopId": "string (the shop uuid as stored)", "createdById": "string",
+        "amount": "decimal", "category": "goods_purchase|rent|salaries|transport|utilities|telecom|marketing|taxes|maintenance|other",
+        "description": "string|null", "expenseDate": "string (YYYY-MM-DD)",
+        "paymentMethod": "cash|mobile_money|bank_transfer|card|other|null",
+        "createdAt": "instant", "updatedAt": "instant", "deletedAt": "instant|null"
+      }
+    },
     "subscriptions": {
       "description": "24.5 — EVERY subscription row of the owner (ownerId), any status",
       "fields": {
@@ -126,6 +153,14 @@
     "products": "ONE untracked Keevo product per productKey across the owner's shops (id, name, creation date of the oldest; price of the latest typed price, else of the latest sale, cents rounded); merged products (mergedIntoId) imported archived and redirected; names made unique with « (2) »…; category « Produits importés »; every Bref product traced",
     "customers": "one Keevo client per customer (same id) in the store of its shop (ADR-08: no merge across stores, sharing off); E.164 phone required (else blocking case CLIENT_INVALID); fields beyond the client limits cut or dropped with a note",
     "blocking": "a product or customer of another shop or duplicated, a price out of range (PRODUCT_INVALID), a customer phone not readable as E.164 (CLIENT_INVALID)"
+  },
+  "keevoMapping24_4": {
+    "settings": "invoicing_settings of the tenant, once: identity of the oldest live shop (name, address, phone, NIU, RCCM), VAT rate of its country, not VAT-registered, prices without VAT; public links valid 90 days",
+    "invoices": "quotes then sales, same ids: quote → QUOTE (DRAFT, or CANCELLED), sale → INVOICE numbered BRF-<8 first characters> (pending/partial/overdue → ISSUED, paid → PAID, cancelled → CANCELLED), issue date = date, seller header = the invoice's shop, store = its shop, client = the imported customer of (shop, phone); amounts in francs (cents rounded and noted, totals kept as Bref had them and noted when they differ from the recalcul); deleted → soft-deleted; publicToken kept for the old links; notes kept",
+    "items": "lines in their order, linked to the Keevo product of (shop, productKey(name, reference)), else free lines",
+    "payments": "the acompte (initialPayment) as one paid payment, each instalment as a payment (paid on paidDate, or due on dueDate); collection state recomputed by Keevo",
+    "expenses": "same id, store of the shop, exact amount, same category and method keys, description → label, deleted → archived",
+    "blocking": "a document or expense of another shop or duplicated, a negative or too large amount, a discount above the subtotal, a line quantity not positive, a public token used twice (DOCUMENT_INVALID), an expense below 0.01 or without a valid date (EXPENSE_INVALID)"
   },
   "keevoMapping24_5": {
     "plan": "the plan Bref's SUBSCRIPTION_IN_FORCE gives at the cutover instant (Apple grace included), else the due scheduled one, else the free plan (no grace, ADR-07): tenant subscription + plan_type, tenant_plan_events cause MIGRATION_BREF; a future paid period of the same plan extends the expiry, of another plan goes to the credit",
@@ -189,7 +224,42 @@
         "createdAt": "2026-03-01T10:00:00.000Z", "updatedAt": "2026-03-01T10:00:00.000Z"
       }
     ],
-    "invoices": [],
+    "invoices": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000501", "userId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "shopId": "6f1d2c3b-0000-4000-8000-000000000101", "type": "sale", "status": "partial",
+        "customerName": "Client Exemple", "customerPhone": "+237600000003", "customerEmail": null,
+        "customerNui": null, "customerRccm": null, "customerAddress": null, "customerContactName": null,
+        "customerWebsite": null, "subtotal": "25000.00", "tax": "0.00", "discount": "0.00", "deliveryFee": "0.00",
+        "total": "25000.00", "paymentMethod": "mobile_money", "initialPayment": "10000.00", "dueDate": null,
+        "notes": null, "date": "2026-03-01", "publicToken": "6f1d2c3b-0000-4000-8000-000000000901",
+        "publicTokenExpiresAt": "2026-05-30T10:00:00.000Z", "cancelledAt": null, "cancelledBy": null,
+        "cancellationReason": null, "validatedAt": null,
+        "createdAt": "2026-03-01T10:00:00.000Z", "updatedAt": "2026-03-01T10:00:00.000Z", "deletedAt": null,
+        "items": [
+          {
+            "id": "6f1d2c3b-0000-4000-8000-000000000601", "reference": "REF-AB12CD", "name": "Riz parfumé 5 kg",
+            "description": null, "quantity": "2.000", "unitPrice": "12500.00", "total": "25000.00"
+          }
+        ],
+        "payments": [
+          {
+            "id": "6f1d2c3b-0000-4000-8000-000000000701", "amount": "15000.00", "dueDate": "2026-04-01",
+            "isPaid": false, "paidDate": null, "notes": null,
+            "createdAt": "2026-03-01T10:00:00.000Z", "updatedAt": "2026-03-01T10:00:00.000Z"
+          }
+        ]
+      }
+    ],
+    "expenses": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000801", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "shopId": "6f1d2c3b-0000-4000-8000-000000000101", "createdById": "6f1d2c3b-0000-4000-8000-000000000001",
+        "amount": "15000.50", "category": "rent", "description": "Loyer de mars", "expenseDate": "2026-03-05",
+        "paymentMethod": "cash", "createdAt": "2026-03-05T09:00:00.000Z", "updatedAt": "2026-03-05T09:00:00.000Z",
+        "deletedAt": null
+      }
+    ],
     "subscriptions": [
       {
         "id": "6f1d2c3b-0000-4000-8000-000000000501", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",

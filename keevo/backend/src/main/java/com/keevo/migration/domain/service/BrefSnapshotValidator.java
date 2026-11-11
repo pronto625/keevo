@@ -128,6 +128,7 @@ public final class BrefSnapshotValidator {
             account(member, identities.get(member.id()), seen, targets, cases);
         }
         catalogue(snapshot, shopIds, cases);
+        BrefSalesValidator.validate(snapshot, shopIds, cases); // Story 24.4 — documents and expenses
         return cases;
     }
 

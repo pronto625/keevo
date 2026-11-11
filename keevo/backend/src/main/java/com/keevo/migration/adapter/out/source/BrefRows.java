@@ -3,6 +3,10 @@ package com.keevo.migration.adapter.out.source;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.keevo.migration.domain.model.BrefAccount;
 import com.keevo.migration.domain.model.BrefCustomer;
+import com.keevo.migration.domain.model.BrefExpense;
+import com.keevo.migration.domain.model.BrefInvoice;
+import com.keevo.migration.domain.model.BrefInvoiceItem;
+import com.keevo.migration.domain.model.BrefInvoicePayment;
 import com.keevo.migration.domain.model.BrefProduct;
 import com.keevo.migration.domain.model.BrefShop;
 
@@ -13,7 +17,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -75,6 +81,81 @@ final class BrefRows {
                 integer(n, "totalInvoices"), decimal(n, "totalSpent"), instantOrNull(n, "lastPurchaseAt"),
                 instantOrNull(n, "marketingConsentAt"), com.keevo.migration.domain.service.BrefMappings.uuidOrNull(consentBy),
                 instantOrNull(n, "marketingOptOutAt"), instant(n, "createdAt"), instant(n, "updatedAt"));
+    }
+
+    /**
+     * Story 24.4 — a Bref {@code invoice} row with its lines and payments: the export nests them ({@code items},
+     * {@code payments}); the database adapter reads them apart and passes them here ({@code null} → read the nested
+     * arrays, absent → none).
+     */
+    static BrefInvoice invoice(JsonNode n, List<BrefInvoiceItem> items, List<BrefInvoicePayment> payments) {
+        UUID id = uuid(n, "id");
+        List<BrefInvoiceItem> lines = items;
+        if (lines == null) {
+            lines = new ArrayList<>();
+            for (JsonNode item : array(n, "items")) {
+                lines.add(invoiceItem(item, id));
+            }
+        }
+        List<BrefInvoicePayment> rows = payments;
+        if (rows == null) {
+            rows = new ArrayList<>();
+            for (JsonNode payment : array(n, "payments")) {
+                rows.add(invoicePayment(payment, id));
+            }
+        }
+        return new BrefInvoice(id, text(n, "userId"), text(n, "shopId"), text(n, "customerName"),
+                text(n, "customerPhone"), text(n, "customerEmail"), text(n, "customerNui"), text(n, "customerRccm"),
+                text(n, "customerAddress"), text(n, "customerContactName"), text(n, "customerWebsite"),
+                decimal(n, "subtotal"), decimal(n, "tax"), decimal(n, "discount"), decimal(n, "deliveryFee"),
+                decimal(n, "total"), text(n, "status"), text(n, "paymentMethod"), decimal(n, "initialPayment"),
+                instantOrNull(n, "dueDate"), text(n, "notes"), text(n, "date"), text(n, "publicToken"),
+                instantOrNull(n, "publicTokenExpiresAt"), instantOrNull(n, "cancelledAt"), text(n, "cancelledBy"),
+                text(n, "cancellationReason"), text(n, "type"), instantOrNull(n, "validatedAt"),
+                instant(n, "createdAt"), instant(n, "updatedAt"), instantOrNull(n, "deletedAt"), lines, rows);
+    }
+
+    /** Story 24.4 — a Bref {@code invoice_item} row; {@code invoiceId} absent (nested in the export) → the parent's. */
+    static BrefInvoiceItem invoiceItem(JsonNode n, UUID parent) {
+        return new BrefInvoiceItem(uuid(n, "id"), parentId(n, parent), text(n, "reference"), text(n, "name"),
+                text(n, "description"), decimal(n, "quantity"), decimal(n, "unitPrice"), decimal(n, "total"));
+    }
+
+    /** Story 24.4 — a Bref {@code invoice_payment} row; {@code invoiceId} absent → the parent's. */
+    static BrefInvoicePayment invoicePayment(JsonNode n, UUID parent) {
+        return new BrefInvoicePayment(uuid(n, "id"), parentId(n, parent), decimal(n, "amount"), text(n, "dueDate"),
+                bool(n, "isPaid", false), text(n, "paidDate"), text(n, "notes"), instant(n, "createdAt"),
+                instant(n, "updatedAt"));
+    }
+
+    /** Story 24.4 — a Bref {@code expense} row. */
+    static BrefExpense expense(JsonNode n) {
+        return new BrefExpense(uuid(n, "id"), text(n, "ownerId"), text(n, "shopId"), text(n, "createdById"),
+                decimal(n, "amount"), text(n, "category"), text(n, "description"), text(n, "expenseDate"),
+                text(n, "paymentMethod"), instant(n, "createdAt"), instant(n, "updatedAt"),
+                instantOrNull(n, "deletedAt"));
+    }
+
+    private static UUID parentId(JsonNode n, UUID parent) {
+        String v = text(n, "invoiceId");
+        if (v == null) {
+            if (parent == null) {
+                throw new IllegalArgumentException("invoiceId missing");
+            }
+            return parent;
+        }
+        return UUID.fromString(v);
+    }
+
+    private static Iterable<JsonNode> array(JsonNode n, String field) {
+        JsonNode v = n.get(field);
+        if (v == null || v.isNull()) {
+            return List.of();
+        }
+        if (!v.isArray()) {
+            throw new IllegalArgumentException(field + " is not an array");
+        }
+        return v;
     }
 
     /** A decimal from a JSON string ({@code "12500.00"}, the contract) or number; absent → {@code 0}. */

@@ -23,6 +23,18 @@ public interface LegacyInvoiceLinkRegistry {
      */
     void register(UUID token, String tenantSchema, UUID invoiceId, Instant expiresAt);
 
+    /** Story 24.4 — one token to record: the invoice it opens, and Bref's own expiry ({@code null} = none). */
+    record Link(UUID token, UUID invoiceId, Instant expiresAt) {
+    }
+
+    /**
+     * Story 24.4 — {@link #register} for many tokens of one tenant in one statement (the Bref import): same rule, a
+     * token already recorded for the same target only refreshes its expiry.
+     *
+     * @throws IllegalStateException one of the tokens already points to another tenant or invoice (never moved)
+     */
+    void registerAll(String tenantSchema, java.util.List<Link> links);
+
     /** The token stops opening anything (rotation); unknown token = no-op. */
     void unregister(UUID token);
 }

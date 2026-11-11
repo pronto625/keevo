@@ -175,3 +175,7 @@ Code : `keevo/backend/src/main/java/com/keevo/crm/contact/adapter/in/web/ClientC
 - Mise en place : `curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"consent":true}' $API/api/v1/clients/<id>/marketing-consent`.
 
 **Clé de suivi mobile :** `m20-2-crm-etendu-clients-par-etablissement`.
+
+### Deferred items routed 2026-11-11
+
+- [ ] [Deferred-from: 24.4 review, 2026-11-11] Purchase count and total spent of the client profile ignore invoices [keevo/backend/src/main/java/com/keevo/crm/contact/adapter/out/persistence/ClientSalesStatsAdapter.java:38-74] — `GetClientProfileUseCase` counts `sales` only, while the exports and the marketing audience (`ClientsExportDatasetProvider`, `JdbcMarketingAudienceQuery`) count sales + issued/paid invoices − credit notes (20.14 rule): a DOCUMENT-flow client (every client imported from Bref by 24.4) shows 0 purchases on its profile. Settled by using the same single revenue source as the export and a test on a client with only invoices.

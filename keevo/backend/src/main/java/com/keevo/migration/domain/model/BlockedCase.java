@@ -49,6 +49,9 @@ public record BlockedCase(String code, String label, String sourceTable, UUID so
         // Story 24.3
         PRODUCT_INVALID("Produit invalide"),
         CLIENT_INVALID("Client invalide"),
+        // Story 24.4
+        DOCUMENT_INVALID("Document invalide"),
+        EXPENSE_INVALID("Dépense invalide"),
         // Story 24.5
         MONETISATION_INVALID("Abonnement ou paiement Bref non repris");
 

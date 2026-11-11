@@ -3,6 +3,10 @@ package com.keevo.migration.adapter.out.source;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.migration.domain.model.BrefAccount;
 import com.keevo.migration.domain.model.BrefCustomer;
+import com.keevo.migration.domain.model.BrefExpense;
+import com.keevo.migration.domain.model.BrefInvoice;
+import com.keevo.migration.domain.model.BrefInvoiceItem;
+import com.keevo.migration.domain.model.BrefInvoicePayment;
 import com.keevo.migration.domain.model.BrefProduct;
 import com.keevo.migration.domain.model.BrefShop;
 import com.keevo.migration.domain.model.BrefSnapshot;
@@ -25,7 +29,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -62,6 +68,34 @@ class JdbcBrefSource implements BrefSourcePort {
     static final String CUSTOMERS_SQL = "SELECT (to_jsonb(c) || jsonb_build_object('totalSpent', "
             + "c.\"totalSpent\"::text))::text FROM customer c WHERE c.\"shopId\" = ANY (?::uuid[]) "
             + "ORDER BY c.\"createdAt\", c.id";
+
+    /**
+     * Story 24.4 — the documents of the owner's shops (sales and quotes, deleted ones included). Bref has no index on
+     * {@code invoice.shopId}: a scan of the invoice table per owner, like the products (24.9 reads every owner in one
+     * pass). Decimals as text (exact).
+     */
+    static final String INVOICES_SQL = "SELECT (to_jsonb(i) || jsonb_build_object('subtotal', i.subtotal::text, "
+            + "'tax', i.tax::text, 'discount', i.discount::text, 'deliveryFee', i.\"deliveryFee\"::text, "
+            + "'total', i.total::text, 'initialPayment', i.\"initialPayment\"::text))::text FROM invoice i "
+            + "WHERE lower(btrim(i.\"shopId\")) = ANY (?::text[]) ORDER BY i.\"createdAt\", i.id";
+    /**
+     * Story 24.4 — the lines of the documents read by {@link #INVOICES_SQL} (their ids, so the invoice table is
+     * scanned once per owner), in their stored order (Bref has no position nor date on a line: the physical order is
+     * the order api-bref saved the line array in; Bref is stopped during the cutover, so it does not move between
+     * runs). Bref has no index on {@code invoiceId}: one scan of the line table per owner (one-pass read: 24.9).
+     */
+    static final String ITEMS_SQL = "SELECT (to_jsonb(it) || jsonb_build_object('quantity', it.quantity::text, "
+            + "'unitPrice', it.\"unitPrice\"::text, 'total', it.total::text))::text FROM invoice_item it "
+            + "WHERE it.\"invoiceId\" = ANY (?::uuid[]) ORDER BY it.\"invoiceId\", it.ctid";
+    /** Story 24.4 — the payments (instalments) of those documents. */
+    static final String PAYMENTS_SQL = "SELECT (to_jsonb(p) || jsonb_build_object('amount', p.amount::text))::text "
+            + "FROM invoice_payment p WHERE p.\"invoiceId\" = ANY (?::uuid[]) ORDER BY p.\"createdAt\", p.id";
+    /**
+     * Story 24.4 — the expenses of the owner's shops (deleted ones included); index {@code (shopId, expenseDate)} is
+     * on the raw column, so this reads like the products (per-owner scan).
+     */
+    static final String EXPENSES_SQL = "SELECT (to_jsonb(e) || jsonb_build_object('amount', e.amount::text))::text "
+            + "FROM expense e WHERE lower(btrim(e.\"shopId\")) = ANY (?::text[]) ORDER BY e.\"createdAt\", e.id";
 
     private final ObjectMapper mapper;
     private final String url;
@@ -132,6 +166,8 @@ class JdbcBrefSource implements BrefSourcePort {
         List<BrefAccount> members = new ArrayList<>();
         List<BrefProduct> products = new ArrayList<>();
         List<BrefCustomer> customers = new ArrayList<>();
+        List<BrefInvoice> invoices = new ArrayList<>();
+        List<BrefExpense> expenses = new ArrayList<>();
         if (!shops.isEmpty()) {
             Object[] shopIds = shops.stream().map(s -> s.id().toString()).toArray();
             for (String row : rows(c, MEMBERS_SQL, ps -> {
@@ -147,8 +183,39 @@ class JdbcBrefSource implements BrefSourcePort {
             for (String row : rows(c, CUSTOMERS_SQL, ps -> ps.setArray(1, c.createArrayOf("uuid", uuids)))) {
                 customers.add(BrefRows.customer(json(row)));
             }
+            documents(c, shopIds, invoices, expenses);
         }
-        return new BrefSnapshot(owner, shops, members, products, customers, SourceKind.DATABASE);
+        return new BrefSnapshot(owner, shops, members, products, customers, invoices, expenses, SourceKind.DATABASE);
+    }
+
+    /** Story 24.4 — documents with their lines and payments (grouped by invoice in one pass), and expenses. */
+    private void documents(Connection c, Object[] shopIds, List<BrefInvoice> invoices, List<BrefExpense> expenses)
+            throws SQLException {
+        List<com.fasterxml.jackson.databind.JsonNode> rows = new ArrayList<>();
+        for (String row : rows(c, INVOICES_SQL, ps -> ps.setArray(1, c.createArrayOf("text", shopIds)))) {
+            rows.add(json(row));
+        }
+        Map<UUID, List<BrefInvoiceItem>> items = new HashMap<>();
+        Map<UUID, List<BrefInvoicePayment>> payments = new HashMap<>();
+        if (!rows.isEmpty()) {
+            Object[] ids = rows.stream().map(n -> UUID.fromString(n.path("id").asText())).toArray();
+            for (String row : rows(c, ITEMS_SQL, ps -> ps.setArray(1, c.createArrayOf("uuid", ids)))) {
+                BrefInvoiceItem item = BrefRows.invoiceItem(json(row), null);
+                items.computeIfAbsent(item.invoiceId(), k -> new ArrayList<>()).add(item);
+            }
+            for (String row : rows(c, PAYMENTS_SQL, ps -> ps.setArray(1, c.createArrayOf("uuid", ids)))) {
+                BrefInvoicePayment payment = BrefRows.invoicePayment(json(row), null);
+                payments.computeIfAbsent(payment.invoiceId(), k -> new ArrayList<>()).add(payment);
+            }
+        }
+        for (com.fasterxml.jackson.databind.JsonNode n : rows) {
+            UUID id = UUID.fromString(n.path("id").asText());
+            invoices.add(BrefRows.invoice(n, items.getOrDefault(id, List.of()),
+                    payments.getOrDefault(id, List.of())));
+        }
+        for (String row : rows(c, EXPENSES_SQL, ps -> ps.setArray(1, c.createArrayOf("text", shopIds)))) {
+            expenses.add(BrefRows.expense(json(row)));
+        }
     }
 
     private interface Binder {

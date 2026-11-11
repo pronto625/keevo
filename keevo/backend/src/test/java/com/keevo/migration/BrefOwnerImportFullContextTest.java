@@ -255,8 +255,8 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
         assertThat(count("SELECT count(*) FROM \"" + schema + "\".user_roles WHERE user_id = ?", owner)).isEqualTo(1);
         int records = count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ?", owner);
         // tenant, owner, owner membership, 2 stores, 3 × (user, membership, employee), « Produits importés » (24.3),
-        // plan in force (24.5)
-        assertThat(records).isEqualTo(1 + 1 + 1 + 2 + 3 * 3 + 1 + 1);
+        // plan in force (24.5), invoicing settings from the oldest live shop (24.4)
+        assertThat(records).isEqualTo(1 + 1 + 1 + 2 + 3 * 3 + 1 + 1 + 1);
 
         // ── re-run: nothing written
         JsonNode again = data(importOwner(owner, "DATABASE", token));

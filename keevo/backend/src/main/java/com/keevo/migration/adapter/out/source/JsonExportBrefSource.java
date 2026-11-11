@@ -5,6 +5,8 @@ import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.migration.domain.model.BrefAccount;
 import com.keevo.migration.domain.model.BrefCustomer;
+import com.keevo.migration.domain.model.BrefExpense;
+import com.keevo.migration.domain.model.BrefInvoice;
 import com.keevo.migration.domain.model.BrefProduct;
 import com.keevo.migration.domain.model.BrefShop;
 import com.keevo.migration.domain.model.BrefSnapshot;
@@ -98,6 +100,8 @@ class JsonExportBrefSource implements BrefSourcePort {
         List<BrefAccount> members = new ArrayList<>();
         List<BrefProduct> products = new ArrayList<>();
         List<BrefCustomer> customers = new ArrayList<>();
+        List<BrefInvoice> invoices = new ArrayList<>();
+        List<BrefExpense> expenses = new ArrayList<>();
         try (DigestInputStream in = new DigestInputStream(new BufferedInputStream(raw), digest)) {
             JsonParser p = mapper.getFactory().createParser(in);
             p.disable(JsonParser.Feature.AUTO_CLOSE_SOURCE);
@@ -114,7 +118,9 @@ class JsonExportBrefSource implements BrefSourcePort {
                     case "members" -> readArray(p, value, n -> members.add(BrefRows.account(n)));
                     case "products" -> readArray(p, value, n -> products.add(BrefRows.product(n)));
                     case "customers" -> readArray(p, value, n -> customers.add(BrefRows.customer(n)));
-                    default -> p.skipChildren(); // 24.4–24.6 sections: not read here
+                    case "invoices" -> readArray(p, value, n -> invoices.add(BrefRows.invoice(n, null, null)));
+                    case "expenses" -> readArray(p, value, n -> expenses.add(BrefRows.expense(n)));
+                    default -> p.skipChildren(); // 24.5–24.6 sections: not read here
                 }
             }
             p.close();
@@ -131,7 +137,8 @@ class JsonExportBrefSource implements BrefSourcePort {
         if (owner == null || !owner.id().equals(ownerId) || !BrefMappings.BREF_OWNER_ROLE.equals(owner.role())) {
             throw new DomainException(ErrorCode.MIGRATION_OWNER_NOT_FOUND, "Export owner mismatch");
         }
-        return new BrefSnapshot(owner, shops, members, products, customers, SourceKind.EXPORT);
+        return new BrefSnapshot(owner, shops, members, products, customers, invoices, expenses,
+                SourceKind.EXPORT);
     }
 
     private interface NodeConsumer {
