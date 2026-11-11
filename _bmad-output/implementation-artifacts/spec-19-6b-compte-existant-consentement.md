@@ -186,6 +186,12 @@ Status: done
 
 **Verification.** Packages one by one: identity 891, architecture 147, shared 1 355, admin 690, reporting 462, sync 679 — 0 failures. Live `keevo_dev_t196b` on 4596 (WhatsApp noop): owner A adds B's phone → 202, re-add → 202 with a single stub message, both identifiers → 409 generic, A's pending list shows the typed phone; B's login → pending invitation → accept → 200 (A, EMPLOYEE), second answer → 404; A's team lists B; A's password regeneration on B → 409 `MEMBER_ACCOUNT_SHARED`; bad loginToken → 401; V74 applied. Database dropped, backend stopped.
 
+## Reprise 11/11/2026 — user decision on D3 (refusals)
+
+**Decision (user, explicit):** the 30-day wait applies only after **two** refusals of the same person for the same company. D3 now reads: after a first refusal the company may invite again at once (still within the 20 invitations / 24 h cap per company and one message per person per 24 h — a re-invitation within 24 h of the last message renews the invitation without a new message); from the second refusal, re-invitations are silent for 30 days; once the person has refused twice, each later refusal starts a new 30-day wait (the count does not decay); an acceptance resets the count; a cancellation does not count. The nightly retention (19-11c, 90 days) deletes old answered rows and their count with them.
+
+**Implementation:** public migration `V82__membership_invitations_decline_count.sql` (`decline_count SMALLINT NOT NULL DEFAULT 0`; existing DECLINED rows = 1 refusal, hence re-invitable at once — consistent with the decision), `MembershipInvitation.DECLINES_BEFORE_COOLDOWN = 2`, `JdbcMembershipInvitationRepository` (upsert guard `status <> 'DECLINED' OR decline_count < 2 OR responded_at < now − 30 d`; `markResponded` +1 on DECLINED, 0 on ACCEPTED). Same single-statement complexity, no new index. Tests: `JdbcMembershipInvitationRepositoryPostgresTest` (1st refusal → renewed, 2nd → silent 30 days, 3rd → silent again, acceptance resets, cancellation keeps the count), `MultiCompanyMemberFullContextTest` (decline → re-invite visible → decline → silent). Review (5 layers) and verification are logged in spec-19-14, section « Reprise 11/11/2026 ». Mobile: scenario updated below; no new endpoint, no new error code.
+
 ## Mobile (React Native — dépôt AI/bref)
 
 **Statut :** API livrée (commit b70f0610). Conventions : spec-16-11 ; synchro : spec-16-10. Remplace le point 1 et le rattachement immédiat décrits dans la section mobile de 19.6.
@@ -211,7 +217,7 @@ Code backend : `keevo/backend/src/main/java/com/keevo/identity/employee/adapter/
 
 **Critères d'acceptation mobile / scénarios de test :**
 - Given la patronne de B, When le patron de A ajoute son numéro, Then il voit « Une invitation a été envoyée » et l'invitation en attente ; elle reçoit un WhatsApp ; à sa connexion elle voit l'invitation, l'accepte, puis choisit A (vendeuse) ou B (patronne).
-- Given une invitation refusée, When le même patron réinvite, Then même message côté patron, rien côté invitée.
+- (Reprise 11/11/2026) Given une invitation refusée **une fois**, When le même patron réinvite, Then l'invitation réapparaît chez l'invitée (sans nouveau WhatsApp si le dernier date de moins de 24 h). Given **deux** refus, When le même patron réinvite dans les 30 jours, Then même message « invitation envoyée » côté patron, rien côté invitée.
 - Given un compte avec seulement un identifiant, When il accepte, Then le message de récupération s'affiche.
 - Mise en place : deux `POST /auth/register`, puis `POST /api/v1/employees` sur A avec le téléphone du second, puis `POST /auth/login` du second et `POST /api/v1/auth/invitations/pending`.
 

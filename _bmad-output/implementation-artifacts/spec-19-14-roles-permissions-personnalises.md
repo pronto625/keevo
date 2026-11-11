@@ -148,6 +148,51 @@ deferred: []
   - `[false]` `[reject]` Code Map names (`RolePermissionGrant`, `clearCustomRole`) differ — naming only; the code uses `CustomRoleGrant` and `CustomRoleStore.assign(…, null)`.
   - `[false]` `[reject]` intersection with declared, not enabled modules — a disabled module's endpoints and pulls are already gated by entitlements; the permission alone grants nothing.
 
+### 2026-11-11 — Review pass (Reprise 11/11/2026: expenses owner-only, finance grantable, invitations after 2 refusals)
+- verdicts: 37 findings — high 0, medium 5, low 26, false 6, maybe-false 0
+- findings (design layer):
+  - `[low]` `[reject]` `;ex=0` re-seeds every member device once, not only managers' — accepted and documented (decision R2): the refonte is not live, every member device re-seeds at go-live anyway (19-14 `;ss/;ds`); gating on the tenant's module would add an entitlement read to the marker for a one-off.
+  - `[low]` `[reject]` visibility marker built by hand (`ss`/`ds`/`ex`) instead of from the providers' `requiredPermission()` — a format change re-seeds again and the pp/ss/ds parts are not provider permissions; constants pinned by `ActorPermissionsTest`.
+  - `[false]` `[reject]` stale `FINANCE_VIEW` in persisted roles now honoured — the old `isGrantable` refused it at write time, no row can carry it.
+- findings (intent layer, descriptive):
+  - `[false]` `[reject]` spec / epic / 20-10 updates absent from the diff — they are in the same change set (`_bmad-output` files, outside the backend diff given to the reviewers).
+  - `[low]` `[reject]` re-seed wider than « the manager » — same as the design row (R2).
+  - `[low]` `[reject]` V1 2.0.1 never exercised as V1 — V1 has no expense screen and calls no expense route; the REST 403 is the generic `@RequiresPermission` path (French message asserted in `expensesOwnerOnlyByDefault`).
+  - `[low]` `[reject]` device purge not server-side — the protocol has no purge command: the re-seed marker plus the Mobile instruction (point 8) is the documented path, as for 16-13/19-14 sales.
+  - `[low]` `[patch]` cumulative vs per-cycle refusal counting not pinned beyond the 2nd refusal — `thirdRefusal_waitsAgain` added; rule written in spec-19-6b (count never decays, acceptance resets).
+  - `[low]` `[reject]` backfill of existing DECLINED rows to 1 not in the intent — direct application of the decision (one known refusal), decision R1.
+  - `[medium]` `[patch]` member `financial_result` (AI/MCP) not tested — see verification row.
+  - `[false]` `[reject]` reporting AI tools (`revenue_summary`, `activity_overview`, `store_performance`) not scoped — they are not the finance summary nor gated by `FINANCE_VIEW` (reporting permissions, owner-only, unchanged).
+- findings (verification-gap layer):
+  - `[medium]` `[patch]` `financial_result` as a member holding « Voir la situation financière » never run — `AiToolsFullContextTest.financeGate` now runs it with a custom grant: listed, no `byStore`, another store's filter ignored, a sale in another store leaves the figures unchanged.
+  - `[low]` `[reject]` V82 backfill untested — one-shot `UPDATE` on a small table, no migration-data harness; checked live (V82 applied on `keevo_dev_t1114r`).
+  - `[medium]` `[patch]` `upsert(... in2Days)` asserted `false` on a live PENDING renewed after 24 h — expectation corrected to `true` (renewed, message due).
+  - `[low]` `[patch]` `storeId` parameter of `financial_result` still said « absent = toutes les boutiques » — now « pour le propriétaire … ignoré pour un membre autorisé ».
+  - `[low]` `[patch]` marker comment/test comment said only the manager re-seeds — comments corrected (every member device re-seeds once).
+- findings (blind layer):
+  - `[low]` `[reject]` V82 lifts running 30-day waits — that is the user decision applied to existing data (one known refusal), R1.
+  - `[low]` `[patch]` refusal count never decays, third refusal untested — test added and rule documented (privacy-protective: someone who refused twice is not pestered again).
+  - `[false]` `[reject]` migration number gap V79 → V82 — V82 is the number reserved for this story by the orchestrator (V80/V81 reserved by parallel stories).
+  - `[low]` `[reject]` `FINANCE_VIEW` alone shows the store's expense totals and revenue without `EXPENSE_VIEW`/`STORE_SALES_VIEW` — aggregates are the financial result the owner chose to show; decision R4 (catalogue label « Voir la situation financière »).
+  - `[low]` `[patch]` `;ex=0` comment narrower than the effect — same patch as above.
+  - `[medium]` `[patch]` positive member paths untested (AI) — AI test added; member without store already `FinanceSummaryServiceTest.member` (`FinanceAccess.member(null)` → empty).
+  - `[low]` `[reject]` EMPLOYEE-based role with expense write rights untested — `ExpenseAccess.member(store)` does not depend on the base role; the MANAGER-base fixture exercises the same path.
+  - `[low]` `[reject]` re-invitation within 24 h after a first refusal sends no message — the existing one-message-per-day anti-spam rule the user kept; documented in 19-6b.
+  - `[false]` `[reject]` owners not told that managers lose expenses — the refonte is not live and V1 2.0.1 has no expenses: no manager uses them in production.
+  - `[low]` `[reject]` migration comment repeats 20 / 30 / 2 — SQL comments cannot reference Java constants; values match the code.
+  - `[low]` `[patch]` weak assertions — French message asserted on the store-limited assignment, return value asserted on the last upsert.
+  - `[low]` `[reject]` `grantExpenses` fixture writes roles by SQL — valid V78 row; the API path is covered by `CustomRolesFullContextTest`.
+  - `[false]` `[reject]` renewal of a DECLINED row keeps `responded_at` — the upsert sets `responded_at = NULL` on renewal (unchanged SQL).
+  - `[low]` `[patch]` broken javadoc sentence in `MembershipInvitationService` — reflowed.
+- findings (edge-case layer):
+  - `[medium]` `[patch]` in2Days assertion — same row as verification (corrected).
+  - `[low]` `[reject]` 90-day retention purge resets the count — retention is a privacy rule (19-11c); 90 days > the 30-day wait; documented in 19-6b.
+  - `[low]` `[reject]` count never decays after the wait — decision (privacy-protective), tested and documented.
+  - `[low]` `[reject]` tenants without expenses re-seed too — same as the design row (R2).
+  - `[low]` `[patch]` `storeId` parameter text — same patch.
+  - `[low]` `[patch]` Mobile section had no expense purge and said managers/viewers are not re-seeded — « Reprise 11/11/2026 — à faire côté mobile » added (points 7–9, scenarios).
+  - `[low]` `[reject]` « one refusal is free » vs third refusal — same decision row.
+
 ## Design Notes
 
 **Patterns.** Policy + Strategy of grant source: the authentication carries an optional custom grant (value object resolved once per request from the cached access state); `ModulePermissions.permissionsOf(Authentication)` is the single evaluator choosing the grant source (owner → all, custom → custom ∩ declared ∩ viewer filter, else manifest mapping). Repository (JDBC) for roles in `public`; Command services for create/update/delete/assign, serialized per tenant by `TransactionLockPort` (name uniqueness, role cap). Team policy exposed as an `identity.api` port so REST and sync share one rule.
@@ -181,6 +226,23 @@ Status: done
 
 **Residual risks.** Expenses: behaviour unchanged (built-in OWNER + MANAGER; a custom role may tick them) — the « owner only vs owner + manager » question stays open for the user (sprint-status says « propriétaire seul », epics and `fix(20-10)` say owner + manager). Every EMPLOYEE device re-seeds once at deploy (own sales only). Members whose store leaves their role's store list lose every right until the owner reassigns a role (DD2). V78 must be deployed with V72–V77 (out-of-order numbering across parallel stories).
 
+## Reprise 11/11/2026 — user decisions (expenses, finance, invitations)
+
+**Intent (explicit user decisions, not defaults).**
+1. **Expenses = owner only by default.** The built-in MANAGER no longer holds `EXPENSE_VIEW/CREATE/DELETE` (manifest `rolePermissions`, hence REST, sync push, pull, AI/MCP `list_expenses`); a custom role may tick them for a manager (store scope of 20.10 unchanged). V1 2.0.1 compatibility: a V1 manager gets a clean French 403 (V1 has no expense screen anyway); sync stops sending expenses to a member without `EXPENSE_VIEW` and the device is re-seeded once (visibility marker `;ex=0`) so it purges its local expenses.
+2. **Invitations (19-6b): the 30-day wait applies only after 2 refusals** of the same person for the same company (`decline_count`, public migration V82; an acceptance resets it; a cancellation does not count). After one refusal the company may invite again at once, within the existing anti-spam limits (20 invitations / 24 h per company, one message / 24 h per person).
+3. **« Voir la situation financière » (`FINANCE_VIEW`) becomes grantable** to a custom role (DD4 reversed — the owner's choice). A member holding it reads `GET /api/v1/finance/summary` and the AI tool `financial_result` for **his own store only** (DD5: no « all stores » reach for a member): totals, comparison, series and categories computed on that store, no `byStore`, a `storeId=` filter ignored (same convention as the expenses list); a member without store gets an empty summary. The owner sees everything as before.
+
+**Code Map.** `resources/keevo/modules/expenses/module.json` (MANAGER `[]`); `expenses/**` javadoc + `ExpenseSyncHandler.ROLE_REFUSED` « Les dépenses sont réservées au propriétaire : demandez-lui le droit de les gérer. »; `keevo/contracts/expense-sync-payloads.json`; `sync/.../SyncPushService.ScopeKey.visibilityMarker` (`;ex=0`, constant `EXPENSE_VIEW_PERMISSION` pinned by `ActorPermissionsTest`); `shared/module/application/PermissionCatalog` (owner-reserved set removed) + `ModulePermissions.permissionsOf(Authentication)` (no owner-reserved filter); `finance/**` javadoc, `FinanceMcpTools` description; `identity/employee/domain/model/MembershipInvitation.DECLINES_BEFORE_COOLDOWN = 2`, `JdbcMembershipInvitationRepository` (upsert guard `decline_count < 2 OR responded_at < cooldown`, `markResponded` counts / resets), `db/migration/V82__membership_invitations_decline_count.sql`.
+
+**Design Notes.** Patterns unchanged: manifest mapping as the single default-rights source + the single evaluator `ModulePermissions.permissionsOf(Authentication)` (no call site touched for expenses and finance); the finance store pin stays in `FinanceAccess`/`FinanceSummaryService` (Policy value object). Invitation state machine: the refusal counter is one more SQL guard in the existing conditional upsert (no read-then-write). Complexity: no new query anywhere — the marker is O(1), the upsert and `markResponded` stay single keyed statements on the unique `(tenant_id, user_id)` / primary key; V82 is a metadata-only `ADD COLUMN … DEFAULT 0` plus one `UPDATE` of the (small) DECLINED subset. The finance summary of a member is the existing store-scoped path (`storeScopedTaxed` + `store_id = ?`, expenses `store_id = ?`): same 2–3 grouped queries.
+
+**Decisions taken by default (this reprise).** R1 an acceptance resets the refusal count, a cancellation leaves it unchanged; existing DECLINED rows count as one refusal (they become re-invitable). R2 the device of every member without `EXPENSE_VIEW` (built-in MANAGER, EMPLOYEE, VIEWER) is re-seeded once at deploy (marker `;ex=0`) — before go-live, so no extra cost in production. R3 a member's `storeId=` filter on the finance summary is ignored (pinned to his store), as for expenses and clients, not refused. R4 a member granted « Voir la situation financière » without « Voir les dépenses » still sees his store's expense totals inside the summary (they are part of the financial result the owner chose to show). R5 once a person has refused twice, each later refusal starts a new 30-day wait (no decay; privacy-protective); the 90-day retention (19-11c) deleting the row resets everything.
+
+**Reprise result.** Review: 5 layers, 37 findings (high 0, medium 5, low 26, false 6) — patched: the wrong in2Days expectation, the untested member `financial_result` (AI test added), the third-refusal case, the `storeId` parameter text, comments on the fleet-wide re-seed, the Mobile section, weak assertions, a broken javadoc; nothing deferred; the rest rejected with reasons (triage log above). Follow-up review: `false` (no high patched; the medium ones are test/documentation fixes, not behaviour).
+
+**Reprise verification.** Chunked Maven runs (tag t1114r), all green: expenses 41, finance 21, identity 968, architecture 173 (1 skipped, pre-existing), sync 701, shared 1 397 (shared/module 558, shared/ai 27), acceptance 15, assistant 55, admin 721; `docs/ai/tools.md` regenerated (`financial_result` texts), `endpoints.md` unchanged (no endpoint change). Live (port 4682, DB `keevo_dev_t1114r`, WhatsApp noop, FCM off, then dropped): V82 column present; built-in manager — `/roles/me` without `EXPENSE_*`, `GET /expenses` 403 « Vous n'avez pas les droits nécessaires », push `CREATE_EXPENSE` REJECTED FORBIDDEN « Les dépenses sont réservées au propriétaire : demandez-lui le droit de les gérer. », pull 0 expense; catalogue lists « Voir la situation financière »; role « Gérant comptable » (FINANCE_VIEW + EXPENSE_VIEW) assigned → summary of his store only (4 000 of expenses, `byStore` empty), unchanged after an expense of 3 000 in a second store and with `?storeId=` of that store, owner sees 7 000 over 2 stores, expenses 200; invitations — invite 202, refusal 1 → re-invite visible (1 pending), refusal 2 → re-invite silent (0 pending), row `DECLINED|2`.
+
 ## Mobile (React Native — dépôt AI/bref)
 
 **Statut :** API livrée (commit `ad26989f`). Conventions : spec-16-11 ; synchro : spec-16-10. **Clé de suivi mobile :** `m19-14-roles-permissions-personnalises`.
@@ -213,6 +275,22 @@ Toutes les réponses sont enveloppées `{"success", "data"}` ; erreurs `{"domain
 4. **Fiche membre** : sélecteur de rôle = Gérant / Employé / Lecteur / rôles créés ; afficher `customRoleName` sinon le libellé du rôle intégré.
 5. **Synchro** : un employé sans « Voir les ventes de toute la boutique » reçoit un re-seed unique : purger ses ventes locales des autres vendeurs (règle de purge de spec-16-13, étendue aux ventes d'autres vendeurs).
 6. Aucun code technique à l'écran (seulement `label`, `moduleLabel`, `baseRoleLabel`).
+
+### Reprise 11/11/2026 — à faire côté mobile (API livrée, commit `07b358a4`)
+
+Ce qui change côté API (décisions de l'utilisateur) :
+- **Dépenses : propriétaire seul par défaut.** Le gérant intégré ne reçoit plus `EXPENSE_VIEW/CREATE/DELETE` dans `GET /roles/me` ; `GET/POST/PUT/DELETE /api/v1/expenses` → **403** `FORBIDDEN` « Vous n'avez pas les droits nécessaires » ; push `CREATE_/UPDATE_/DELETE_EXPENSE` → `REJECTED` `FORBIDDEN`, `conflictData.message` « Les dépenses sont réservées au propriétaire : demandez-lui le droit de les gérer. » ; le pull ne contient plus de dépenses. Un rôle personnalisé peut cocher « Voir les dépenses », « Saisir et modifier des dépenses », « Supprimer des dépenses » (sa boutique seulement).
+- **Synchro :** le marqueur de visibilité gagne `;ex=0` pour tout membre sans « Voir les dépenses » → **chaque appareil de membre (gérant, employé, lecteur) reçoit une fois `reseed: true`** au déploiement de la refonte (le paragraphe « Le gérant et le lecteur ne sont pas re-semés » ci-dessus ne vaut plus).
+- **« Voir la situation financière »** (`FINANCE_VIEW`) apparaît dans `GET /roles/permissions` (module « Finance ») et peut être coché ; le membre qui l'a voit `GET /api/v1/finance/summary` **de sa boutique seulement** (pas de `byStore`, le paramètre `storeId` est ignoré) ; sans boutique : résumé vide.
+
+À implémenter (suite de la liste ci-dessus) :
+7. Masquer l'écran Dépenses (menu, raccourcis, file hors ligne) quand `GET /roles/me` ne contient pas `EXPENSE_VIEW` — y compris pour un gérant ; ne jamais mettre en file une opération de dépense sans `EXPENSE_CREATE` / `EXPENSE_DELETE`.
+8. Sur un `reseed: true`, si `EXPENSE_VIEW` est absent : **purger toutes les dépenses locales** (et la file d'opérations de dépenses en attente, en affichant « Les dépenses sont réservées au propriétaire »).
+9. Afficher l'écran Finance quand `permissions` contient `FINANCE_VIEW` ; pour un membre, titre « Situation de ma boutique », pas de sélecteur de boutique ni de tableau par boutique.
+
+Scénarios :
+- Given un gérant sans rôle personnalisé, When il ouvre l'app après le déploiement, Then l'appareil est re-semé, ses dépenses locales disparaissent et l'écran Dépenses est masqué.
+- Given le propriétaire coche « Voir la situation financière » dans le rôle « Gérant comptable » d'un gérant de la boutique B, When le gérant ouvre Finance, Then il voit les chiffres de B seulement.
 
 ### Implémentation de référence
 
