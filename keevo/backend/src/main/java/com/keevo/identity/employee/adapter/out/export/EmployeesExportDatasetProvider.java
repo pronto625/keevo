@@ -52,12 +52,17 @@ public class EmployeesExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "e.first_name, e.last_name, u.phone_number, st.name, e.status, e.created_at";
+        // Story 19.6b — a member who joined by an invitation typed with his username: his phone stays hidden
+        return "e.first_name, e.last_name, CASE WHEN mi.identifier_kind = 'USERNAME' THEN NULL ELSE u.phone_number END, "
+                + "st.name, e.status, e.created_at";
     }
 
     @Override
     protected String fromClause() {
-        return "employees e LEFT JOIN public.users u ON u.id = e.user_id LEFT JOIN stores st ON st.id = e.store_id";
+        return "employees e LEFT JOIN public.users u ON u.id = e.user_id "
+                + "LEFT JOIN public.membership_invitations mi ON mi.user_id = e.user_id AND mi.status = 'ACCEPTED' "
+                + "AND mi.tenant_id = (SELECT cur_t.id FROM public.tenants cur_t WHERE cur_t.schema_name = current_schema()) "
+                + "LEFT JOIN stores st ON st.id = e.store_id";
     }
 
     @Override

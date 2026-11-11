@@ -50,6 +50,7 @@ public class EmployeeController {
     private final EmployeeRoleResolver employeeRoleResolver;
     private final GetEmployeeActivityUseCase getEmployeeActivityUseCase;
     private final EmployeeTeamScope teamScope;
+    private final MembershipInvitationUseCase invitationUseCase;
 
     public EmployeeController(CreateEmployeeUseCase createEmployeeUseCase,
                                ListEmployeesUseCase listEmployeesUseCase,
@@ -62,7 +63,8 @@ public class EmployeeController {
                                SetEmployeePasswordUseCase setEmployeePasswordUseCase,
                                EmployeeRoleResolver employeeRoleResolver,
                                GetEmployeeActivityUseCase getEmployeeActivityUseCase,
-                               EmployeeTeamScope teamScope) {
+                               EmployeeTeamScope teamScope,
+                               MembershipInvitationUseCase invitationUseCase) {
         this.createEmployeeUseCase = createEmployeeUseCase;
         this.listEmployeesUseCase = listEmployeesUseCase;
         this.reassignStoreUseCase = reassignStoreUseCase;
@@ -75,26 +77,31 @@ public class EmployeeController {
         this.employeeRoleResolver = employeeRoleResolver;
         this.getEmployeeActivityUseCase = getEmployeeActivityUseCase;
         this.teamScope = teamScope;
+        this.invitationUseCase = invitationUseCase;
     }
 
     @Operation(summary = "Create a new employee",
             description = "Story 19.4 — phoneNumber and username are optional, at least one is required. A username is "
                     + "3 to 50 letters, digits, '.', '_' or '-', unique case-insensitively; the member signs in with it "
-                    + "and the temporary password, returned once. Story 19.6 — when the phone (then the username) "
-                    + "already belongs to an account, that account is added to the company as is: password unchanged, "
-                    + "temporaryPassword \"\" (never null), existingAccount true; the person is notified (inbox, "
-                    + "then WhatsApp or email, best effort).")
+                    + "and the temporary password, returned once. Story 19.6b — when the identifier already belongs to "
+                    + "an account, nothing is attached: the person is invited (WhatsApp or verified email, once) and "
+                    + "becomes a member when she accepts in the app; the answer is 202 {employee: null, "
+                    + "temporaryPassword: \"\", existingAccount: true, invitationPending: true} whatever the account's "
+                    + "state (nothing else is disclosed). The plan limit is checked first, for every identifier.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201",
-                    description = "Employee created (existingAccount false) or existing account added (existingAccount "
-                            + "true, temporaryPassword \"\")"),
+            @ApiResponse(responseCode = "201", description = "Employee created (existingAccount and invitationPending "
+                    + "false)"),
+            @ApiResponse(responseCode = "202", description = "Story 19.6b — existing account: invitation pending"),
             @ApiResponse(responseCode = "403", description = "Plan limit exceeded or not OWNER"),
             @ApiResponse(responseCode = "409",
                     description = "Already a member of this company (MEMBER_ALREADY_IN_COMPANY) or deactivated here "
-                            + "(MEMBER_INACTIVE_IN_COMPANY); phone and username of two different accounts or only one "
-                            + "of them matching, a platform administrator's or an inactive account (USER_ALREADY_EXISTS); username taken by a concurrent creation (USERNAME_ALREADY_EXISTS)"),
+                            + "(MEMBER_INACTIVE_IN_COMPANY); phone and username given while one of them is already "
+                            + "used (USER_ALREADY_EXISTS); username taken by a concurrent creation "
+                            + "(USERNAME_ALREADY_EXISTS)"),
             @ApiResponse(responseCode = "422",
-                    description = "Neither phone nor username, or invalid username (VALIDATION_FAILED)")
+                    description = "Neither phone nor username, or invalid username (VALIDATION_FAILED)"),
+            @ApiResponse(responseCode = "429", description = "Story 19.6b — too many invitations from this company "
+                    + "today (RATE_LIMIT_EXCEEDED)")
     })
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<TempPasswordResponseDto>> createEmployee(
@@ -105,13 +112,37 @@ public class EmployeeController {
                 actorId, request.phoneNumber(), request.firstName(),
                 request.lastName(), request.storeId(), request.username(), request.role());
         CreateEmployeeResult result = createEmployeeUseCase.execute(command);
-        // Story 19.6 — V1 reads temporaryPassword as a String: "" (never null) for an attached account.
-        TempPasswordResponseDto dto = new TempPasswordResponseDto(
-                toDto(result.employee()),
-                result.existingAccount() ? "" : result.temporaryPassword(),
-                result.existingAccount());
+        if (result.invitationPending()) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseWrapper.ok(
+                    TempPasswordResponseDto.invitation()));
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponseWrapper.ok(dto));
+                .body(ApiResponseWrapper.ok(new TempPasswordResponseDto(
+                        toDto(result.employee()), result.temporaryPassword(), false, false)));
+    }
+
+    @Operation(summary = "Pending invitations of the company",
+            description = "Story 19.6b — invitations of existing accounts not answered yet (7 days): the names, role, "
+                    + "store and identifier the company typed. A MANAGER sees those of his store.")
+    @ApiResponse(responseCode = "200", description = "Pending invitations, newest first")
+    @GetMapping("/invitations")
+    public ResponseEntity<ApiResponseWrapper<List<InvitationResponseDto>>> listInvitations() {
+        UUID scope = teamScope.listScope();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(invitationUseCase.listForCompany(scope).stream()
+                .map(InvitationResponseDto::fromDomain).toList()));
+    }
+
+    @Operation(summary = "Cancel a pending invitation",
+            description = "Story 19.6b — the person can no longer accept it; the company may invite her again.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Invitation cancelled"),
+            @ApiResponse(responseCode = "404", description = "No such pending invitation (INVITATION_NOT_FOUND)")
+    })
+    @DeleteMapping("/invitations/{invitationId}")
+    public ResponseEntity<Void> cancelInvitation(@PathVariable UUID invitationId) {
+        UUID scope = teamScope.listScope();
+        invitationUseCase.cancel(invitationId, scope);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "List all employees")

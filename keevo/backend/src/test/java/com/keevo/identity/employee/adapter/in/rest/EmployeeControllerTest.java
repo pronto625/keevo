@@ -50,6 +50,7 @@ class EmployeeControllerTest {
     @Mock EmployeeRoleResolver employeeRoleResolver;
     @Mock GetEmployeeActivityUseCase getEmployeeActivityUseCase;
     @Mock EmployeeRepository employeeRepository;
+    @Mock com.keevo.identity.employee.domain.port.in.MembershipInvitationUseCase invitationUseCase;
 
     EmployeeController employeeController;
 
@@ -64,7 +65,7 @@ class EmployeeControllerTest {
         employeeController = new EmployeeController(createEmployeeUseCase, listEmployeesUseCase, reassignStoreUseCase,
                 deactivateEmployeeUseCase, reactivateEmployeeUseCase, regeneratePasswordUseCase, updateEmployeeUseCase,
                 changeEmployeeRoleUseCase, setEmployeePasswordUseCase, employeeRoleResolver, getEmployeeActivityUseCase,
-                new EmployeeTeamScope(employeeRepository, employeeRoleResolver));
+                new EmployeeTeamScope(employeeRepository, employeeRoleResolver), invitationUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(employeeController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -122,23 +123,48 @@ class EmployeeControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.temporaryPassword").value("TmpPass12345"))
                 .andExpect(jsonPath("$.data.existingAccount").value(false)) // 19.6 — always present
+                .andExpect(jsonPath("$.data.invitationPending").value(false)) // 19.6b — always present
                 .andExpect(jsonPath("$.data.employee.firstName").value("Loïc"));
     }
 
     @Test
-    @DisplayName("19.6 POST /api/v1/employees with an existing account → 201, temporaryPassword \"\" (never null: V1 "
-            + "reads a String), existingAccount true")
-    void createEmployee_existingAccount_emptyTempPassword() throws Exception {
-        when(createEmployeeUseCase.execute(any())).thenReturn(new CreateEmployeeResult(sampleEmployee, null, true));
+    @DisplayName("19.6b POST /api/v1/employees with an existing account → 202, employee null, temporaryPassword \"\" "
+            + "(never null: V1 reads a String), existingAccount and invitationPending true")
+    void createEmployee_existingAccount_invitation() throws Exception {
+        when(createEmployeeUseCase.execute(any())).thenReturn(CreateEmployeeResult.pendingInvitation());
 
         mockMvc.perform(post("/api/v1/employees")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"firstName":"Loïc","lastName":"Nkoulou","phoneNumber":"+237690000001","storeId":"%s"}
                                 """.formatted(storeId)))
-                .andExpect(status().isCreated())
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.employee").doesNotExist())
                 .andExpect(jsonPath("$.data.temporaryPassword").value(""))
-                .andExpect(jsonPath("$.data.existingAccount").value(true));
+                .andExpect(jsonPath("$.data.existingAccount").value(true))
+                .andExpect(jsonPath("$.data.invitationPending").value(true));
+        verify(employeeRoleResolver, never()).resolveAll(any());
+    }
+
+    @Test
+    @DisplayName("19.6b GET /api/v1/employees/invitations (owner: whole company) and DELETE cancel → 204")
+    void invitations_listAndCancel() throws Exception {
+        var inv = com.keevo.identity.employee.domain.model.MembershipInvitation.pending(UUID.randomUUID(),
+                UUID.randomUUID(), "VIEWER", storeId, "Awa", "Mbarga",
+                com.keevo.identity.employee.domain.model.MembershipInvitation.IdentifierKind.USERNAME, "awa.k", actorId,
+                Instant.now(), Instant.now().plusSeconds(3600));
+        when(invitationUseCase.listForCompany(null)).thenReturn(List.of(inv));
+
+        mockMvc.perform(get("/api/v1/employees/invitations"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].firstName").value("Awa"))
+                .andExpect(jsonPath("$.data[0].roleLabel").value("Lecteur"))
+                .andExpect(jsonPath("$.data[0].identifierKind").value("USERNAME"))
+                .andExpect(jsonPath("$.data[0].identifier").value("awa.k"));
+
+        mockMvc.perform(delete("/api/v1/employees/invitations/" + inv.id()))
+                .andExpect(status().isNoContent());
+        verify(invitationUseCase).cancel(inv.id(), null);
     }
 
     @Test

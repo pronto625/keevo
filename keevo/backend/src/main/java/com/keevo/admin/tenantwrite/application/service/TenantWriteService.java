@@ -141,8 +141,11 @@ public class TenantWriteService implements TenantWriteUseCase {
             CreatedMember created = members.createMember(tenant.schemaName(), new CreateMemberInput(actorId,
                     in.phoneNumber().trim(), in.firstName().trim(), in.lastName() == null ? null : in.lastName().trim(),
                     storeId, role));
+            if (created.invitationPending()) { // Story 19.6b — an existing account is invited, never attached
+                return new MemberCreated(null, null, null, true, null, true);
+            }
             return new MemberCreated(created.employeeId().toString(), created.userId().toString(),
-                    created.temporaryPassword(), created.existingAccount(), view(tenant, created.employeeId()));
+                    created.temporaryPassword(), created.existingAccount(), view(tenant, created.employeeId()), false);
         });
     }
 

@@ -21,7 +21,7 @@ class PlatformWhatsAppMessageTest {
                 .containsExactly("Riz");
         assertThat(PlatformWhatsAppMessage.fixed(PlatformMessageKind.ACCOUNT_DELETED, "Supprimé").parameters())
                 .isEmpty();
-        PlatformWhatsAppMessage member = PlatformWhatsAppMessage.of(PlatformMessageKind.MEMBER_ADDED, "texte",
+        PlatformWhatsAppMessage member = PlatformWhatsAppMessage.of(PlatformMessageKind.MEMBERSHIP_INVITATION, "texte",
                 "Boutique Akwa", "Gérant");
         assertThat(member.parameters()).containsExactly("Boutique Akwa", "Gérant");
         assertThat(member.text()).isEqualTo("texte");
@@ -32,7 +32,7 @@ class PlatformWhatsAppMessageTest {
     void wrongCount() {
         assertThatThrownBy(() -> PlatformWhatsAppMessage.of(PlatformMessageKind.STOCK_ALERT, "t", "a", "b"))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("STOCK_ALERT");
-        assertThatThrownBy(() -> PlatformWhatsAppMessage.fixed(PlatformMessageKind.MEMBER_ADDED, "t"))
+        assertThatThrownBy(() -> PlatformWhatsAppMessage.fixed(PlatformMessageKind.MEMBERSHIP_INVITATION, "t"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -42,7 +42,7 @@ class PlatformWhatsAppMessageTest {
         PlatformWhatsAppMessage m = PlatformWhatsAppMessage.detail(PlatformMessageKind.DAILY_REPORT, null);
         assertThat(m.text()).isEmpty();
         assertThat(m.parameters()).containsExactly("");
-        assertThat(PlatformWhatsAppMessage.of(PlatformMessageKind.MEMBER_ADDED, "t", null, "Gérant").parameters())
+        assertThat(PlatformWhatsAppMessage.of(PlatformMessageKind.MEMBERSHIP_INVITATION, "t", null, "Gérant").parameters())
                 .containsExactly("", "Gérant");
         assertThat(new PlatformWhatsAppMessage(PlatformMessageKind.SYNC_SILENCE, List.of("3"), "t").parameters())
                 .containsExactly("3");

@@ -172,6 +172,25 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
     }
 
     @Test
+    @DisplayName("19.6b — actor who joined by an invitation typed with his username: no phone; by phone: phone kept")
+    void actorPhone_hiddenForUsernameInvitedMember() {
+        UUID byUsername = insertUser("EMPLOYEE");
+        UUID byPhone = insertUser("EMPLOYEE");
+        for (Object[] row : new Object[][]{{byUsername, "USERNAME"}, {byPhone, "PHONE"}}) {
+            jdbc.update("INSERT INTO public.membership_invitations (id, tenant_id, user_id, role, store_id, "
+                    + "first_name, last_name, identifier_kind, identifier, status, invited_at, expires_at, "
+                    + "responded_at, last_sent_at) VALUES (gen_random_uuid(), ?, ?, 'EMPLOYEE', gen_random_uuid(), "
+                    + "'A', 'B', ?, 'x', 'ACCEPTED', now(), now(), now(), now())", currentTenantId(), row[0], row[1]);
+        }
+        Instant at = Instant.parse("2026-02-03T10:00:00Z");
+        UUID e1 = insertEnriched(byUsername, null, at, null);
+        UUID e2 = insertEnriched(byPhone, null, at.plusSeconds(1), null);
+
+        assertThat(adapter.findById(e1).orElseThrow().actorPhone()).isNull();
+        assertThat(adapter.findById(e2).orElseThrow().actorPhone()).startsWith("+2376");
+    }
+
+    @Test
     @DisplayName("actorName: employee name > stored actorLabel; storeName resolved from stores")
     void actorAndStoreNames() {
         UUID storeId = insertStore("Boutique Centre");

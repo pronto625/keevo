@@ -74,7 +74,8 @@ class EmployeeControllerManagerTest {
         EmployeeController controller = new EmployeeController(createEmployeeUseCase, listEmployeesUseCase,
                 reassignStoreUseCase, deactivateEmployeeUseCase, reactivateEmployeeUseCase, regeneratePasswordUseCase,
                 updateEmployeeUseCase, changeEmployeeRoleUseCase, setEmployeePasswordUseCase, roleResolver,
-                activityUseCase, new EmployeeTeamScope(employeeRepository, roleResolver));
+                activityUseCase, new EmployeeTeamScope(employeeRepository, roleResolver),
+                org.mockito.Mockito.mock(com.keevo.identity.employee.domain.port.in.MembershipInvitationUseCase.class));
         mockMvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
         actAs("ROLE_MANAGER", myStore);
 

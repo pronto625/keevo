@@ -6,6 +6,8 @@ import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.employee.domain.model.MembershipInvitation.IdentifierKind;
+import com.keevo.identity.employee.domain.port.out.MembershipInvitationRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -35,13 +37,16 @@ public class EmployeeRoleResolver {
     private final UserMembershipRepository membershipRepository;
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
+    private final MembershipInvitationRepository invitationRepository;
 
     public EmployeeRoleResolver(UserMembershipRepository membershipRepository,
                                  TenantRepository tenantRepository,
-                                 UserRepository userRepository) {
+                                 UserRepository userRepository,
+                                 MembershipInvitationRepository invitationRepository) {
         this.membershipRepository = membershipRepository;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
+        this.invitationRepository = invitationRepository;
     }
 
     /**
@@ -67,6 +72,9 @@ public class EmployeeRoleResolver {
      * Story 19.4 — enrichment of several employees in three queries whatever their number (tenant once, users by
      * {@code id = ANY(?)}, memberships of the tenant for those users), instead of three per employee.
      *
+     * <p>Story 19.6b — a member who joined by invitation shows the company only the identifier it typed (one more set
+     * query on the accepted invitations): invited by username → phone {@code ""}; invited by phone → no username.
+     *
      * @return one entry per requested user id
      */
     public Map<UUID, Enrichment> resolveAll(Collection<UUID> userIds) {
@@ -80,13 +88,19 @@ public class EmployeeRoleResolver {
         Map<UUID, String> roles = membershipRepository.findByTenantIdAndUserIdIn(tenant.getId(), userIds).stream()
                 .collect(Collectors.toMap(UserTenantMembership::getUserId, UserTenantMembership::getRole,
                         (a, b) -> a));
+        Map<UUID, IdentifierKind> invitedBy = invitationRepository.acceptedIdentifierKinds(tenant.getId(), userIds);
         Map<UUID, Enrichment> result = new HashMap<>();
         for (UUID userId : userIds) {
             User user = users.get(userId);
+            IdentifierKind kind = invitedBy.get(userId);
+            boolean phoneVisible = kind != IdentifierKind.USERNAME;
+            boolean usernameVisible = kind != IdentifierKind.PHONE;
             result.put(userId, new Enrichment(
                     roles.getOrDefault(userId, "EMPLOYEE"),
-                    user == null ? null : (user.getPhoneNumber() != null ? user.getPhoneNumber() : ""),
-                    user == null || Usernames.isTechnical(user.getUsername()) ? null : user.getUsername(),
+                    user == null ? null
+                            : (phoneVisible && user.getPhoneNumber() != null ? user.getPhoneNumber() : ""),
+                    user == null || !usernameVisible || Usernames.isTechnical(user.getUsername())
+                            ? null : user.getUsername(),
                     roles.containsKey(userId)));
         }
         return result;

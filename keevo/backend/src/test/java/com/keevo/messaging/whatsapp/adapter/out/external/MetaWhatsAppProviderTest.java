@@ -185,7 +185,7 @@ class MetaWhatsAppProviderTest {
         when(http.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(ResponseEntity.ok("{}"));
 
-        assertThat(provider.sendTemplate(PHONE, "keevo_ajout_entreprise", "fr", List.of("Boutique Akwa", "Gérant")))
+        assertThat(provider.sendTemplate(PHONE, "keevo_invitation_entreprise", "fr", List.of("Boutique Akwa", "Gérant")))
                 .isEqualTo(SendOutcome.DELIVERED);
 
         JsonNode body = JSON.valueToTree(requests(1).get(0).getBody());
@@ -194,7 +194,7 @@ class MetaWhatsAppProviderTest {
                 "to", "237699000080",
                 "type", "template",
                 "template", Map.of(
-                        "name", "keevo_ajout_entreprise",
+                        "name", "keevo_invitation_entreprise",
                         "language", Map.of("code", "fr"),
                         "components", List.of(Map.of("type", "body", "parameters", List.of(
                                 Map.of("type", "text", "text", "Boutique Akwa"),

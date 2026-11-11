@@ -41,8 +41,8 @@ public enum PlatformMessageKind {
     ACCOUNT_REACTIVATED(0),
     /** Devices silent for several days. Parameter = number of days. */
     SYNC_SILENCE(1),
-    /** A person was added to a company. Parameters = company name, role label. */
-    MEMBER_ADDED(2),
+    /** A person with an existing account was invited to join a company (19.6b). Parameters = company name, role label. */
+    MEMBERSHIP_INVITATION(2),
     /** Company deletion requested. Parameter = deletion date (dd/MM/yyyy). */
     DELETION_SCHEDULED(1),
     /** Company deleted. No variable. */

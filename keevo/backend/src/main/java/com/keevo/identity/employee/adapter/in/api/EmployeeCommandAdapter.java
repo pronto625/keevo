@@ -70,8 +70,11 @@ class EmployeeCommandAdapter implements EmployeeCommandPort {
         TenantContext.requireCurrent(tenantSchema);
         CreateEmployeeResult result = createEmployee.execute(new CreateEmployeeCommand(in.actorId(), in.phoneNumber(),
                 in.firstName(), in.lastName(), in.storeId(), null, in.role()));
+        if (result.invitationPending()) { // Story 19.6b — an existing account is invited, never attached
+            return new CreatedMember(null, null, null, true, true);
+        }
         return new CreatedMember(result.employee().getId(), result.employee().getUserId(), result.temporaryPassword(),
-                result.existingAccount());
+                result.existingAccount(), false);
     }
 
     @Override
@@ -95,8 +98,9 @@ class EmployeeCommandAdapter implements EmployeeCommandPort {
     @Override
     public UUID create(String tenantSchema, CreateEmployeeInput in) {
         TenantContext.requireCurrent(tenantSchema);
+        // Story 19.6b — the V1 sync push needs an employee record: an existing account is refused as before 19.6
         return createEmployee.execute(new CreateEmployeeCommand(
-                in.actorId(), in.phoneNumber(), in.firstName(), in.lastName(), in.storeId()))
+                in.actorId(), in.phoneNumber(), in.firstName(), in.lastName(), in.storeId(), null, null, false))
                 .employee().getId();
     }
 

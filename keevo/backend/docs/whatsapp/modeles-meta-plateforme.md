@@ -273,17 +273,17 @@ Bonjour, votre boutique Keevo n'a pas été synchronisée depuis {{1}} jours. Ou
 |---|---|
 | `{{1}}` | 3 |
 
-### 3.14 `keevo_ajout_entreprise`
+### 3.14 `keevo_invitation_entreprise`
 
 - Catégorie : Utilitaire (UTILITY)
 - Langue : Français (`fr`)
-- Utilisé pour : Personne ajoutée à une entreprise
+- Utilisé pour : Invitation à rejoindre une entreprise
 - Pied de page : « Message automatique de Keevo »
 
 Corps :
 
 ```text
-Vous avez rejoint {{1}} en tant que {{2}}. Connectez-vous avec votre compte habituel, puis choisissez cette entreprise.
+Vous êtes invité à rejoindre l'équipe de {{1}} en tant que {{2}}. Ouvrez l'application pour accepter ou refuser. L'invitation expire dans 7 jours. Si vous ne connaissez pas cette entreprise, ignorez ce message.
 ```
 
 | Variable | Exemple |
@@ -367,7 +367,7 @@ Merci pour votre confiance.
 | Compte suspendu par le support | `TenantStatusWhatsAppNotificationListener` | `keevo_compte_suspendu` | aucune |
 | Compte réactivé par le support | `TenantStatusWhatsAppNotificationListener` | `keevo_compte_reactive` | aucune |
 | Boutique non synchronisée depuis plusieurs jours | `SyncSilenceAlertService` | `keevo_synchronisation` | {{1}} = nombre de jours |
-| Personne ajoutée à une entreprise | `MemberAddedNotifier` | `keevo_ajout_entreprise` | {{1}} = entreprise, {{2}} = rôle |
+| Invitation à rejoindre une entreprise | `MembershipInvitationNotifier` | `keevo_invitation_entreprise` | {{1}} = entreprise, {{2}} = rôle |
 | Demande de suppression du compte enregistrée | `AccountDeletionService` | `keevo_suppression_programmee` | {{1}} = date de suppression |
 | Compte supprimé | `TenantDeletionService` | `keevo_compte_supprime` | aucune |
 | Lien d'une facture ou d'un devis envoyé au client depuis le numéro Keevo (quand le WhatsApp Business de l'entreprise n'est pas utilisable, 21.5) | `WhatsAppInvoiceChannel` | `keevo_document_lien` | {{1}} = client, {{2}} = « facture » ou « devis », {{3}} = référence, {{4}} = vendeur, {{5}} = montant, {{6}} = lien |

@@ -215,6 +215,8 @@ public final class ErrorMessages {
             Map.entry("MEMBER_ALREADY_IN_COMPANY", "Cette personne fait déjà partie de l'entreprise"),
             Map.entry("MEMBER_INACTIVE_IN_COMPANY", "Cette personne a été désactivée : réactivez-la"),
             Map.entry("MEMBER_ACCOUNT_SHARED", "Ce membre utilise aussi Bref Point ailleurs : il gère lui-même son mot de passe et ses identifiants"),
+            Map.entry("INVITATION_NOT_FOUND", "Cette invitation n'existe plus ou a expiré"),
+            Map.entry("ACCOUNT_RECOVERY_REQUIRED", "Pour rejoindre une autre entreprise, votre compte doit avoir un numéro de téléphone ou une adresse email vérifiée : demandez au responsable de votre entreprise d'ajouter votre numéro"),
             Map.entry("ONBOARDING_ALREADY_COMPLETED", "La configuration initiale est déjà terminée"),
             Map.entry("SECTOR_TEMPLATE_NOT_FOUND", "Secteur d'activité inconnu"),
             Map.entry("PREFERENCES_NOT_FOUND", "Préférences introuvables"),

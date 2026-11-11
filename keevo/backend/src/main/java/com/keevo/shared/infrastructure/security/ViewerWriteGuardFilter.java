@@ -29,7 +29,7 @@ import java.util.Set;
  * here and refused operation by operation ({@code REJECTED/FORBIDDEN}) by the push service.
  *
  * <p>Registered in {@link SecurityConfig} right after {@link JwtAuthFilter} (not a bean: never a second servlet
- * filter). Cost O(1) per request: a method check, then — for a VIEWER write only — a match against a constant list of 19.
+ * filter). Cost O(1) per request: a method check, then — for a VIEWER write only — a match against a constant list of 18.
  */
 public class ViewerWriteGuardFilter extends OncePerRequestFilter {
 
@@ -50,10 +50,6 @@ public class ViewerWriteGuardFilter extends OncePerRequestFilter {
             new AllowedWrite("POST", "/api/v1/auth/change-password"),
             new AllowedWrite("DELETE", "/api/v1/auth/sessions"),
             new AllowedWrite("DELETE", "/api/v1/auth/sessions/{sessionId}"),
-            // Story 19.3b — the viewer's own Google / Apple links
-            new AllowedWrite("POST", "/api/v1/auth/social/accounts/google"),
-            new AllowedWrite("POST", "/api/v1/auth/social/accounts/apple"),
-            new AllowedWrite("DELETE", "/api/v1/auth/social/accounts/{provider}"),
             new AllowedWrite("POST", "/api/v1/devices/token"),
             new AllowedWrite("DELETE", "/api/v1/devices/token"),
             new AllowedWrite("POST", "/api/v1/web-push/subscribe"),
@@ -62,6 +58,9 @@ public class ViewerWriteGuardFilter extends OncePerRequestFilter {
             new AllowedWrite("PATCH", "/api/v1/notifications/{id}/read"),
             new AllowedWrite("POST", "/api/v1/feedback"),
             new AllowedWrite("POST", "/api/v1/sync/push"),
+            // Story 19.6b — a viewer here may answer an invitation to another company (her own account)
+            new AllowedWrite("POST", "/api/v1/account/invitations/{invitationId}/accept"),
+            new AllowedWrite("POST", "/api/v1/account/invitations/{invitationId}/decline"),
             // Story 21.4 — the assistant: asking a question only reads (every tool is read-only and keeps its own
             // gates); the conversations saved are the viewer's own
             new AllowedWrite("POST", "/api/v1/ai/chat"),

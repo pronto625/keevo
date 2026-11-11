@@ -64,7 +64,7 @@ class PlatformTemplateCatalogDocTest {
                 "`TenantStatusWhatsAppNotificationListener`", "aucune"));
         USAGES.put(SYNC_SILENCE, new Usage("Boutique non synchronisée depuis plusieurs jours",
                 "`SyncSilenceAlertService`", "{{1}} = nombre de jours"));
-        USAGES.put(MEMBER_ADDED, new Usage("Personne ajoutée à une entreprise", "`MemberAddedNotifier`",
+        USAGES.put(MEMBERSHIP_INVITATION, new Usage("Invitation à rejoindre une entreprise", "`MembershipInvitationNotifier`",
                 "{{1}} = entreprise, {{2}} = rôle"));
         USAGES.put(DELETION_SCHEDULED, new Usage("Demande de suppression du compte enregistrée",
                 "`AccountDeletionService`", "{{1}} = date de suppression"));

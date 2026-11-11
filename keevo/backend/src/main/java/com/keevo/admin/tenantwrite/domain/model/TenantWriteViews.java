@@ -28,9 +28,12 @@ public final class TenantWriteViews {
     public record MemberInput(String phoneNumber, String firstName, String lastName, String storeId, String role) {
     }
 
-    /** A created member; {@code temporaryPassword} shown once (null when an existing account was attached). */
+    /**
+     * A created member; {@code temporaryPassword} shown once. Story 19.6b — {@code invitationPending}: the phone belongs
+     * to an existing account, which was invited (its acceptance makes it a member): ids, password and member null.
+     */
     public record MemberCreated(String employeeId, String userId, String temporaryPassword, boolean existingAccount,
-                                MemberView member) {
+                                MemberView member, boolean invitationPending) {
     }
 
     /** A member of the account. */

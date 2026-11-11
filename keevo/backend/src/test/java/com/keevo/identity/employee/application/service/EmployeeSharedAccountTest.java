@@ -58,6 +58,7 @@ class EmployeeSharedAccountTest {
     @Mock PasswordEncoder passwordEncoder;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock TransactionLockPort transactionLock;
+    @Mock com.keevo.identity.employee.domain.port.out.MembershipInvitationRepository invitationRepository;
 
     SharedAccountGuard guard;
     final UUID actorId = UUID.randomUUID();
@@ -70,7 +71,7 @@ class EmployeeSharedAccountTest {
     @BeforeEach
     void setUp() {
         TenantContext.setCurrentTenant("kv_a");
-        guard = new SharedAccountGuard(membershipRepository, tenantRepository);
+        guard = new SharedAccountGuard(membershipRepository, tenantRepository, userRepository, invitationRepository);
         employee = new Employee(employeeId, userId, UUID.randomUUID(), "Awa", "Mbarga", EmployeeStatus.ACTIVE, false,
                 Instant.now());
         lenient().when(tenantRepository.findBySchemaName("kv_a")).thenReturn(Optional.of(tenantA));
@@ -115,20 +116,49 @@ class EmployeeSharedAccountTest {
     }
 
     @Test
-    @DisplayName("isShared with the membership already loaded: OWNER here → shared without the EXISTS")
+    @DisplayName("isShared with the membership already loaded: OWNER here with a phone → shared, no second lookup")
     void guard_loadedMembership() {
+        lenient().when(userRepository.findById(userId)).thenReturn(Optional.of(
+                new User(userId, "+237690000099", "$2a$12$x", Role.OWNER, true, Instant.now())));
         assertThat(guard.isShared(userId, tenantA.getId(), Optional.of(new UserTenantMembership(UUID.randomUUID(),
                 userId, tenantA.getId(), "OWNER", true, Instant.now())))).isTrue();
-        verify(membershipRepository, never()).hasMembershipOutside(any(), any());
+        verify(membershipRepository, never()).findByUserIdAndTenantId(any(), any());
     }
 
     @Test
     @DisplayName("OWNER of this company → shared; EMPLOYEE of this company only → not shared")
     void guard_ownerHere() {
+        lenient().when(userRepository.findById(userId)).thenReturn(Optional.of(
+                new User(userId, "+237690000099", "$2a$12$x", Role.OWNER, true, Instant.now())));
         membershipHere("OWNER");
         assertThat(guard.isShared(userId, tenantA.getId())).isTrue();
         membershipHere("EMPLOYEE");
         assertThat(guard.isShared(userId, tenantA.getId())).isFalse();
+        verify(userRepository).findById(userId); // the user is read only for the OWNER
+    }
+
+    @Test
+    @DisplayName("19.6b — OWNER here with only a username and no other company → NOT shared (the owners can recover "
+            + "it); the same account in another company → shared")
+    void guard_ownerWithoutRecoveryChannel() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(User.newEmployee(null, "awa.k", "$2a$12$x")));
+        membershipHere("OWNER");
+        assertThat(guard.isShared(userId, tenantA.getId())).isFalse();
+        guard.refuseIfShared(userId); // no MEMBER_ACCOUNT_SHARED
+
+        sharedElsewhere();
+        assertThat(guard.isShared(userId, tenantA.getId())).isTrue();
+    }
+
+    @Test
+    @DisplayName("19.6b — a verified email is a recovery channel; an unverified one is not")
+    void guard_verifiedEmailIsRecovery() {
+        membershipHere("OWNER");
+        User unverified = User.newEmployee(null, "awa.k", "$2a$12$x").withEmail("awa@example.cm");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(unverified));
+        assertThat(guard.isShared(userId, tenantA.getId())).isFalse();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(unverified.withEmailVerifiedAt(Instant.now())));
+        assertThat(guard.isShared(userId, tenantA.getId())).isTrue();
     }
 
     // ── Account-wide changes refused ─────────────────────────────────────
@@ -257,5 +287,15 @@ class EmployeeSharedAccountTest {
 
         verify(refreshTokenRepository).revokeAllByUserId(userId);
         verify(refreshTokenRepository, never()).revokeAllByUserIdAndTenantId(any(), any());
+    }
+
+    @Test
+    @DisplayName("19.6b — joined this company by invitation → shared even with no other company (the person's own "
+            + "account: never reset by this company)")
+    void guard_joinedByInvitation() {
+        membershipHere("EMPLOYEE");
+        when(invitationRepository.hasAccepted(tenantA.getId(), userId)).thenReturn(true);
+        assertThat(guard.isShared(userId, tenantA.getId())).isTrue();
+        assertShared(() -> guard.refuseIfShared(userId));
     }
 }

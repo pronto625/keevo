@@ -81,8 +81,10 @@ public class AdminTenantWriteController {
     public ResponseEntity<ApiResponseWrapper<MemberCreated>> createMember(@PathVariable String tenantId,
                                                                           @RequestBody(required = false) MemberInput body) {
         CurrentActor.requireSuperAdmin();
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(
-                useCase.createMember(CurrentActor.actorId(), tenantId, body)));
+        MemberCreated created = useCase.createMember(CurrentActor.actorId(), tenantId, body);
+        // Story 19.6b — 202 when the phone belongs to an existing account, which was invited
+        return ResponseEntity.status(created.invitationPending() ? HttpStatus.ACCEPTED : HttpStatus.CREATED)
+                .body(ApiResponseWrapper.ok(created));
     }
 
     @Operation(summary = "Update a member of an account", security = @SecurityRequirement(name = "bearerAuth"))

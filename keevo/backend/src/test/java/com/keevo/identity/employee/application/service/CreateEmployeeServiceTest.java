@@ -73,7 +73,7 @@ class CreateEmployeeServiceTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock PasswordEncoder passwordEncoder;
     @Mock TransactionLockPort transactionLock;
-    @Mock MemberAddedNotifier memberAddedNotifier;
+    @Mock MembershipInvitationService invitationService;
 
     CreateEmployeeService createEmployeeService;
 
@@ -85,9 +85,9 @@ class CreateEmployeeServiceTest {
     void setUp() {
         // 12.2d: real subscription API adapters over the mocked repository / guard
         createEmployeeService = new CreateEmployeeService(userRepository, membershipRepository, employeeRepository,
-                SubscriptionApiTestSupport.limitPort(planLimitGuard), employeeCountPort,
-                SubscriptionApiTestSupport.queryPort(subscriptionRepository), tenantRepository, passwordEncoder,
-                eventPublisher, transactionLock, memberAddedNotifier);
+                new EmployeePlanLimit(transactionLock, SubscriptionApiTestSupport.queryPort(subscriptionRepository),
+                        employeeCountPort, SubscriptionApiTestSupport.limitPort(planLimitGuard)),
+                tenantRepository, passwordEncoder, eventPublisher, invitationService);
         actorId = UUID.randomUUID();
         storeId = UUID.randomUUID();
         premiumSubscription = mock(Subscription.class);
@@ -164,7 +164,8 @@ class CreateEmployeeServiceTest {
         Subscription freeSub = mock(Subscription.class);
         when(freeSub.getPlanType()).thenReturn(PlanType.FREE);
 
-        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
+        // 19.6b — the plan is checked before the lookup: the lookup never runs on a full plan
+        lenient().when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(5, 0));
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "employees limit reached"))
@@ -185,6 +186,9 @@ class CreateEmployeeServiceTest {
         User existing = User.newEmployee("+237690000003", "$2a$12$x");
         UUID tenantId = UUID.randomUUID();
         when(userRepository.findByPhoneNumber("+237690000003")).thenReturn(Optional.of(existing));
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(1, 0));
         when(tenantRepository.findBySchemaName("kv_test01")).thenReturn(Optional.of(
                 new Tenant(tenantId, "KV-TEST01", "kv_test01", TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now())));
         when(membershipRepository.findByUserIdAndTenantId(existing.getId(), tenantId)).thenReturn(Optional.of(
@@ -197,7 +201,7 @@ class CreateEmployeeServiceTest {
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getDomainCode())
                 .isEqualTo(ErrorCode.MEMBER_ALREADY_IN_COMPANY.name());
-        verifyNoInteractions(employeeRepository, memberAddedNotifier);
+        verifyNoInteractions(employeeRepository, invitationService);
     }
 
     @Test

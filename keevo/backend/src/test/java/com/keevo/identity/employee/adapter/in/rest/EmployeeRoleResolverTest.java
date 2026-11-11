@@ -27,6 +27,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.*;
 
@@ -39,6 +40,7 @@ class EmployeeRoleResolverTest {
     @Mock UserMembershipRepository membershipRepository;
     @Mock TenantRepository tenantRepository;
     @Mock UserRepository userRepository;
+    @Mock com.keevo.identity.employee.domain.port.out.MembershipInvitationRepository invitationRepository;
 
     @InjectMocks EmployeeRoleResolver resolver;
 
@@ -117,5 +119,31 @@ class EmployeeRoleResolverTest {
     void empty() {
         assertThat(resolver.resolveAll(List.of())).isEmpty();
         verifyNoInteractions(tenantRepository, userRepository, membershipRepository);
+    }
+
+    @Test
+    @DisplayName("19.6b — joined by invitation: invited by USERNAME → phone \"\"; invited by PHONE → no username; "
+            + "created by the company → both (one extra set query)")
+    void invitedMembers_onlyTheTypedIdentifier() {
+        UUID byUsername = UUID.randomUUID();
+        UUID byPhone = UUID.randomUUID();
+        UUID created = UUID.randomUUID();
+        when(userRepository.findAllByIds(anyCollection())).thenReturn(List.of(
+                user(byUsername, "+237690000011", "awa.k"), user(byPhone, "+237690000012", "ben.n"),
+                user(created, "+237690000013", "cle.m")));
+        when(membershipRepository.findByTenantIdAndUserIdIn(any(), anyCollection())).thenReturn(List.of(
+                membership(byUsername, tenantId, "EMPLOYEE"), membership(byPhone, tenantId, "EMPLOYEE"),
+                membership(created, tenantId, "EMPLOYEE")));
+        when(invitationRepository.acceptedIdentifierKinds(eq(tenantId), anyCollection())).thenReturn(Map.of(
+                byUsername, com.keevo.identity.employee.domain.model.MembershipInvitation.IdentifierKind.USERNAME,
+                byPhone, com.keevo.identity.employee.domain.model.MembershipInvitation.IdentifierKind.PHONE));
+
+        Map<UUID, EmployeeRoleResolver.Enrichment> result = resolver.resolveAll(List.of(byUsername, byPhone, created));
+
+        assertThat(result.get(byUsername)).isEqualTo(new EmployeeRoleResolver.Enrichment("EMPLOYEE", "", "awa.k"));
+        assertThat(result.get(byPhone)).isEqualTo(new EmployeeRoleResolver.Enrichment("EMPLOYEE", "+237690000012", null));
+        assertThat(result.get(created)).isEqualTo(new EmployeeRoleResolver.Enrichment("EMPLOYEE", "+237690000013",
+                "cle.m"));
+        verify(invitationRepository, times(1)).acceptedIdentifierKinds(eq(tenantId), anyCollection());
     }
 }

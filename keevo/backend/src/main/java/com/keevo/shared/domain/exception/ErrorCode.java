@@ -50,6 +50,8 @@ public enum ErrorCode {
     MEMBER_ALREADY_IN_COMPANY,  // Story 19.6 — HTTP 409: the added person already has a membership (active or not) here
     MEMBER_INACTIVE_IN_COMPANY, // Story 19.6 — HTTP 409: the added person has an inactive membership here (reactivate)
     MEMBER_ACCOUNT_SHARED,      // Story 19.6 — HTTP 409: account-wide change refused, the member's account is used elsewhere
+    INVITATION_NOT_FOUND,       // Story 19.6b — HTTP 404: no such pending invitation for the caller (answered, expired, cancelled)
+    ACCOUNT_RECOVERY_REQUIRED,  // Story 19.6b — HTTP 409: joining another company needs a phone or a verified email
     // ── Onboarding ────────────────────────────────────────────────────────
     ONBOARDING_ALREADY_COMPLETED,
     SECTOR_TEMPLATE_NOT_FOUND,    PREFERENCES_NOT_FOUND,       // Story 7.5 — tenant_preferences row missing    // ── Catalog ───────────────────────────────────────────────────

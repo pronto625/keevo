@@ -91,9 +91,10 @@ public final class PlatformTemplateCatalog {
             "Bonjour, votre boutique Keevo n'a pas été synchronisée depuis {{1}} jours. Ouvrez l'application avec "
                     + "une connexion internet pour sauvegarder vos ventes.", List.of("3"));
 
-    public static final PlatformTemplate MEMBER = utility("keevo_ajout_entreprise",
-            "Vous avez rejoint {{1}} en tant que {{2}}. Connectez-vous avec votre compte habituel, puis choisissez "
-                    + "cette entreprise.", List.of("Boutique Akwa", "Gérant"));
+    public static final PlatformTemplate INVITATION = utility("keevo_invitation_entreprise",
+            "Vous êtes invité à rejoindre l'équipe de {{1}} en tant que {{2}}. Ouvrez l'application pour accepter ou "
+                    + "refuser. L'invitation expire dans 7 jours. Si vous ne connaissez pas cette entreprise, ignorez ce "
+                    + "message.", List.of("Boutique Akwa", "Gérant"));
 
     public static final PlatformTemplate DELETION = utility("keevo_suppression_programmee",
             "Votre demande de suppression a été enregistrée. Toutes vos données seront supprimées le {{1}}. "
@@ -128,7 +129,7 @@ public final class PlatformTemplateCatalog {
         byKind.put(ACCOUNT_SUSPENDED, SUSPENDED);
         byKind.put(ACCOUNT_REACTIVATED, REACTIVATED);
         byKind.put(SYNC_SILENCE, SYNC);
-        byKind.put(MEMBER_ADDED, MEMBER);
+        byKind.put(MEMBERSHIP_INVITATION, INVITATION);
         byKind.put(DELETION_SCHEDULED, DELETION);
         byKind.put(ACCOUNT_DELETED, DELETED);
         byKind.put(DOCUMENT_LINK, DOCUMENT);

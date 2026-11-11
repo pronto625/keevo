@@ -63,7 +63,7 @@ class CreateEmployeeServiceUsernameTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock PasswordEncoder passwordEncoder;
     @Mock TransactionLockPort transactionLock;
-    @Mock MemberAddedNotifier memberAddedNotifier;
+    @Mock MembershipInvitationService invitationService;
 
     CreateEmployeeService service;
     UUID actorId = UUID.randomUUID();
@@ -73,9 +73,9 @@ class CreateEmployeeServiceUsernameTest {
     void setUp() {
         TenantContext.setCurrentTenant("kv_test01");
         service = new CreateEmployeeService(userRepository, membershipRepository, employeeRepository,
-                SubscriptionApiTestSupport.limitPort(planLimitGuard), employeeCountPort,
-                SubscriptionApiTestSupport.queryPort(subscriptionRepository), tenantRepository, passwordEncoder,
-                eventPublisher, transactionLock, memberAddedNotifier);
+                new EmployeePlanLimit(transactionLock, SubscriptionApiTestSupport.queryPort(subscriptionRepository),
+                        employeeCountPort, SubscriptionApiTestSupport.limitPort(planLimitGuard)),
+                tenantRepository, passwordEncoder, eventPublisher, invitationService);
     }
 
     @AfterEach
@@ -139,9 +139,9 @@ class CreateEmployeeServiceUsernameTest {
     }
 
     @Test
-    @DisplayName("19.6 — username of an existing account in another case → that account is attached (no new user, no "
-            + "USERNAME_ALREADY_EXISTS)")
-    void usernameTaken_attachesExistingAccount() {
+    @DisplayName("19.6b — username of an existing account in another case → that account is invited by USERNAME "
+            + "(no new user, nothing attached, no USERNAME_ALREADY_EXISTS)")
+    void usernameTaken_invitesExistingAccount() {
         stubCreationFlow();
         User existing = User.newEmployee(null, "AWA_K", "$2b$12$x");
         when(userRepository.findByUsername("awa_k")).thenReturn(Optional.of(existing));
@@ -149,10 +149,15 @@ class CreateEmployeeServiceUsernameTest {
         CreateEmployeeResult result = service.execute(command(null, "awa_k"));
 
         assertThat(result.existingAccount()).isTrue();
+        assertThat(result.invitationPending()).isTrue();
         assertThat(result.temporaryPassword()).isNull();
         verify(userRepository, never()).insertIfAbsent(any());
         verify(userRepository, never()).save(any());
-        verify(membershipRepository).save(any(UserTenantMembership.class));
+        verify(membershipRepository, never()).save(any(UserTenantMembership.class));
+        verify(invitationService).invite(org.mockito.ArgumentMatchers.eq(existing), any(), any(), any(),
+                org.mockito.ArgumentMatchers.eq(
+                        com.keevo.identity.employee.domain.model.MembershipInvitation.IdentifierKind.USERNAME),
+                org.mockito.ArgumentMatchers.eq("awa_k"));
     }
 
     @Test

@@ -74,6 +74,9 @@ public class SecurityConfig {
             "/api/v1/auth/create-company",   // Story 19.2 — company creation from a loginToken (account without company)
             "/api/v1/auth/social/google",    // Story 19.3 — Google ID token → loginToken + memberships
             "/api/v1/auth/social/apple",     // Story 19.3 — Apple identity token → loginToken + memberships
+            "/api/v1/auth/invitations/pending",     // Story 19.6b — invitations at the login step (loginToken body)
+            "/api/v1/auth/invitations/*/accept",    // Story 19.6b — accept at the login step (loginToken body)
+            "/api/v1/auth/invitations/*/decline",   // Story 19.6b — decline at the login step (loginToken body)
             "/api/v1/web-push/vapid-public-key", // Story 19.9b — VAPID public key of browser notifications
             "/api/v1/app-version/check",     // Story 19.10 — minimum / latest app version (per-IP limited, raw body)
             "/api/v1/exports/download",      // v1s-18-1 — signed export link (HMAC token, no JWT)

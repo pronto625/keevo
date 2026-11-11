@@ -113,9 +113,10 @@ class PlatformTemplateCatalogTest {
     @Test
     @DisplayName("render replaces variables in order; {{0}} is left as is")
     void render() {
-        assertThat(PlatformTemplateCatalog.MEMBER.render(List.of("Boutique Akwa", "Gérant")))
-                .isEqualTo("Vous avez rejoint Boutique Akwa en tant que Gérant. Connectez-vous avec votre compte "
-                        + "habituel, puis choisissez cette entreprise.");
+        assertThat(PlatformTemplateCatalog.INVITATION.render(List.of("Boutique Akwa", "Gérant")))
+                .isEqualTo("Vous êtes invité à rejoindre l'équipe de Boutique Akwa en tant que Gérant. Ouvrez l'application "
+                        + "pour accepter ou refuser. L'invitation expire dans 7 jours. Si vous ne connaissez pas cette "
+                        + "entreprise, ignorez ce message.");
         assertThat(new PlatformTemplate("t", Category.UTILITY, "fr", "a {{0}} b", null, List.of()).render(List.of("x")))
                 .isEqualTo("a {{0}} b");
     }

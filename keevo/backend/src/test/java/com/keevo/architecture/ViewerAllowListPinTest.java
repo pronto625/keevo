@@ -38,6 +38,9 @@ class ViewerAllowListPinTest {
             "PATCH /api/v1/notifications/{id}/read",
             "POST /api/v1/feedback",
             "POST /api/v1/sync/push",
+            // Story 19.6b — answering an invitation to another company (the viewer's own account)
+            "POST /api/v1/account/invitations/{invitationId}/accept",
+            "POST /api/v1/account/invitations/{invitationId}/decline",
             // Story 21.4 — the assistant: a question reads data (tools keep the VIEWER read-only), conversations
             // are the viewer's own
             "POST /api/v1/ai/chat",

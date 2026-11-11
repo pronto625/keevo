@@ -40,6 +40,7 @@ class EmployeeActivityControllerSecurityTest {
     @Autowired MockMvc mockMvc;
 
     @MockitoBean CreateEmployeeUseCase createEmployeeUseCase;
+    @MockitoBean com.keevo.identity.employee.domain.port.in.MembershipInvitationUseCase invitationUseCase;
     @MockitoBean ListEmployeesUseCase listEmployeesUseCase;
     @MockitoBean ReassignStoreUseCase reassignStoreUseCase;
     @MockitoBean DeactivateEmployeeUseCase deactivateEmployeeUseCase;

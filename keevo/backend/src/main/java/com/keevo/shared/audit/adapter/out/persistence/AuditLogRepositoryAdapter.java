@@ -46,7 +46,9 @@ public class AuditLogRepositoryAdapter implements AuditPort {
      * join; {@code stores}/{@code employees} resolve to the tenant schema via search_path.
      * The employee lookup is LATERAL + LIMIT 1 so a user with several employee rows never
      * duplicates an audit row. Story v1s-18-7 — {@code te} gives Employee targets without a
-     * stored label (legacy rows, events carrying no name) the employee's current name.
+     * stored label (legacy rows, events carrying no name) the employee's current name. Story 19.6b — {@code ami}: the
+     * actor's phone is hidden when he joined this company by an invitation typed with his username (one lookup on the
+     * unique {@code (tenant_id, user_id)} key per row, the current tenant resolved once).
      */
     /**
      * Displayed object label: stored label, else the target employee's name (v1s-18-7).
@@ -58,7 +60,7 @@ public class AuditLogRepositoryAdapter implements AuditPort {
     private static final String SELECT_ENRICHED = """
             SELECT CAST(a.id AS text), a.entity_type, CAST(a.entity_id AS text), a.action,
                    a.value_before, a.value_after, CAST(a.user_id AS text), a.occurred_at,
-                   u.phone_number,
+                   CASE WHEN ami.identifier_kind = 'USERNAME' THEN NULL ELSE u.phone_number END,
                    CAST(a.store_id AS text), st.name,
                    COALESCE(a.entity_label,
                             NULLIF(TRIM(CONCAT_WS(' ', te.first_name, te.last_name)), '')),
@@ -71,6 +73,8 @@ public class AuditLogRepositoryAdapter implements AuditPort {
             LEFT JOIN public.users u ON a.user_id = u.id
             LEFT JOIN public.user_tenant_memberships am ON am.user_id = a.user_id
                  AND am.tenant_id = (SELECT cur_t.id FROM public.tenants cur_t WHERE cur_t.schema_name = current_schema())
+            LEFT JOIN public.membership_invitations ami ON ami.user_id = a.user_id AND ami.status = 'ACCEPTED'
+                 AND ami.tenant_id = (SELECT cur_i.id FROM public.tenants cur_i WHERE cur_i.schema_name = current_schema())
             LEFT JOIN stores st ON st.id = a.store_id
             LEFT JOIN employees te ON a.entity_type = 'Employee' AND te.id = a.entity_id
             LEFT JOIN LATERAL (

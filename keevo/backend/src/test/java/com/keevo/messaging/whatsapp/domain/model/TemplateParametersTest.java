@@ -24,7 +24,7 @@ class TemplateParametersTest {
     @Test
     @DisplayName("short values are kept as they are")
     void shortKept() {
-        assertThat(TemplateParameters.fit(PlatformTemplateCatalog.MEMBER, List.of("Boutique Akwa", "Gérant")))
+        assertThat(TemplateParameters.fit(PlatformTemplateCatalog.INVITATION, List.of("Boutique Akwa", "Gérant")))
                 .contains(List.of("Boutique Akwa", "Gérant"));
     }
 

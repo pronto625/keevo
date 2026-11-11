@@ -90,7 +90,9 @@ class IdentityEmployeeApiAdaptersTest {
         Employee created = employee(EmployeeStatus.ACTIVE);
         UUID actor = UUID.randomUUID();
         UUID store = UUID.randomUUID();
-        when(createEmployee.execute(new CreateEmployeeCommand(actor, "+237690000002", "Awa", "Ngono", store)))
+        // Story 19.6b — the sync push never invites: invitationAllowed false
+        when(createEmployee.execute(new CreateEmployeeCommand(actor, "+237690000002", "Awa", "Ngono", store, null,
+                null, false)))
                 .thenReturn(new CreateEmployeeResult(created, "tmp"));
 
         assertThat(adapter.create(TENANT, new CreateEmployeeInput(actor, "+237690000002", "Awa", "Ngono", store)))
@@ -109,5 +111,31 @@ class IdentityEmployeeApiAdaptersTest {
         assertThatThrownBy(() -> new CreateEmployeeInput(UUID.randomUUID(), "+237", "A", "B", null))
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+    }
+
+    @Test
+    void createMember_existingAccount_invitationWithoutIds() {
+        var adapter = new EmployeeCommandAdapter(createEmployee, reassignStore, deactivateEmployee, reactivateEmployee);
+        when(createEmployee.execute(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(CreateEmployeeResult.pendingInvitation());
+
+        var created = adapter.createMember(TENANT, new com.keevo.identity.api.CreateMemberInput(UUID.randomUUID(),
+                "+237690000002", "Awa", null, UUID.randomUUID(), null));
+
+        assertThat(created).isEqualTo(new com.keevo.identity.api.CreatedMember(null, null, null, true, true));
+    }
+
+    @Test
+    void createMember_newAccount_notAnInvitation() {
+        var adapter = new EmployeeCommandAdapter(createEmployee, reassignStore, deactivateEmployee, reactivateEmployee);
+        Employee created = employee(EmployeeStatus.ACTIVE);
+        when(createEmployee.execute(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new CreateEmployeeResult(created, "tmp"));
+
+        var member = adapter.createMember(TENANT, new com.keevo.identity.api.CreateMemberInput(UUID.randomUUID(),
+                "+237690000003", "Awa", "N", UUID.randomUUID(), null));
+
+        assertThat(member.invitationPending()).isFalse();
+        assertThat(member.employeeId()).isEqualTo(created.getId());
     }
 }

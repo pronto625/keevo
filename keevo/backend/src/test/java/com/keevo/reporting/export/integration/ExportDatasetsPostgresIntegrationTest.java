@@ -381,6 +381,27 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
     }
 
     @Test
+    @DisplayName("19.6b — a member who joined by an invitation typed with his username: no phone in the employees "
+            + "export")
+    void employeesExport_hidesPhoneOfUsernameInvitedMember() throws Exception {
+        Seed a = seed("I" + UUID.randomUUID().toString().substring(0, 8));
+        UUID tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class,
+                a.schema());
+        jdbc.update("INSERT INTO public.membership_invitations (id, tenant_id, user_id, role, store_id, first_name, "
+                + "last_name, identifier_kind, identifier, status, invited_at, expires_at, responded_at, last_sent_at) "
+                + "VALUES (?, ?, ?, 'EMPLOYEE', ?, 'Awa', 'K', 'USERNAME', 'awa.k', 'ACCEPTED', now(), now(), now(), "
+                + "now())", UUID.randomUUID(), tenantId, a.employeeUser(), a.s1());
+        try {
+            // two datasets: the export is a zip with one CSV per dataset
+            String employees = String.join("\n", unzipCsv(export(a.schema(), List.of("employees", "clients"),
+                    ExportFormat.CSV, ExportFilter.none())).get("employees"));
+            assertThat(employees).contains("\nAwa;" + a.tag() + "-Emp;;" + a.tag() + "-S1;Actif;");
+        } finally {
+            jdbc.update("DELETE FROM public.membership_invitations WHERE tenant_id = ?", tenantId);
+        }
+    }
+
+    @Test
     @DisplayName("content: French labels, archived / cancelled rows kept, integer XAF, WAT dates, store-scoped stock, actor names")
     void content() throws Exception {
         Seed a = seed("C" + UUID.randomUUID().toString().substring(0, 8));

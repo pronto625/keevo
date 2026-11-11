@@ -157,6 +157,14 @@ public final class User {
     /** Story 19.1 — true when a password hash is present (OTP/social-only accounts have none). */
     public boolean hasPassword()       { return passwordHash != null && !passwordHash.isBlank(); }
 
+    /**
+     * Story 19.6b — true when the person can recover the account alone: a phone (forgot-password and sign-in codes are
+     * sent to it) or a verified email (sign-in codes by email). A username-only account depends on an owner.
+     */
+    public boolean hasRecoveryChannel() {
+        return hasPhoneNumber() || (email != null && !email.isBlank() && emailVerifiedAt != null);
+    }
+
     /** Returns new User instance with updated failedAttempts and lockedUntil. */
     public User withLockoutState(int newFailedAttempts, Instant newLockedUntil) {
         return copy().failedAttempts(newFailedAttempts).lockedUntil(newLockedUntil).build();

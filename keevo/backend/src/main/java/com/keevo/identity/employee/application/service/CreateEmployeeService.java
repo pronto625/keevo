@@ -2,6 +2,7 @@ package com.keevo.identity.employee.application.service;
 
 import com.keevo.identity.api.Role;
 import com.keevo.shared.domain.PhoneNumbers;
+import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.Usernames;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
@@ -11,17 +12,14 @@ import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeeCreatedEvent;
 import com.keevo.identity.employee.domain.model.CreateEmployeeResult;
 import com.keevo.identity.employee.domain.model.Employee;
+import com.keevo.identity.employee.domain.model.MembershipInvitation;
 import com.keevo.identity.employee.domain.model.TempPasswordFactory;
 import com.keevo.identity.employee.domain.port.in.CreateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.in.CreateEmployeeUseCase;
-import com.keevo.identity.employee.domain.port.out.EmployeeCountPort;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
-import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.shared.capability.entitlement.PlanLimitCheck;
-import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -35,19 +33,20 @@ import java.time.Instant;
  * <p>Story 19.4 — the member is identified by a phone, a username (Bref members), or both. Complexity: one indexed
  * lookup per identifier given, then today's flow.
  *
- * <p>Story 19.6 — find-or-attach: when the phone (then the username) already belongs to an account, that account is
- * attached to this company (membership with the requested role + employee row, password untouched, no forced change,
- * the person notified after commit by {@link MemberAddedNotifier}) instead of failing. Refused when it is already a
- * member here ({@code MEMBER_ALREADY_IN_COMPANY}, or {@code MEMBER_INACTIVE_IN_COMPANY} when deactivated), is the
- * platform administrator or an inactive account, or when phone and username point at two different accounts or only
- * one of them matches ({@code USER_ALREADY_EXISTS}). The global {@code users.role} is never
- * changed. Complexity: + one {@code (user_id, tenant_id)} index lookup.
+ * <p>Story 19.6b — an identifier that already belongs to an account never attaches it: the account is invited
+ * ({@link MembershipInvitationService#invite}) and only the person's acceptance makes it a member. The order hides the
+ * account from the inviting company: per-company lock and plan ceiling first (both paths), then the lookup; both
+ * identifiers given while one is already used → {@code USER_ALREADY_EXISTS} without saying which nor whose; an existing
+ * account already member here → {@code MEMBER_ALREADY_IN_COMPANY} / {@code MEMBER_INACTIVE_IN_COMPANY} (the company
+ * knows its members); otherwise the neutral invitation result, whatever the account's state. The global
+ * {@code users.role} is never changed. Complexity: + one {@code (user_id, tenant_id)} index lookup, one count, one
+ * upsert.
  */
 @Service
 public class CreateEmployeeService implements CreateEmployeeUseCase {
 
-    static final String PARTIAL_MATCH_MESSAGE =
-            "Ce téléphone ou cet identifiant appartient déjà à un compte : n'indiquez que celui-là";
+    static final String PARTIAL_MATCH_MESSAGE = "Ce téléphone ou cet identifiant est déjà utilisé : indiquez seulement "
+            + "le téléphone ou seulement l'identifiant de la personne";
 
     private static final java.util.regex.Pattern PHONE_PATTERN =
             java.util.regex.Pattern.compile("^\\+?[0-9]{8,15}$");
@@ -55,37 +54,28 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
     private final UserRepository userRepository;
     private final UserMembershipRepository membershipRepository;
     private final EmployeeRepository employeeRepository;
-    private final PlanLimitCheck planLimit;
-    private final EmployeeCountPort employeeCountPort;
-    private final TenantPlanQuery tenantPlanQuery;
+    private final EmployeePlanLimit employeePlanLimit;
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
-    private final TransactionLockPort transactionLock;
-    private final MemberAddedNotifier memberAddedNotifier;
+    private final MembershipInvitationService invitationService;
 
     public CreateEmployeeService(UserRepository userRepository,
                                   UserMembershipRepository membershipRepository,
                                   EmployeeRepository employeeRepository,
-                                  PlanLimitCheck planLimit,
-                                  EmployeeCountPort employeeCountPort,
-                                  TenantPlanQuery tenantPlanQuery,
+                                  EmployeePlanLimit employeePlanLimit,
                                   TenantRepository tenantRepository,
                                   PasswordEncoder passwordEncoder,
                                   ApplicationEventPublisher eventPublisher,
-                                  TransactionLockPort transactionLock,
-                                  MemberAddedNotifier memberAddedNotifier) {
+                                  MembershipInvitationService invitationService) {
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
         this.employeeRepository = employeeRepository;
-        this.planLimit = planLimit;
-        this.employeeCountPort = employeeCountPort;
-        this.tenantPlanQuery = tenantPlanQuery;
+        this.employeePlanLimit = employeePlanLimit;
         this.tenantRepository = tenantRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
-        this.transactionLock = transactionLock;
-        this.memberAddedNotifier = memberAddedNotifier;
+        this.invitationService = invitationService;
     }
 
     @Override
@@ -113,15 +103,22 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
             throw new DomainException(ErrorCode.VALIDATION_FAILED, "role must be MANAGER, EMPLOYEE or VIEWER");
         }
 
-        // 1. Story 19.6 — an identifier that already belongs to an account: attach that account (find-or-attach).
+        // 1. Plan limit under the per-company lock, BEFORE the lookup (Story 19.6b): a full plan answers the same
+        // whatever the identifier, and two concurrent arrivals are serialised (v1s-13-13).
+        employeePlanLimit.lockAndCheck(command.storeId());
+
+        // 2. Story 19.6b — an identifier that already belongs to an account: invitation, never an attach.
         // The unique indexes stay the source of truth for a concurrent creation (insertWithUsername / save).
         User existing = findExistingAccount(phone, username);
         if (existing != null) {
-            return attachExistingAccount(existing, command, role);
+            if (!command.invitationAllowed()) { // V1 sync push: the pre-19.6 refusal, nothing stored
+                throw new DomainException(ErrorCode.USER_ALREADY_EXISTS, "identifier already registered");
+            }
+            return phone != null
+                    ? inviteExistingAccount(existing, command, role, MembershipInvitation.IdentifierKind.PHONE, phone)
+                    : inviteExistingAccount(existing, command, role, MembershipInvitation.IdentifierKind.USERNAME,
+                            username);
         }
-
-        // 2. Enforce plan limit
-        enforcePlanLimit(command);
 
         // 3. Generate temp password
         String tempPassword = TempPasswordFactory.generate();
@@ -135,9 +132,7 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         newUser = username == null ? userRepository.save(newUser) : insertWithUsername(newUser);
 
         // 5. Create membership in public.user_tenant_memberships
-        String schemaName = TenantContext.getCurrentTenant();
-        var tenant = tenantRepository.findBySchemaName(schemaName)
-                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
+        Tenant tenant = currentTenant();
         membershipRepository.save(
                 UserTenantMembership.create(newUser.getId(), tenant.getId(), role.name()));
 
@@ -155,80 +150,39 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
     }
 
     /**
-     * Story 19.6 — the account holding the phone, else the one holding the username; {@code null} when neither
-     * exists. Phone and username of two different accounts, or the platform administrator's account, answer
-     * {@code USER_ALREADY_EXISTS}.
+     * The account holding the phone, else the one holding the username; {@code null} when neither exists. Story 19.6b
+     * — when both identifiers are given and either is already used, {@code USER_ALREADY_EXISTS} with one message that
+     * says neither which one nor whether they are the same account.
      */
     private User findExistingAccount(String phone, String username) {
         User byPhone = phone == null ? null : userRepository.findByPhoneNumber(phone).orElse(null);
         User byUsername = username == null ? null : userRepository.findByUsername(username).orElse(null);
-        if (byPhone != null && byUsername != null && !byPhone.getId().equals(byUsername.getId())) {
-            throw new DomainException(ErrorCode.USER_ALREADY_EXISTS, "phone and username of two different accounts");
-        }
-        // Both given, only one matches: the other identifier would be silently dropped (never written on an
-        // existing account) — refused, the owner gives only the matching one.
-        if (phone != null && username != null && (byPhone == null) != (byUsername == null)) {
+        if (phone != null && username != null && (byPhone != null || byUsername != null)) {
             throw DomainException.userFacing(ErrorCode.USER_ALREADY_EXISTS, PARTIAL_MATCH_MESSAGE);
         }
-        User found = byPhone != null ? byPhone : byUsername;
-        if (found != null && (found.getRole() == Role.SUPER_ADMIN || !found.isActive())) {
-            throw new DomainException(ErrorCode.USER_ALREADY_EXISTS, "platform administrator or inactive account");
-        }
-        return found;
+        return byPhone != null ? byPhone : byUsername;
     }
 
     /**
-     * Story 19.6 — adds an existing account to this company: membership with the requested role, employee row with
-     * the request's names and store, no password change and no forced change, {@code EmployeeCreatedEvent}, the
-     * person notified after commit. Plan limits as for a new member.
+     * Story 19.6b — an existing account: refused when it is already a member here (active or deactivated), otherwise
+     * invited (neutral result, see {@link MembershipInvitationService#invite}).
      */
-    private CreateEmployeeResult attachExistingAccount(User account, CreateEmployeeCommand command, Role role) {
-        String schemaName = TenantContext.getCurrentTenant();
-        var tenant = tenantRepository.findBySchemaName(schemaName)
-                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
-        // Per-tenant lock BEFORE the membership check: two concurrent attaches of the same account are serialised,
-        // the second sees the first's membership (no unique-key failure at commit).
-        lockEmployeeLimit();
+    private CreateEmployeeResult inviteExistingAccount(User account, CreateEmployeeCommand command, Role role,
+                                                       MembershipInvitation.IdentifierKind kind, String identifier) {
+        Tenant tenant = currentTenant();
+        // after the per-company lock: a concurrent acceptance of the same person is already visible
         var here = membershipRepository.findByUserIdAndTenantId(account.getId(), tenant.getId());
         if (here.isPresent()) {
             throw new DomainException(here.get().isActive()
                     ? ErrorCode.MEMBER_ALREADY_IN_COMPANY : ErrorCode.MEMBER_INACTIVE_IN_COMPANY);
         }
-        checkPlanLimit(command);
-
-        membershipRepository.save(UserTenantMembership.create(account.getId(), tenant.getId(), role.name()));
-        Employee employee = employeeRepository.save(Employee.createForExistingAccount(
-                account.getId(), command.storeId(), command.firstName(), command.lastName()));
-
-        eventPublisher.publishEvent(new EmployeeCreatedEvent(
-                command.actorId(), account.getId(), employee.getId(),
-                command.storeId(), Instant.now()));
-        memberAddedNotifier.notifyAfterCommit(account, schemaName, tenant.getName(), role);
-        return new CreateEmployeeResult(employee, null, true);
+        invitationService.invite(account, tenant, command, role, kind, identifier);
+        return CreateEmployeeResult.pendingInvitation();
     }
 
-    /**
-     * Plan limit — v1s-13-13: per-tenant lock BEFORE the count so two concurrent creates at max−1 cannot both pass
-     * (the JdbcTemplate count sees the winner's commit, which happens before the lock is released).
-     */
-    private void enforcePlanLimit(CreateEmployeeCommand command) {
-        lockEmployeeLimit();
-        checkPlanLimit(command);
-    }
-
-    private void lockEmployeeLimit() {
-        transactionLock.lock("employee-limit:" + TenantContext.getCurrentTenant());
-    }
-
-    private void checkPlanLimit(CreateEmployeeCommand command) {
-        var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
-                .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
-        // Story 19.7b — tenant and target-store counts in one query; per-store limit after the tenant-wide one
-        var counts = employeeCountPort.countActive(command.storeId(), null);
-        planLimit.checkEmployeeLimit(plan, counts.tenant());
-        if (plan.maxEmployeesPerStore() != null && command.storeId() != null) {
-            planLimit.checkStoreEmployeeLimit(plan, counts.store());
-        }
+    private Tenant currentTenant() {
+        return tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())
+                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
     }
 
     /**
