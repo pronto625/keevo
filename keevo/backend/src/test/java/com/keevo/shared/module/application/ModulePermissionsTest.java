@@ -169,8 +169,12 @@ class ModulePermissionsTest {
                 .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND");
         assertThat(permissions.permissionsFor(Role.MANAGER))
                 .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "EXPENSE_VIEW",
-                        "EXPENSE_CREATE", "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW");
-        assertThat(permissions.permissionsFor(Role.VIEWER)).containsExactlyInAnyOrder("INVOICE_VIEW");
+                        "EXPENSE_CREATE", "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW",
+                        // 19.5b — fine rights of the store manager
+                        "STORE_SALES_VIEW", "INVENTORY_SESSION_MANAGE", "PRODUCT_MERGE", "TEAM_MANAGE");
+        // 19.5b — a VIEWER reads his store's sales
+        assertThat(permissions.permissionsFor(Role.VIEWER)).containsExactlyInAnyOrder("INVOICE_VIEW",
+                "STORE_SALES_VIEW");
         assertThat(permissions.permissionsFor(Role.OWNER)).contains("EXPENSE_VIEW", "EXPENSE_CREATE",
                 "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW");
         // 16.13 reprise (user decision 2026-11-10): purchase prices for the OWNER and the MANAGER only

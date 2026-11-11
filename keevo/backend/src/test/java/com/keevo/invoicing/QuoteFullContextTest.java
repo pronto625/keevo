@@ -415,6 +415,44 @@ class QuoteFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
+    @DisplayName("19.5b — an employee cancels his own quote (the right that deletes it), never an invoice; a viewer "
+            + "cancels nothing")
+    void employeeCancelsOwnQuote_neverAnInvoice() throws Exception {
+        UUID store = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores ORDER BY created_at LIMIT 1",
+                UUID.class);
+        UUID seller = UUID.randomUUID();
+        UUID reader = UUID.randomUUID();
+        for (UUID user : List.of(seller, reader)) {
+            jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
+                    + "password_change_required) VALUES (?, ?, 'Paul', 'Ekane', false)", user, store);
+        }
+        String owner = ownerToken;
+        try {
+            ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, seller,
+                    schema, "EMPLOYEE", "ACTIVE", store, false);
+            String quoteId = createQuote().path("id").asText();
+            String invoiceId = createInvoice();
+            JsonNode cancelled = data(call(HttpMethod.POST, "/api/v1/invoices/" + quoteId + "/cancel",
+                    Map.of("reason", "Le client a renoncé")), 200);
+            assertThat(cancelled.path("status").asText()).isEqualTo("CANCELLED");
+            data(call(HttpMethod.POST, "/api/v1/invoices/" + invoiceId + "/issue", null), 200);
+            error(call(HttpMethod.POST, "/api/v1/invoices/" + invoiceId + "/cancel", Map.of("reason", "Erreur")),
+                    403, "FORBIDDEN");
+            assertThat(row(invoiceId).get("status")).isEqualTo("ISSUED");
+
+            ownerToken = owner;
+            String ownerQuote = createQuote().path("id").asText();
+            ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, reader,
+                    schema, "VIEWER", "ACTIVE", store, false);
+            error(call(HttpMethod.POST, "/api/v1/invoices/" + ownerQuote + "/cancel", Map.of("reason", "Non")),
+                    403, "FORBIDDEN");
+            assertThat(row(ownerQuote).get("status")).isEqualTo("DRAFT");
+        } finally {
+            ownerToken = owner;
+        }
+    }
+
+    @Test
     @DisplayName("PDF of a quote: application/pdf, file devis-DV-XXXXXXXX.pdf")
     void pdf() throws Exception {
         JsonNode quote = createQuote();

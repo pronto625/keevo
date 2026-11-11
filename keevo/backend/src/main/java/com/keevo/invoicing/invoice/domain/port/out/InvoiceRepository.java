@@ -217,6 +217,12 @@ public interface InvoiceRepository {
     /** Story 20.14 — the creator and store of a document (deleted drafts included), by primary key. */
     java.util.Optional<com.keevo.invoicing.invoice.domain.model.DocumentScope.Owner> ownerOf(UUID invoiceId);
 
+    /**
+     * Story 19.5b — whether the document is a quote ({@code true}) or an invoice ({@code false}), by primary key;
+     * empty when unknown.
+     */
+    java.util.Optional<Boolean> isQuote(UUID invoiceId);
+
     /** Story 20.14 — the creator and store of the invoice of a credit note. */
     java.util.Optional<com.keevo.invoicing.invoice.domain.model.DocumentScope.Owner> ownerOfCreditNote(
             UUID creditNoteId);

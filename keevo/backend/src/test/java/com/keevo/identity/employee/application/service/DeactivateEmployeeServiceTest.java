@@ -110,7 +110,7 @@ class DeactivateEmployeeServiceTest {
 
         deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId));
 
-        verify(membershipRepository).deactivate(eq(userId), eq(tenant.getId()));
+        verify(membershipRepository).deactivate(eq(userId), eq(tenant.getId()), eq(false));
     }
 
     @Test
@@ -196,7 +196,7 @@ class DeactivateEmployeeServiceTest {
 
         verify(transactionLock).lock("owners:kv_abc123");
         verify(employeeRepository, never()).updateStatus(any(), any());
-        verify(membershipRepository, never()).deactivate(any(), any());
+        verify(membershipRepository, never()).deactivate(any(), any(), anyBoolean());
         verifyNoInteractions(refreshTokenRepository, tokenRevocationPort, eventPublisher);
     }
 
@@ -213,7 +213,7 @@ class DeactivateEmployeeServiceTest {
         inOrder.verify(transactionLock).lock("owners:kv_abc123");
         inOrder.verify(userRepository).findOwnersByTenantSchemaName("kv_abc123");
         inOrder.verify(employeeRepository).updateStatus(employeeId, EmployeeStatus.INACTIVE);
-        verify(membershipRepository).deactivate(eq(userId), eq(tenant.getId()));
+        verify(membershipRepository).deactivate(eq(userId), eq(tenant.getId()), eq(false));
     }
 
     @Test
@@ -242,7 +242,7 @@ class DeactivateEmployeeServiceTest {
 
         verifyNoInteractions(transactionLock);
         verify(userRepository, never()).findOwnersByTenantSchemaName(any());
-        verify(membershipRepository).deactivate(userId, tenant.getId());
+        verify(membershipRepository).deactivate(userId, tenant.getId(), false);
     }
 
     @Test
@@ -252,8 +252,8 @@ class DeactivateEmployeeServiceTest {
 
         deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId));
 
-        verify(membershipRepository).deactivate(userId, tenant.getId());
-        verify(membershipRepository, never()).deactivate(eq(userId), argThat(id -> !tenant.getId().equals(id)));
+        verify(membershipRepository).deactivate(userId, tenant.getId(), false);
+        verify(membershipRepository, never()).deactivate(eq(userId), argThat(id -> !tenant.getId().equals(id)), anyBoolean());
     }
 
     @Test
@@ -267,6 +267,14 @@ class DeactivateEmployeeServiceTest {
                 .extracting(e -> ((DomainException) e).getErrorCode())
                 .isEqualTo(ErrorCode.TENANT_NOT_FOUND);
         verify(employeeRepository, never()).updateStatus(any(), any());
-        verify(membershipRepository, never()).deactivate(any(), any());
+        verify(membershipRepository, never()).deactivate(any(), any(), anyBoolean());
+    }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("19.5b — a delegated team manager's deactivation is recorded on the membership")
+    void delegatedDeactivation_recordsTheFlag() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        deactivateEmployeeService.execute(new DeactivateEmployeeCommand(actorId, employeeId, true));
+        verify(membershipRepository).deactivate(userId, tenant.getId(), true);
     }
 }

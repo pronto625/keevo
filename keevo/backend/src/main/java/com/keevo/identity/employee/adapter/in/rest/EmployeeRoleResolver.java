@@ -111,10 +111,14 @@ public class EmployeeRoleResolver {
      * default: team scoping must fail closed).
      */
     public Optional<String> membershipRole(UUID userId) {
+        return membership(userId).map(UserTenantMembership::getRole);
+    }
+
+    /** Story 19.5b — the membership of a user in the current tenant (role, active, deactivated-by-manager flag). */
+    public Optional<UserTenantMembership> membership(UUID userId) {
         var tenant = tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
-        return membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())
-                .map(UserTenantMembership::getRole);
+        return membershipRepository.findByUserIdAndTenantId(userId, tenant.getId());
     }
 
     /**

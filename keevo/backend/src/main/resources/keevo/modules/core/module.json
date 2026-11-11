@@ -13,10 +13,12 @@
     "declares": [],
     "fills": []
   },
-  "permissions": [],
+  "permissions": [
+    "TEAM_MANAGE"
+  ],
   "routes": [],
   "rolePermissions": {
-    "MANAGER": [],
+    "MANAGER": ["TEAM_MANAGE"],
     "EMPLOYEE": [],
     "VIEWER": []
   },

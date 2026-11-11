@@ -268,7 +268,7 @@ class EmployeeSharedAccountTest {
 
         service.execute(new DeactivateEmployeeCommand(actorId, employeeId));
 
-        verify(membershipRepository).deactivate(userId, tenantA.getId());
+        verify(membershipRepository).deactivate(userId, tenantA.getId(), false);
         verify(refreshTokenRepository).revokeAllByUserIdAndTenantId(userId, "kv_a");
         verify(refreshTokenRepository, never()).revokeAllByUserId(any());
         verify(tokenRevocationPort).revokeAllSessions(userId, "kv_a");

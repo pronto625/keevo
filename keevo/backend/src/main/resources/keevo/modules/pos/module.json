@@ -28,12 +28,14 @@
     ],
     "fills": []
   },
-  "permissions": [],
+  "permissions": [
+    "STORE_SALES_VIEW"
+  ],
   "routes": [],
   "rolePermissions": {
-    "MANAGER": [],
+    "MANAGER": ["STORE_SALES_VIEW"],
     "EMPLOYEE": [],
-    "VIEWER": []
+    "VIEWER": ["STORE_SALES_VIEW"]
   },
   "entitlement": "module.pos",
   "free": true

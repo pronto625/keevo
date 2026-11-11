@@ -51,7 +51,7 @@ class InventorySessionControllerValidateTest {
         var controller = new InventorySessionController(
                 createSessionUseCase, getActiveSessionUseCase,
                 cancelSessionUseCase, listSessionsUseCase,
-                validateInventoryUseCase);
+                validateInventoryUseCase, com.keevo.shared.infrastructure.security.ShippedActorPermissions.get());
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

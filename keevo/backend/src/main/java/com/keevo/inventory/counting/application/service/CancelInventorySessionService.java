@@ -1,6 +1,5 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.shared.domain.MemberRoles;
 import com.keevo.shared.event.catalog.counting.InventorySessionCancelledEvent;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.port.in.CancelInventorySessionCommand;
@@ -19,6 +18,8 @@ import java.time.Instant;
 @Transactional
 public class CancelInventorySessionService implements CancelInventorySessionUseCase {
 
+    static final String OTHER_STORE = "Vous ne pouvez gérer que les inventaires de votre boutique.";
+
     private final InventorySessionRepository sessionRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -34,9 +35,12 @@ public class CancelInventorySessionService implements CancelInventorySessionUseC
                 .orElseThrow(() -> new DomainException(ErrorCode.INVENTORY_SESSION_NOT_FOUND,
                         "Session not found: " + command.sessionId()));
 
-        // RBAC: EMPLOYEE can only cancel their own session
-        if (MemberRoles.isStoreMember(command.actorRole())
-                && !session.getStartedBy().equals(command.actorId())) {
+        // Story 19.5b — rights decided by the adapter: a store member never cancels another store's session; only the
+        // owner or a holder of INVENTORY_SESSION_MANAGE (MANAGER) cancels a session someone else started
+        if (command.restrictedStore() != null && !command.restrictedStore().equals(session.getStoreId())) {
+            throw DomainException.userFacing(ErrorCode.FORBIDDEN, OTHER_STORE);
+        }
+        if (!command.anyStarter() && !session.getStartedBy().equals(command.actorId())) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "Employees can only cancel their own sessions");
         }

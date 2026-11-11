@@ -21,6 +21,7 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
+import com.keevo.shared.module.RequiresPermission;
 import com.keevo.store.api.StoreQueryPort;
 
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,9 @@ import java.util.UUID;
 @RequestMapping("/api/v1/products")
 @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class ProductController {
+
+    /** Story 19.5b — merging products (declared by the {@code catalog} manifest). */
+    public static final String MERGE_PERMISSION = "PRODUCT_MERGE";
 
     private final CreateOrRestoreProductUseCase createOrRestoreProductUseCase; // 17.13: archived name → restored
     private final UpdateProductUseCase updateProductUseCase;
@@ -163,9 +167,11 @@ public class ProductController {
 
     /**
      * Story 20.1 — merges the path product AWAY into {@code targetId} (Bref convention): the path product is archived
-     * and redirected, the answer is the target. Same roles as the archive (a VIEWER is refused by the write guard).
+     * and redirected, the answer is the target. Story 19.5b — irreversible, so reserved to the holders of
+     * {@value #MERGE_PERMISSION} (OWNER, MANAGER by default; 19-14: « Fusionner des produits »): EMPLOYEE → 403.
      * POST /api/v1/products/{id}/merge
      */
+    @RequiresPermission(MERGE_PERMISSION)
     @RequiresEntitlement("catalog")
     @PostMapping("/{id}/merge")
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> mergeProduct(

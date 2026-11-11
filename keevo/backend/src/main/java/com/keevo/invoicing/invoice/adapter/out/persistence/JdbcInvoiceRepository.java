@@ -487,6 +487,12 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
+    public Optional<Boolean> isQuote(UUID invoiceId) {
+        return jdbc.query("SELECT kind = 'QUOTE' AS quote FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                + " WHERE id = ?", (rs, n) -> rs.getBoolean("quote"), invoiceId).stream().findFirst();
+    }
+
+    @Override
     public Optional<DocumentScope.Owner> ownerOfCreditNote(UUID creditNoteId) {
         return jdbc.query("SELECT i.created_by, i.store_id FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
                         + " i JOIN " + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES) + " cn ON cn.invoice_id = i.id "

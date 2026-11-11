@@ -44,6 +44,10 @@ public class UserTenantMembershipJpaEntity extends JpaBaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
+    /** Story 19.5b (V77) — the last deactivation was made by a delegated team manager, not the owner. */
+    @Column(name = "deactivated_by_manager", nullable = false)
+    private boolean deactivatedByManager;
+
     protected UserTenantMembershipJpaEntity() {}
 
     public UserTenantMembershipJpaEntity(UUID id, UUID userId, UUID tenantId,
@@ -61,4 +65,6 @@ public class UserTenantMembershipJpaEntity extends JpaBaseEntity {
     public void    setRole(String role) { this.role = role; }
     public boolean isActive()    { return active; }
     public void    setActive(boolean active) { this.active = active; }
+    public boolean isDeactivatedByManager() { return deactivatedByManager; }
+    public void    setDeactivatedByManager(boolean byManager) { this.deactivatedByManager = byManager; }
 }

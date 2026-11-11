@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.ActorPermissions;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.inventory.counting.adapter.in.rest.dto.CreateInventorySessionRequestDto;
 import com.keevo.inventory.counting.adapter.in.rest.dto.InventorySessionResponseDto;
@@ -30,6 +31,13 @@ import java.util.UUID;
 @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class InventorySessionController {
 
+    /**
+     * Story 19.5b — cancelling an inventory session someone else started in the member's store (declared by the
+     * {@code counting} manifest, MANAGER by default; 19-14: « Gérer les inventaires de la boutique »).
+     */
+    public static final String MANAGE_PERMISSION = "INVENTORY_SESSION_MANAGE";
+
+    private final ActorPermissions permissions;
     private final CreateInventorySessionUseCase createSessionUseCase;
     private final GetActiveSessionUseCase getActiveSessionUseCase;
     private final CancelInventorySessionUseCase cancelSessionUseCase;
@@ -40,7 +48,9 @@ public class InventorySessionController {
                                        GetActiveSessionUseCase getActiveSessionUseCase,
                                        CancelInventorySessionUseCase cancelSessionUseCase,
                                        ListInventorySessionsUseCase listSessionsUseCase,
-                                       ValidateInventoryUseCase validateInventoryUseCase) {
+                                       ValidateInventoryUseCase validateInventoryUseCase,
+                                       ActorPermissions permissions) {
+        this.permissions = permissions;
         this.createSessionUseCase = createSessionUseCase;
         this.getActiveSessionUseCase = getActiveSessionUseCase;
         this.cancelSessionUseCase = cancelSessionUseCase;
@@ -97,7 +107,7 @@ public class InventorySessionController {
     @Operation(summary = "Cancel an inventory session")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Session cancelled"),
-            @ApiResponse(responseCode = "403", description = "Employee cannot cancel another user's session"),
+            @ApiResponse(responseCode = "403", description = "Another user's session without INVENTORY_SESSION_MANAGE, or another store's session"),
             @ApiResponse(responseCode = "404", description = "Session not found"),
             @ApiResponse(responseCode = "409", description = "Session is not in progress")
     })
@@ -107,10 +117,15 @@ public class InventorySessionController {
             @PathVariable UUID id) {
 
         UUID actorId = extractActorId();
-        String role = CurrentActor.role();
+        // Story 19.5b — owner: any session; a store member: his store only, and someone else's session only with
+        // INVENTORY_SESSION_MANAGE (MANAGER by default)
+        boolean storeMember = !CurrentActor.isOwner() && CurrentActor.isStoreMember();
+        var command = storeMember
+                ? new CancelInventorySessionCommand(id, actorId,
+                        permissions.currentActorHolds(MANAGE_PERMISSION), CurrentActor.assignedStoreId())
+                : CancelInventorySessionCommand.unrestricted(id, actorId);
 
-        InventorySession result = cancelSessionUseCase.execute(
-                new CancelInventorySessionCommand(id, actorId, role));
+        InventorySession result = cancelSessionUseCase.execute(command);
 
         return ResponseEntity.ok(
                 ApiResponseWrapper.ok(InventorySessionResponseDto.fromDomain(result)));

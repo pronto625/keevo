@@ -57,7 +57,7 @@ class GetSalesHistoryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(employeeSale)));
 
         // When
-        var query = new SalesHistoryQuery(STORE_ID, EMPLOYEE_ID, FROM, TO, "EMPLOYEE", 0, 50);
+        var query = new SalesHistoryQuery(STORE_ID, EMPLOYEE_ID, FROM, TO, 0, 50);
         var result = service.getSalesHistory(query);
 
         // Then - repository called with employee filter
@@ -80,7 +80,7 @@ class GetSalesHistoryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(sale1, sale2)));
 
         // When - OWNER query without specific employeeId
-        var query = new SalesHistoryQuery(STORE_ID, null, FROM, TO, "OWNER", 0, 50);
+        var query = new SalesHistoryQuery(STORE_ID, null, FROM, TO, 0, 50);
         var result = service.getSalesHistory(query);
 
         // Then - repository called without employee filter
@@ -97,7 +97,7 @@ class GetSalesHistoryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(createSale(UUID.randomUUID()))));
 
         // When
-        var query = new SalesHistoryQuery(STORE_ID, null, FROM, TO, "OWNER", 0, 50);
+        var query = new SalesHistoryQuery(STORE_ID, null, FROM, TO, 0, 50);
         var result = service.getSalesHistory(query);
 
         // Then
@@ -118,7 +118,7 @@ class GetSalesHistoryServiceTest {
                 .thenReturn(new PageImpl<>(List.of(createSale(actualEmployeeId))));
 
         // When - EMPLOYEE queries with their own ID (service ignores parameter and uses role check)
-        var query = new SalesHistoryQuery(STORE_ID, actualEmployeeId, FROM, TO, "EMPLOYEE", 0, 50);
+        var query = new SalesHistoryQuery(STORE_ID, actualEmployeeId, FROM, TO, 0, 50);
         var result = service.getSalesHistory(query);
 
         // Then - only their own sales are returned
@@ -138,7 +138,7 @@ class GetSalesHistoryServiceTest {
                 .thenReturn(new PageImpl<>(sales, expectedPageable, 50));
 
         // When - page 1, size 25
-        var query = new SalesHistoryQuery(STORE_ID, null, FROM, TO, "OWNER", 1, 25);
+        var query = new SalesHistoryQuery(STORE_ID, null, FROM, TO, 1, 25);
         var result = service.getSalesHistory(query);
 
         // Then
@@ -160,13 +160,13 @@ class GetSalesHistoryServiceTest {
     }
 
     @Test
-    void getSalesHistory_asManager_filtersOnEmployeeId_likeAnEmployee() {
-        // Story 19.5 — MANAGER is a store member: own sales only
+    void getSalesHistory_withEmployeeFilter_neverReadsTheWholeStore() {
+        // Story 19.5b — the adapter decides the filter; a filter given → never the store-wide query
         when(saleRepository.findByStoreIdAndEmployeeIdAndDateRange(
                 eq(STORE_ID), eq(EMPLOYEE_ID), eq(FROM), eq(TO), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(createSale(EMPLOYEE_ID))));
 
-        var result = service.getSalesHistory(new SalesHistoryQuery(STORE_ID, EMPLOYEE_ID, FROM, TO, "MANAGER", 0, 50));
+        var result = service.getSalesHistory(new SalesHistoryQuery(STORE_ID, EMPLOYEE_ID, FROM, TO, 0, 50));
 
         assertThat(result.getContent()).hasSize(1);
         verify(saleRepository, org.mockito.Mockito.never()).findByStoreIdAndDateRange(any(), any(), any(), any());

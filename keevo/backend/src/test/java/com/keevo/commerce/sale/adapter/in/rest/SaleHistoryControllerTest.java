@@ -57,7 +57,9 @@ class SaleHistoryControllerTest {
     @BeforeEach
     void setUp() {
         mapper.registerModule(new JavaTimeModule());
-        var controller = new SaleHistoryController(getSalesHistoryUseCase);
+        var controller = new SaleHistoryController(getSalesHistoryUseCase,
+                new com.keevo.commerce.sale.adapter.in.SalesReadScope(
+                        com.keevo.shared.infrastructure.security.ShippedActorPermissions.get()));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -66,10 +68,9 @@ class SaleHistoryControllerTest {
     }
 
     private void authenticateAs(String role) {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        actorId, null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + role))));
+        // Story 19.5b — a store member carries his store, as JwtAuthFilter sets it
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticate(
+                actorId, role, "OWNER".equals(role) ? null : storeId);
     }
 
     private Claims claimsWithStore(String role) {
@@ -133,9 +134,9 @@ class SaleHistoryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content").isArray());
 
-        // Verify that the service was called with EMPLOYEE role
+        // Story 19.5b — an EMPLOYEE's history is forced to his own sales
         verify(getSalesHistoryUseCase).getSalesHistory(argThat(query ->
-                "EMPLOYEE".equals(query.role())));
+                actorId.equals(query.employeeId()) && storeId.equals(query.storeId())));
     }
 
     @Test
@@ -191,21 +192,58 @@ class SaleHistoryControllerTest {
     }
 
     @Test
-    void GET_salesHistory_manager_forcedToOwnSales_likeAnEmployee() throws Exception {
-        // Story 19.5 — a MANAGER is a store member: an employeeId filter is ignored, his own sales only
+    void GET_salesHistory_manager_seesHisWholeStore_withOptionalEmployeeFilter() throws Exception {
+        // Story 19.5b — STORE_SALES_VIEW: every sale of his store; an employee filter is honoured
         mockJwt("MANAGER");
+        UUID seller = UUID.randomUUID();
         when(getSalesHistoryUseCase.getSalesHistory(any(SalesHistoryQuery.class)))
                 .thenReturn(new PageImpl<>(List.of(createSale())));
 
-        mockMvc.perform(get("/api/v1/sales/history")
-                        .header("Authorization", "Bearer fake-token")
-                        .param("storeId", storeId.toString())
-                        .param("employeeId", UUID.randomUUID().toString())
-                        .param("from", "2026-03-19")
-                        .param("to", "2026-03-19"))
+        mockMvc.perform(get("/api/v1/sales/history").param("storeId", storeId.toString()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/sales/history").param("storeId", storeId.toString())
+                        .param("employeeId", seller.toString()))
                 .andExpect(status().isOk());
 
         verify(getSalesHistoryUseCase).getSalesHistory(argThat(query ->
-                "MANAGER".equals(query.role()) && actorId.equals(query.employeeId())));
+                storeId.equals(query.storeId()) && query.employeeId() == null));
+        verify(getSalesHistoryUseCase).getSalesHistory(argThat(query -> seller.equals(query.employeeId())));
+    }
+
+    @Test
+    void GET_salesHistory_viewer_seesHisWholeStore() throws Exception {
+        // Story 19.5b (DD1) — a VIEWER reads his store's sales (he never sells: his own history would be empty)
+        mockJwt("VIEWER");
+        when(getSalesHistoryUseCase.getSalesHistory(any(SalesHistoryQuery.class)))
+                .thenReturn(new PageImpl<>(List.of(createSale())));
+
+        mockMvc.perform(get("/api/v1/sales/history").param("storeId", storeId.toString()))
+                .andExpect(status().isOk());
+
+        verify(getSalesHistoryUseCase).getSalesHistory(argThat(query -> query.employeeId() == null));
+    }
+
+    @Test
+    void GET_salesHistory_employee_filterOnAnotherSeller_isForcedToHimself() throws Exception {
+        mockJwt("EMPLOYEE");
+        when(getSalesHistoryUseCase.getSalesHistory(any(SalesHistoryQuery.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/v1/sales/history").param("storeId", storeId.toString())
+                        .param("employeeId", UUID.randomUUID().toString()))
+                .andExpect(status().isOk());
+
+        verify(getSalesHistoryUseCase).getSalesHistory(argThat(query -> actorId.equals(query.employeeId())));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"MANAGER", "EMPLOYEE", "VIEWER"})
+    void GET_salesHistory_member_otherStore_403(String role) throws Exception {
+        mockJwt(role);
+
+        mockMvc.perform(get("/api/v1/sales/history").param("storeId", UUID.randomUUID().toString()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(getSalesHistoryUseCase);
     }
 }

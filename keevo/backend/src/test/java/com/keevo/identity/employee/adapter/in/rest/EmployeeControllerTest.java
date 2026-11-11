@@ -65,7 +65,8 @@ class EmployeeControllerTest {
         employeeController = new EmployeeController(createEmployeeUseCase, listEmployeesUseCase, reassignStoreUseCase,
                 deactivateEmployeeUseCase, reactivateEmployeeUseCase, regeneratePasswordUseCase, updateEmployeeUseCase,
                 changeEmployeeRoleUseCase, setEmployeePasswordUseCase, employeeRoleResolver, getEmployeeActivityUseCase,
-                new EmployeeTeamScope(employeeRepository, employeeRoleResolver), invitationUseCase);
+                new EmployeeTeamScope(employeeRepository, employeeRoleResolver,
+                        com.keevo.shared.infrastructure.security.ShippedActorPermissions.get()), invitationUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(employeeController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

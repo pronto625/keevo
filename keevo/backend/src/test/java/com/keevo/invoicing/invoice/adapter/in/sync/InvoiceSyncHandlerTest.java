@@ -46,6 +46,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -68,6 +69,8 @@ class InvoiceSyncHandlerTest {
             mock(com.keevo.invoicing.invoice.application.service.InvoiceSendOutbox.class);
     private final ModuleProvisioner provisioner = mock(ModuleProvisioner.class);
     private final ModulePermissions permissions = mock(ModulePermissions.class);
+    private final com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository invoiceRepository =
+            mock(com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository.class);
     private final ObjectMapper objectMapper = JsonMapper.builder().findAndAddModules()
             .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
@@ -80,7 +83,8 @@ class InvoiceSyncHandlerTest {
         handler = new InvoiceSyncHandler(drafts, lifecycle, provisioner, permissions, objectMapper, validator,
                 conversions, payments,
                 org.mockito.Mockito.mock(com.keevo.invoicing.invoice.application.usecase.DocumentAccess.class),
-                sending, outbox);
+                sending, outbox, new com.keevo.invoicing.invoice.application.usecase.DocumentCancelPermission(
+                        invoiceRepository, com.keevo.shared.infrastructure.security.ShippedActorPermissions.get()));
         as("OWNER", ALL);
     }
 
@@ -264,6 +268,22 @@ class InvoiceSyncHandlerTest {
                 "reason", "Erreur")), ACTOR, TENANT);
         assertThat(r.reason()).isEqualTo("FORBIDDEN");
         verify(lifecycle, never()).cancel(eq(invoiceId), eq("Erreur"), any(), any());
+    }
+
+    @Test
+    @DisplayName("19.5b — CANCEL_INVOICE on a QUOTE: an employee may (same right as deleting it); a viewer may not")
+    void cancelQuote_byEmployee() {
+        when(invoiceRepository.isQuote(invoiceId)).thenReturn(java.util.Optional.of(true));
+        when(lifecycle.cancel(invoiceId, "Le client renonce", ACTOR, TENANT)).thenReturn(invoice());
+        as("EMPLOYEE", EMPLOYEE);
+
+        assertThat(handler.handle(op("CANCEL_INVOICE", Map.of("invoiceId", invoiceId.toString(),
+                "reason", "Le client renonce")), ACTOR, TENANT).status()).isEqualTo(SyncOperationStatus.APPLIED);
+
+        as("VIEWER", Set.of("INVOICE_VIEW"));
+        assertThat(handler.handle(op("CANCEL_INVOICE", Map.of("invoiceId", invoiceId.toString(),
+                "reason", "Le client renonce")), ACTOR, TENANT).reason()).isEqualTo("FORBIDDEN");
+        verify(lifecycle, times(1)).cancel(eq(invoiceId), any(), any(), any());
     }
 
     @Test

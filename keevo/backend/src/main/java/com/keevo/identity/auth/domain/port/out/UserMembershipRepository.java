@@ -41,7 +41,14 @@ public interface UserMembershipRepository {
      */
     void deactivate(UUID userId, UUID tenantId);
 
-    /** Reactivate the user's membership in ONE tenant (set is_active = true). Story 3.5. */
+    /**
+     * Story 19.5b — as {@link #deactivate(UUID, UUID)}, recording whether the deactivation was made by a delegated
+     * team manager ({@code true}) or by the owner / the system ({@code false}); a delegated team manager may only
+     * reactivate the former. {@link #reactivate} clears the flag.
+     */
+    void deactivate(UUID userId, UUID tenantId, boolean byManager);
+
+    /** Reactivate the user's membership in ONE tenant (set is_active = true, clears the 19.5b flag). Story 3.5. */
     void reactivate(UUID userId, UUID tenantId);
 
     /** Story 20.13 — deletes the user's membership in ONE tenant (member removal); no-op when there is none. */

@@ -1,10 +1,12 @@
 package com.keevo.identity.employee.adapter.in.rest;
 
 import com.keevo.identity.api.Role;
+import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.ActorPermissions;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import org.springframework.stereotype.Component;
 
@@ -15,10 +17,13 @@ import java.util.UUID;
  * Story 19.5 — who may manage which team members on {@code /api/v1/employees} (policy object of the REST adapter):
  * <ul>
  *   <li>{@code OWNER}: every member, unchanged;</li>
- *   <li>{@code MANAGER}: only the members of his own store whose membership role is {@code EMPLOYEE} or
+ *   <li>a store member holding {@value #PERMISSION} ({@code MANAGER} by default — Story 19.5b, one permission instead
+ *       of a role check; 19-14: « Gérer l'équipe de sa boutique »): only the members of his own store whose membership role is {@code EMPLOYEE} or
  *       {@code VIEWER} (a missing membership is refused — fail closed); his lists show those members and himself;
  *       creates only in his store and only {@code EMPLOYEE} or {@code VIEWER}; never changes roles nor reassigns
- *       stores (those endpoints stay {@link CurrentActor#requireOwner owner-only});</li>
+ *       stores (those endpoints stay {@link CurrentActor#requireOwner owner-only}); Story 19.5b: he also lists and closes
+ *       their device sessions, and reactivates only a member that a team manager deactivated (never one the owner
+ *       deactivated);</li>
  *   <li>anyone else: 403 {@code FORBIDDEN}.</li>
  * </ul>
  * Cost: O(1) for the owner; one employee row and one membership row by key for a MANAGER's per-member checks; lists
@@ -27,6 +32,11 @@ import java.util.UUID;
 @Component
 public class EmployeeTeamScope {
 
+    /** Story 19.5b — managing the team of one's own store (declared by the {@code core} manifest). */
+    public static final String PERMISSION = "TEAM_MANAGE";
+
+    static final String DEACTIVATED_BY_OWNER =
+            "Ce membre a été désactivé par le propriétaire : lui seul peut le réactiver.";
     static final String OWNER_REQUIRED = "OWNER role required";
     static final String OUT_OF_TEAM = "MANAGER may only manage EMPLOYEE or VIEWER members of his own store";
     static final String NO_STORE = "MANAGER token missing assigned store";
@@ -36,10 +46,21 @@ public class EmployeeTeamScope {
 
     private final EmployeeRepository employeeRepository;
     private final EmployeeRoleResolver roleResolver;
+    private final ActorPermissions permissions;
 
-    public EmployeeTeamScope(EmployeeRepository employeeRepository, EmployeeRoleResolver roleResolver) {
+    public EmployeeTeamScope(EmployeeRepository employeeRepository, EmployeeRoleResolver roleResolver,
+                             ActorPermissions permissions) {
         this.employeeRepository = employeeRepository;
         this.roleResolver = roleResolver;
+        this.permissions = permissions;
+    }
+
+    /**
+     * Whether the current actor acts as a delegated team manager (a store member holding {@value #PERMISSION}), not
+     * as the owner: his deactivations are recorded so that he may undo them, and only them.
+     */
+    public boolean actsAsDelegate() {
+        return !CurrentActor.isOwner() && CurrentActor.isStoreMember() && permissions.currentActorHolds(PERMISSION);
     }
 
     /**
@@ -74,16 +95,39 @@ public class EmployeeTeamScope {
         if (CurrentActor.isOwner()) {
             return;
         }
+        requireManagedMembership(employeeId);
+    }
+
+    /**
+     * Story 19.5b — as {@link #requireManageable}, and a delegated team manager may only reactivate a member whose
+     * deactivation was made by a delegated team manager (the flag kept on the membership); a member deactivated by
+     * the owner (or before this rule existed) is reactivated by the owner only.
+     *
+     * @throws DomainException FORBIDDEN « Ce membre a été désactivé par le propriétaire… » otherwise
+     */
+    public void requireReactivatable(UUID employeeId) {
+        if (CurrentActor.isOwner()) {
+            return;
+        }
+        UserTenantMembership membership = requireManagedMembership(employeeId);
+        if (!membership.isActive() && !membership.isDeactivatedByManager()) {
+            throw DomainException.userFacing(ErrorCode.FORBIDDEN, DEACTIVATED_BY_OWNER);
+        }
+    }
+
+    /** The target's membership when it is an EMPLOYEE/VIEWER member of the delegate's store (two keyed reads). */
+    private UserTenantMembership requireManagedMembership(UUID employeeId) {
         UUID store = requireManagerStore();
         Employee target = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new DomainException(ErrorCode.EMPLOYEE_NOT_FOUND));
         if (!store.equals(target.getStoreId())) {
             throw new DomainException(ErrorCode.FORBIDDEN, OUT_OF_TEAM);
         }
-        String role = roleResolver.membershipRole(target.getUserId()).orElse(null);
-        if (role == null || !MANAGEABLE_BY_MANAGER.contains(role)) {
+        UserTenantMembership membership = roleResolver.membership(target.getUserId()).orElse(null);
+        if (membership == null || !MANAGEABLE_BY_MANAGER.contains(membership.getRole())) {
             throw new DomainException(ErrorCode.FORBIDDEN, OUT_OF_TEAM);
         }
+        return membership;
     }
 
     /**
@@ -111,9 +155,12 @@ public class EmployeeTeamScope {
         }
     }
 
-    /** The MANAGER's store; FORBIDDEN for any other role, or a MANAGER token without store (fails closed). */
-    private static UUID requireManagerStore() {
-        if (!CurrentActor.isManager()) {
+    /**
+     * The delegate's store; FORBIDDEN for an actor without {@value #PERMISSION} (or not a store member), or a token
+     * without store (fails closed).
+     */
+    private UUID requireManagerStore() {
+        if (!CurrentActor.isStoreMember() || !permissions.currentActorHolds(PERMISSION)) {
             throw new DomainException(ErrorCode.FORBIDDEN, OWNER_REQUIRED);
         }
         UUID store = CurrentActor.assignedStoreIdOrNull();

@@ -1,7 +1,6 @@
 package com.keevo.commerce.sale.adapter.in.rest;
 
-import com.keevo.shared.domain.MemberRoles;
-import com.keevo.shared.infrastructure.security.CurrentActor;
+import com.keevo.commerce.sale.adapter.in.SalesReadScope;
 import com.keevo.commerce.sale.adapter.in.rest.dto.*;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleItem;
@@ -10,9 +9,6 @@ import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase.SalesHistor
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -35,9 +31,11 @@ public class SaleHistoryController {
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
 
     private final GetSalesHistoryUseCase getSalesHistoryUseCase;
+    private final SalesReadScope scope; // Story 19.5b
 
-    public SaleHistoryController(GetSalesHistoryUseCase getSalesHistoryUseCase) {
+    public SaleHistoryController(GetSalesHistoryUseCase getSalesHistoryUseCase, SalesReadScope scope) {
         this.getSalesHistoryUseCase = getSalesHistoryUseCase;
+        this.scope = scope;
     }
 
     /**
@@ -47,7 +45,7 @@ public class SaleHistoryController {
      * - storeId (required): UUID of the store
      * - from (optional): Start date (YYYY-MM-DD), defaults to today - 30 days
      * - to (optional): End date (YYYY-MM-DD), defaults to today
-     * - employeeId (optional): Filter by employee (OWNER only)
+     * - employeeId (optional): Filter by employee (OWNER, and a member who sees his whole store — Story 19.5b)
      * - page (optional): Page number (0-indexed), default 0
      * - size (optional): Page size, default 20, max 100
      *
@@ -74,22 +72,15 @@ public class SaleHistoryController {
         Instant fromInstant = fromDate.atStartOfDay(WAT).toInstant();
         Instant toInstant = toDate.plusDays(1).atStartOfDay(WAT).toInstant();
 
-        // Extract JWT claims
-        // Story 16.11 — role from the server-side access state, never the token.
-        UUID actorId = CurrentActor.actorId();
-        String role = CurrentActor.role();
-
-        // Security: EMPLOYEE can only see their own sales
-        UUID effectiveEmployeeId = MemberRoles.isStoreMember(role) ? actorId : employeeId;
-
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
+        // Story 19.5b — one policy decides the store and the employee filter (store-wide for STORE_SALES_VIEW, own
+        // sales for any other store member, 403 for another store)
+        SalesReadScope.Resolved resolved = scope.resolve(storeId, employeeId);
 
         SalesHistoryQuery query = new SalesHistoryQuery(
-                storeId,
-                effectiveEmployeeId,
+                resolved.store(),
+                resolved.employeeFilter(),
                 fromInstant,
                 toInstant,
-                role,
                 page,
                 size
         );

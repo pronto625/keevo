@@ -64,12 +64,17 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
 
     @Override
     public void deactivate(UUID userId, UUID tenantId) {
-        setActive(userId, tenantId, false);
+        deactivate(userId, tenantId, false);
+    }
+
+    @Override
+    public void deactivate(UUID userId, UUID tenantId, boolean byManager) {
+        setActive(userId, tenantId, false, byManager);
     }
 
     @Override
     public void reactivate(UUID userId, UUID tenantId) {
-        setActive(userId, tenantId, true);
+        setActive(userId, tenantId, true, false);
     }
 
     @Override
@@ -77,9 +82,10 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
         springRepository.findByUserIdAndTenantId(userId, tenantId).ifPresent(springRepository::delete);
     }
 
-    private void setActive(UUID userId, UUID tenantId, boolean active) {
+    private void setActive(UUID userId, UUID tenantId, boolean active, boolean deactivatedByManager) {
         springRepository.findByUserIdAndTenantId(userId, tenantId).ifPresent(m -> {
             m.setActive(active);
+            m.setDeactivatedByManager(deactivatedByManager);
             springRepository.save(m);
         });
     }
@@ -118,6 +124,6 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
     private UserTenantMembership toDomain(UserTenantMembershipJpaEntity e) {
         return new UserTenantMembership(
                 e.getId(), e.getUserId(), e.getTenantId(),
-                e.getRole(), e.isActive(), e.getCreatedAt());
+                e.getRole(), e.isActive(), e.getCreatedAt(), e.isDeactivatedByManager());
     }
 }

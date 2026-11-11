@@ -189,19 +189,21 @@ public class EmployeeController {
             @PathVariable UUID employeeId) {
         teamScope.requireManageable(employeeId);
         UUID actorId = CurrentActor.actorId();
-        deactivateEmployeeUseCase.execute(new DeactivateEmployeeCommand(actorId, employeeId));
+        deactivateEmployeeUseCase.execute(
+                new DeactivateEmployeeCommand(actorId, employeeId, teamScope.actsAsDelegate())); // 19.5b
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
     }
 
     @Operation(summary = "Reactivate a previously deactivated employee")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Employee reactivated"),
+            @ApiResponse(responseCode = "403", description = "A manager reactivating a member the owner deactivated"),
             @ApiResponse(responseCode = "404", description = "Employee not found")
     })
     @PatchMapping("/{employeeId}/reactivate")
     public ResponseEntity<ApiResponseWrapper<Void>> reactivateEmployee(
             @PathVariable UUID employeeId) {
-        teamScope.requireManageable(employeeId);
+        teamScope.requireReactivatable(employeeId); // 19.5b — never a member the owner deactivated
         UUID actorId = CurrentActor.actorId();
         reactivateEmployeeUseCase.execute(new ReactivateEmployeeCommand(actorId, employeeId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));

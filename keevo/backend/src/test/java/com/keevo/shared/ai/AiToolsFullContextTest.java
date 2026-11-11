@@ -331,6 +331,18 @@ class AiToolsFullContextTest extends FullContextIntegrationTest {
         assertThat(tools.call("sales_history", "{}", AiToolChannel.INTERNAL).errorCode())
                 .isEqualTo("VALIDATION_ERROR"); // the owner names the store
         assertThat(ok("sales_history", "{\"storeId\":\"" + storeA + "\"}").path("totalSales").asLong()).isEqualTo(2);
+
+        // Story 19.5b — a MANAGER (STORE_SALES_VIEW) sees every sale of HIS store, and never another store's
+        jdbc.update("INSERT INTO \"" + schema + "\".sales (id, created_at, employee_id, occurred_at, payment_mode, "
+                        + "status, store_id, total_amount, discount_amount) VALUES (?, ?, ?, ?, 'CASH', 'COMPLETED', ?, "
+                        + "7000, 0)", UUID.randomUUID(), Timestamp.from(noon), UUID.randomUUID(), Timestamp.from(noon),
+                storeB);
+        as(schema, managerB);
+        JsonNode store = ok("sales_history", "{}");
+        assertThat(store.path("totalSales").asLong()).isEqualTo(1);
+        assertThat(store.path("ownSalesOnly").asBoolean()).isFalse();
+        assertThat(tools.call("sales_history", "{\"storeId\":\"" + storeA + "\"}", AiToolChannel.INTERNAL).errorCode())
+                .isEqualTo("FORBIDDEN");
     }
 
     @Test

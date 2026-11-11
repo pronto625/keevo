@@ -29,6 +29,7 @@ import com.keevo.invoicing.invoice.application.usecase.InvoiceQueryUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
 import com.keevo.invoicing.invoice.application.usecase.DocumentAccess;
+import com.keevo.invoicing.invoice.application.usecase.DocumentCancelPermission;
 import com.keevo.invoicing.invoice.application.usecase.DocumentStoreResolver;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase.DraftContent;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
@@ -66,7 +67,8 @@ import java.util.UUID;
  * Invoices of the tenant — Story 14.1 (« Facturation », standalone). Every handler is gated by the {@code invoicing}
  * module ({@code @RequiresEntitlement}: GET → READ, other verbs → WRITE) and a module permission
  * ({@code @RequiresPermission}, evaluated first): view → {@code INVOICE_VIEW}; create / edit / delete a draft →
- * {@code INVOICE_CREATE}; issue / record the payment → {@code INVOICE_SEND}; cancel → {@code INVOICE_MANAGE} (owner).
+ * {@code INVOICE_CREATE}; issue / record the payment → {@code INVOICE_SEND}; cancel an invoice → {@code INVOICE_MANAGE}
+ * (owner), cancel a quote → {@code INVOICE_CREATE} (Story 19.5b).
  * Story 14.3: CRM client suggestions ({@code GET /clients}, {@code INVOICE_CREATE}) and CRM link of the client.
  * Story 20.3: quotes ({@code kind QUOTE}) share these endpoints; {@code POST /{id}/convert} ({@code INVOICE_SEND}).
  * Story 20.4: collections — {@code POST /{id}/payments}, {@code POST /{id}/payments/{paymentId}/settle}
@@ -98,6 +100,7 @@ public class InvoiceController {
     private final InvoiceResponseAssembler assembler;
     private final DocumentStoreResolver stores;
     private final DocumentAccess access;
+    private final DocumentCancelPermission cancelPermission; // Story 19.5b
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                              InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
@@ -105,7 +108,8 @@ public class InvoiceController {
                              PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients,
                              ConvertQuoteUseCase conversions, InvoicePaymentUseCase payments,
                              InvoiceResponseAssembler assembler, DocumentStoreResolver stores,
-                             DocumentAccess access) {
+                             DocumentAccess access, DocumentCancelPermission cancelPermission) {
+        this.cancelPermission = cancelPermission;
         this.assembler = assembler;
         this.stores = stores;
         this.access = access;
@@ -272,14 +276,17 @@ public class InvoiceController {
 
     /**
      * POST /api/v1/invoices/{id}/cancel — an issued (unpaid) invoice without credit note; its number is kept. A paid
-     * invoice, or one with a credit note, is credited instead (Story 14.7, {@code POST /{id}/credit-notes}).
+     * invoice, or one with a credit note, is credited instead (Story 14.7, {@code POST /{id}/credit-notes}). Story
+     * 19.5b — a draft QUOTE is cancelled with the right that deletes it ({@code INVOICE_CREATE}); an invoice still
+     * needs {@code INVOICE_MANAGE} ({@link DocumentCancelPermission}, after the visibility check).
      */
-    @RequiresPermission(InvoicingModule.INVOICE_MANAGE)
+    @RequiresPermission(DocumentCancelPermission.QUOTE_PERMISSION)
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> cancel(
             @PathVariable UUID id, @Valid @RequestBody CancelInvoiceRequestDto request) {
         access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
+        cancelPermission.require(id); // Story 19.5b — quote: INVOICE_CREATE; invoice: INVOICE_MANAGE
         Invoice cancelled = lifecycle.cancel(id, request.reason(), CurrentActor.actorId(),
                 TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(cancelled)));

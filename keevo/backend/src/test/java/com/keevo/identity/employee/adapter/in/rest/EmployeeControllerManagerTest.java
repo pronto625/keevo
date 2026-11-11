@@ -1,5 +1,6 @@
 package com.keevo.identity.employee.adapter.in.rest;
 
+import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.employee.domain.model.CreateEmployeeResult;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
@@ -74,7 +75,8 @@ class EmployeeControllerManagerTest {
         EmployeeController controller = new EmployeeController(createEmployeeUseCase, listEmployeesUseCase,
                 reassignStoreUseCase, deactivateEmployeeUseCase, reactivateEmployeeUseCase, regeneratePasswordUseCase,
                 updateEmployeeUseCase, changeEmployeeRoleUseCase, setEmployeePasswordUseCase, roleResolver,
-                activityUseCase, new EmployeeTeamScope(employeeRepository, roleResolver),
+                activityUseCase, new EmployeeTeamScope(employeeRepository, roleResolver,
+                com.keevo.shared.infrastructure.security.ShippedActorPermissions.get()),
                 org.mockito.Mockito.mock(com.keevo.identity.employee.domain.port.in.MembershipInvitationUseCase.class));
         mockMvc = MockMvcBuilders.standaloneSetup(controller).setControllerAdvice(new GlobalExceptionHandler()).build();
         actAs("ROLE_MANAGER", myStore);
@@ -90,8 +92,8 @@ class EmployeeControllerManagerTest {
                 colleague.getUserId(), "MANAGER", ownerRow.getUserId(), "OWNER", managerId, "MANAGER");
         for (Employee e : List.of(seller, otherSeller, colleague, ownerRow, ghost, self)) {
             lenient().when(employeeRepository.findById(e.getId())).thenReturn(Optional.of(e));
-            lenient().when(roleResolver.membershipRole(e.getUserId()))
-                    .thenReturn(Optional.ofNullable(roles.get(e.getUserId())));
+            lenient().when(roleResolver.membership(e.getUserId()))
+                    .thenReturn(Optional.ofNullable(roles.get(e.getUserId())).map(r -> membership(e, r, true, false)));
         }
         lenient().doAnswer(inv -> {
             Map<UUID, EmployeeRoleResolver.Enrichment> map = new HashMap<>();
@@ -114,6 +116,13 @@ class EmployeeControllerManagerTest {
         auth.setDetails(new AuthDetails("Gérant", store, null));
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
+
+    private static UserTenantMembership membership(Employee e, String role, boolean active, boolean byManager) {
+        return new UserTenantMembership(UUID.randomUUID(), e.getUserId(), TENANT, role, active, Instant.now(),
+                byManager);
+    }
+
+    private static final UUID TENANT = UUID.randomUUID();
 
     private static Employee employee(UUID store) {
         return new Employee(UUID.randomUUID(), UUID.randomUUID(), store, "Awa", "Kamga", EmployeeStatus.ACTIVE, false,
@@ -150,7 +159,7 @@ class EmployeeControllerManagerTest {
         verify(listEmployeesUseCase).execute(query.capture());
         assertThat(query.getValue().storeId()).isEqualTo(myStore);
         verify(roleResolver, times(1)).resolveAll(any());
-        verify(roleResolver, never()).membershipRole(any());
+        verify(roleResolver, never()).membership(any());
     }
 
     @Test
@@ -218,9 +227,38 @@ class EmployeeControllerManagerTest {
                 .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/employees/" + seller.getId() + "/password").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"newPassword\":\"Secret1234\"}")).andExpect(status().isOk());
-        verify(deactivateEmployeeUseCase).execute(any());
+        // Story 19.5b — his deactivation is recorded as a delegate's
+        verify(deactivateEmployeeUseCase).execute(new DeactivateEmployeeCommand(managerId, seller.getId(), true));
         verify(reactivateEmployeeUseCase).execute(any());
         verify(setEmployeePasswordUseCase).execute(any());
+    }
+
+    @Test
+    @DisplayName("19.5b — a member the OWNER deactivated: the manager may not reactivate him (French 403); one a "
+            + "manager deactivated: 200")
+    void reactivation_onlyWhenDeactivatedByAManager() throws Exception {
+        when(roleResolver.membership(seller.getUserId()))
+                .thenReturn(Optional.of(membership(seller, "EMPLOYEE", false, false)));
+        mockMvc.perform(patch("/api/v1/employees/" + seller.getId() + "/reactivate"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error")
+                        .value("Ce membre a été désactivé par le propriétaire : lui seul peut le réactiver."));
+        verifyNoInteractions(reactivateEmployeeUseCase);
+
+        when(roleResolver.membership(seller.getUserId()))
+                .thenReturn(Optional.of(membership(seller, "EMPLOYEE", false, true)));
+        mockMvc.perform(patch("/api/v1/employees/" + seller.getId() + "/reactivate")).andExpect(status().isOk());
+        verify(reactivateEmployeeUseCase).execute(any());
+    }
+
+    @Test
+    @DisplayName("19.5b — the OWNER reactivates anyone and his deactivations are not a delegate's")
+    void owner_reactivatesAnyone_deactivationNotDelegated() throws Exception {
+        actAs("ROLE_OWNER", null);
+        mockMvc.perform(patch("/api/v1/employees/" + seller.getId() + "/deactivate")).andExpect(status().isOk());
+        mockMvc.perform(patch("/api/v1/employees/" + otherSeller.getId() + "/reactivate")).andExpect(status().isOk());
+        verify(deactivateEmployeeUseCase).execute(new DeactivateEmployeeCommand(managerId, seller.getId(), false));
+        verify(roleResolver, never()).membership(any());
     }
 
     @Test

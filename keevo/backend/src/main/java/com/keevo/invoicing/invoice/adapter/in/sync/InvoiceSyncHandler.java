@@ -13,6 +13,7 @@ import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.PayInvoiceRequestDto;
 import com.keevo.invoicing.invoice.application.usecase.ConvertQuoteUseCase;
 import com.keevo.invoicing.invoice.application.usecase.DocumentAccess;
+import com.keevo.invoicing.invoice.application.usecase.DocumentCancelPermission;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceLifecycleUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
@@ -46,7 +47,7 @@ import java.util.UUID;
  *       allocated now (never on the device);</li>
  *   <li>{@code PAY_INVOICE} {@code {invoiceId, paymentMethod?, paidAt?}} — {@code paidAt} = the day the client paid
  *       ({@code yyyy-MM-dd}, today when absent), same bounds as {@code POST /pay};</li>
- *   <li>{@code CANCEL_INVOICE} {@code {invoiceId, reason}} (owner).</li>
+ *   <li>{@code CANCEL_INVOICE} {@code {invoiceId, reason}} (an invoice: owner; a quote: who may delete it — 19.5b).</li>
  *   <li>Story 20.3 — {@code CONVERT_QUOTE} {@code {quoteId, invoiceId?, expectedUpdatedAt?}} (entity = the quote): the quote becomes a new issued invoice
  *       ({@code invoiceId} = the id chosen on the device); replayed, the same invoice ({@code serverEntityId} = the
  *       invoice id). {@code CREATE_INVOICE} takes {@code kind} ({@code QUOTE} = a quote); {@code UPDATE_INVOICE} takes
@@ -107,7 +108,7 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
             UPDATE, InvoicingModule.INVOICE_CREATE,
             ISSUE, InvoicingModule.INVOICE_SEND,
             PAY, InvoicingModule.INVOICE_SEND,
-            CANCEL, InvoicingModule.INVOICE_MANAGE,
+            CANCEL, DocumentCancelPermission.QUOTE_PERMISSION, // 19.5b — the lowest; invoices need more (see apply)
             CONVERT_QUOTE, InvoicingModule.INVOICE_SEND,
             ADD_PAYMENT, InvoicingModule.INVOICE_SEND,
             SETTLE_PAYMENT, InvoicingModule.INVOICE_SEND,
@@ -127,12 +128,16 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
     /** Story 20.14 — the documents the actor sees (same policy as REST). */
     private final DocumentAccess access;
 
+    /** Story 19.5b — who may cancel which document (same policy as REST). */
+    private final DocumentCancelPermission cancelPermission;
+
     public InvoiceSyncHandler(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                               ModuleProvisioner provisioner, ModulePermissions permissions,
                               ObjectMapper objectMapper, Validator validator, ConvertQuoteUseCase conversions,
                               InvoicePaymentUseCase payments, DocumentAccess access, SendInvoiceUseCase sending,
-                              InvoiceSendOutbox outbox) {
+                              InvoiceSendOutbox outbox, DocumentCancelPermission cancelPermission) {
         this.access = access;
+        this.cancelPermission = cancelPermission;
         this.drafts = drafts;
         this.sending = sending;
         this.outbox = outbox;
@@ -198,6 +203,9 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
             access.requireInvoice(parseUuid(p.get("quoteId")));
         } else {
             access.requireInvoice(invoiceId(p));
+            if (CANCEL.equals(type)) {
+                cancelPermission.require(invoiceId(p)); // 19.5b — a quote: INVOICE_CREATE; an invoice: INVOICE_MANAGE
+            }
         }
         Invoice result = switch (type) {
             case CREATE -> {

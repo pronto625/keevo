@@ -21,15 +21,23 @@ public final class UserTenantMembership {
     private final String role;
     private final boolean active;
     private final Instant createdAt;
+    /** Story 19.5b — the last deactivation was made by a delegated team manager (not the owner). */
+    private final boolean deactivatedByManager;
 
     public UserTenantMembership(UUID id, UUID userId, UUID tenantId,
                                 String role, boolean active, Instant createdAt) {
+        this(id, userId, tenantId, role, active, createdAt, false);
+    }
+
+    public UserTenantMembership(UUID id, UUID userId, UUID tenantId,
+                                String role, boolean active, Instant createdAt, boolean deactivatedByManager) {
         this.id        = Objects.requireNonNull(id,       "id must not be null");
         this.userId    = Objects.requireNonNull(userId,   "userId must not be null");
         this.tenantId  = Objects.requireNonNull(tenantId, "tenantId must not be null");
         this.role      = Objects.requireNonNull(role,     "role must not be null");
         this.active    = active;
         this.createdAt = createdAt != null ? createdAt : Instant.now();
+        this.deactivatedByManager = deactivatedByManager;
     }
 
     /**
@@ -50,6 +58,7 @@ public final class UserTenantMembership {
     public String  getRole()      { return role; }
     public boolean isActive()     { return active; }
     public Instant getCreatedAt() { return createdAt; }
+    public boolean isDeactivatedByManager() { return deactivatedByManager; }
 
     @Override
     public boolean equals(Object o) {

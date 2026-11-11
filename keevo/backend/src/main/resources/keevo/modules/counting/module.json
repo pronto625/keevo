@@ -16,14 +16,16 @@
     "declares": [],
     "fills": []
   },
-  "permissions": [],
+  "permissions": [
+    "INVENTORY_SESSION_MANAGE"
+  ],
   "routes": [
     "/inventory",
     "/inventory/counting/:sessionId",
     "/inventory/gap-report/:sessionId"
   ],
   "rolePermissions": {
-    "MANAGER": [],
+    "MANAGER": ["INVENTORY_SESSION_MANAGE"],
     "EMPLOYEE": [],
     "VIEWER": []
   },

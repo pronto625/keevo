@@ -1,12 +1,11 @@
 package com.keevo.commerce.sale.adapter.in.mcp;
 
+import com.keevo.commerce.sale.adapter.in.SalesReadScope;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleItem;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase.SalesHistoryQuery;
-import com.keevo.shared.domain.MemberRoles;
 import com.keevo.shared.domain.time.KeevoZones;
-import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
 import com.keevo.shared.ai.AiToolArguments;
 import com.keevo.shared.module.RequiresEntitlement;
@@ -25,8 +24,9 @@ import java.util.UUID;
 
 /**
  * Story 21.8 — AI tools of the {@code commerce} module, mirroring {@code SaleHistoryController} (every member role,
- * module {@code pos} READ): a store member (EMPLOYEE, MANAGER, VIEWER) only ever sees their own sales; the owner sees
- * every seller's. Same defaults (last 30 days, WAT days). No sale, product, seller or client id is returned.
+ * module {@code pos} READ) through the same policy ({@link SalesReadScope}, Story 19.5b): a member holding
+ * {@code STORE_SALES_VIEW} (MANAGER, VIEWER) sees every sale of his store, another store member (EMPLOYEE) his own
+ * sales, the owner every seller's; a member asking another store is refused. Same defaults (last 30 days, WAT days). No sale, product, seller or client id is returned.
  */
 @Component
 public class SalesMcpTools {
@@ -41,10 +41,12 @@ public class SalesMcpTools {
 
     private final GetSalesHistoryUseCase history;
     private final Clock clock;
+    private final SalesReadScope scope; // Story 19.5b
 
-    public SalesMcpTools(GetSalesHistoryUseCase history, Clock clock) {
+    public SalesMcpTools(GetSalesHistoryUseCase history, Clock clock, SalesReadScope scope) {
         this.history = history;
         this.clock = clock;
+        this.scope = scope;
     }
 
     public record SaleLine(String product, int quantity, int unitPrice, int subtotal) {
@@ -60,7 +62,7 @@ public class SalesMcpTools {
 
     @Tool(name = "sales_history", description = "Historique des ventes en caisse d'une boutique sur une période "
             + "(date et heure, statut, paiement, total, remise, articles), les plus récentes d'abord, par pages. "
-            + "Un employé, un gérant ou un lecteur ne voit que ses propres ventes. Par défaut les 30 derniers jours et "
+            + "Un employé ne voit que ses propres ventes ; un gérant ou un lecteur voit celles de sa boutique. Par défaut les 30 derniers jours et "
             + "la boutique de l'employé ; le propriétaire indique storeId (outil list_stores). Montants en FCFA.")
     @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     @RequiresEntitlement(value = "pos", access = RequiresEntitlement.Access.READ)
@@ -73,7 +75,8 @@ public class SalesMcpTools {
             LocalDate to,
             @ToolParam(required = false, description = "Numéro de page, à partir de 0") Integer page,
             @ToolParam(required = false, description = "Ventes par page, 1 à 50 (défaut 20)") Integer size) {
-        UUID store = storeId != null ? storeId : CurrentActor.assignedStoreIdOrNull();
+        SalesReadScope.Resolved resolved = scope.resolve(storeId, null); // Story 19.5b
+        UUID store = resolved.store();
         if (store == null) {
             throw new InvalidRequestParameterException("storeId", "store required",
                     "Précisez la boutique (outil list_stores).");
@@ -84,13 +87,10 @@ public class SalesMcpTools {
         AiToolArguments.checkPeriod(dateFrom, dateTo);
         int pageNumber = AiToolArguments.page(page);
         int pageSize = size == null ? DEFAULT_SIZE : Math.max(1, Math.min(size, MAX_SIZE));
-        // same rule as SaleHistoryController: a store member only ever sees their own sales
-        String role = CurrentActor.role();
-        boolean own = MemberRoles.isStoreMember(role);
-        UUID employee = own ? CurrentActor.actorId() : null;
-        Page<Sale> sales = history.getSalesHistory(new SalesHistoryQuery(store, employee,
+        boolean own = resolved.ownSalesOnly();
+        Page<Sale> sales = history.getSalesHistory(new SalesHistoryQuery(store, resolved.employeeFilter(),
                 dateFrom.atStartOfDay(KeevoZones.WAT).toInstant(),
-                dateTo.plusDays(1).atStartOfDay(KeevoZones.WAT).toInstant(), role, pageNumber, pageSize));
+                dateTo.plusDays(1).atStartOfDay(KeevoZones.WAT).toInstant(), pageNumber, pageSize));
         List<SaleRow> rows = sales.getContent().stream().map(SalesMcpTools::row).toList();
         return new SalesPage(dateFrom, dateTo, own, sales.getNumber(), sales.getSize(), sales.getTotalElements(),
                 sales.getTotalPages(), rows);

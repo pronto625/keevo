@@ -180,6 +180,29 @@ class CreateEmployeeServiceTest {
                 .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED.name());
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"MANAGER", "VIEWER"})
+    @DisplayName("19.5b (DD5) — a MANAGER or a VIEWER takes a seat: PLAN_LIMIT_EXCEEDED at the ceiling, nothing written")
+    void managerAndViewer_countInTheCeiling(String role) {
+        Subscription freeSub = mock(Subscription.class);
+        when(freeSub.getPlanType()).thenReturn(PlanType.FREE);
+        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub));
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(1, 0));
+        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "employees limit reached"))
+                .when(planLimitGuard).checkEmployeeLimit(
+                        com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE),
+                        org.mockito.ArgumentMatchers.eq(1));
+
+        assertThatThrownBy(() -> createEmployeeService.execute(new CreateEmployeeCommand(
+                actorId, "+237690000002", "Test", "User", storeId, null, role)))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getDomainCode())
+                .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED.name());
+        verify(employeeRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
     @Test
     @DisplayName("19.6 — phone of an account already member here → MEMBER_ALREADY_IN_COMPANY (was USER_ALREADY_EXISTS)")
     void execute_shouldThrowMemberAlreadyInCompany_whenPhoneBelongsToAMember() {

@@ -20,11 +20,12 @@
     "fills": []
   },
   "permissions": [
-    "PURCHASE_PRICE_VIEW"
+    "PURCHASE_PRICE_VIEW",
+    "PRODUCT_MERGE"
   ],
   "routes": [],
   "rolePermissions": {
-    "MANAGER": ["PURCHASE_PRICE_VIEW"],
+    "MANAGER": ["PURCHASE_PRICE_VIEW", "PRODUCT_MERGE"],
     "EMPLOYEE": [],
     "VIEWER": []
   },

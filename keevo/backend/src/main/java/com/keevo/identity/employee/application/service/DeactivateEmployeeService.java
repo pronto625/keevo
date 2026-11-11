@@ -101,7 +101,7 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
 
         // 3. Deactivate the membership of THIS tenant only (v1s-13-9 follow-up: the user may
         // belong to — or own — other shops, which must keep their access).
-        membershipRepository.deactivate(employee.getUserId(), tenantId);
+        membershipRepository.deactivate(employee.getUserId(), tenantId, command.byManager()); // 19.5b flag
 
         // 4. Revoke refresh tokens — Story 19.6: for a shared account only this company's (one UPDATE by user and
         // tenant); the person's sessions in their other companies stay valid.

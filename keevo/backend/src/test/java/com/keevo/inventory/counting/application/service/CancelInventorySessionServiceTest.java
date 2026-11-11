@@ -52,7 +52,7 @@ class CancelInventorySessionServiceTest {
         when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.execute(new CancelInventorySessionCommand(SESSION_ID, OWNER_ID, "OWNER"));
+        service.execute(CancelInventorySessionCommand.unrestricted(SESSION_ID, OWNER_ID));
 
         assertThat(session.getStatus()).isEqualTo(InventorySessionStatus.CANCELLED);
         verify(sessionRepository).save(session);
@@ -63,7 +63,7 @@ class CancelInventorySessionServiceTest {
         when(sessionRepository.findById(any())).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.execute(
-                new CancelInventorySessionCommand(SESSION_ID, OWNER_ID, "OWNER")))
+                CancelInventorySessionCommand.unrestricted(SESSION_ID, OWNER_ID)))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
                         .isEqualTo("INVENTORY_SESSION_NOT_FOUND"));
@@ -76,7 +76,7 @@ class CancelInventorySessionServiceTest {
         when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> service.execute(
-                new CancelInventorySessionCommand(SESSION_ID, OWNER_ID, "OWNER")))
+                CancelInventorySessionCommand.unrestricted(SESSION_ID, OWNER_ID)))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
                         .isEqualTo("INVENTORY_SESSION_NOT_IN_PROGRESS"));
@@ -88,7 +88,7 @@ class CancelInventorySessionServiceTest {
         when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.execute(new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, "EMPLOYEE"));
+        service.execute(new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, false, session.getStoreId()));
 
         assertThat(session.getStatus()).isEqualTo(InventorySessionStatus.CANCELLED);
     }
@@ -99,7 +99,7 @@ class CancelInventorySessionServiceTest {
         when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> service.execute(
-                new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, "EMPLOYEE")))
+                new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, false, session.getStoreId())))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
                         .isEqualTo("FORBIDDEN"));
@@ -111,7 +111,7 @@ class CancelInventorySessionServiceTest {
         when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.execute(new CancelInventorySessionCommand(SESSION_ID, OWNER_ID, "OWNER"));
+        service.execute(CancelInventorySessionCommand.unrestricted(SESSION_ID, OWNER_ID));
 
         assertThat(session.getStatus()).isEqualTo(InventorySessionStatus.CANCELLED);
     }
@@ -122,7 +122,7 @@ class CancelInventorySessionServiceTest {
         when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.execute(new CancelInventorySessionCommand(SESSION_ID, OWNER_ID, "OWNER"));
+        service.execute(CancelInventorySessionCommand.unrestricted(SESSION_ID, OWNER_ID));
 
         ArgumentCaptor<InventorySessionCancelledEvent> captor =
                 ArgumentCaptor.forClass(InventorySessionCancelledEvent.class);
@@ -131,13 +131,40 @@ class CancelInventorySessionServiceTest {
     }
 
     @Test
-    void cancel_manager_cannotCancelOthersSession() {
-        // Story 19.5 — MANAGER is restricted like an EMPLOYEE
+    void cancel_manager_cancelsASellersSessionOfHisStore() {
+        // Story 19.5b — INVENTORY_SESSION_MANAGE (decided by the adapter): any session of his store
         var session = createActiveSession(OWNER_ID);
+        when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
+        when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, true, session.getStoreId()));
+
+        assertThat(session.getStatus()).isEqualTo(InventorySessionStatus.CANCELLED);
+    }
+
+    @Test
+    void cancel_manager_otherStoresSession_forbidden_withFrenchMessage() {
+        var session = createActiveSession(EMPLOYEE_ID);
         when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
 
         assertThatThrownBy(() -> service.execute(
-                new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, "MANAGER")))
+                new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, true, UUID.randomUUID())))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> {
+                    assertThat(((DomainException) ex).getDomainCode()).isEqualTo("FORBIDDEN");
+                    assertThat(((DomainException) ex).getUserMessage())
+                            .isEqualTo("Vous ne pouvez gérer que les inventaires de votre boutique.");
+                });
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    void cancel_employee_ownSessionInAnotherStore_forbidden() {
+        var session = createActiveSession(EMPLOYEE_ID);
+        when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.execute(
+                new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, false, UUID.randomUUID())))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode()).isEqualTo("FORBIDDEN"));
     }

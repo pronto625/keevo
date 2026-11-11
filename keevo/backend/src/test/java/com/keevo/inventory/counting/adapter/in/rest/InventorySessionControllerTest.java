@@ -60,7 +60,7 @@ class InventorySessionControllerTest {
         var controller = new InventorySessionController(
                 createSessionUseCase, getActiveSessionUseCase,
                 cancelSessionUseCase, listSessionsUseCase,
-                validateInventoryUseCase);
+                validateInventoryUseCase, com.keevo.shared.infrastructure.security.ShippedActorPermissions.get());
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -147,7 +147,8 @@ class InventorySessionControllerTest {
 
     @Test
     void POST_sessions_cancel_employeeCannotCancelOthers_shouldReturn403() throws Exception {
-        mockJwtRole("EMPLOYEE");
+        // a store member carries his store (Story 19.5b: the command needs it)
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticate(actorId, "EMPLOYEE", storeId);
         UUID sessionId = UUID.randomUUID();
         doThrow(new DomainException(ErrorCode.FORBIDDEN, "Cannot cancel"))
                 .when(cancelSessionUseCase).execute(any());
@@ -225,5 +226,36 @@ class InventorySessionControllerTest {
                 .andExpect(status().isForbidden());
 
         verify(createSessionUseCase, never()).execute(any());
+    }
+
+    // ── Story 19.5b — who may cancel which session ─────────────────────────────
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0} → anyStarter {1}")
+    @org.junit.jupiter.params.provider.CsvSource({"MANAGER,true", "EMPLOYEE,false"})
+    void POST_sessions_cancel_storeMember_commandCarriesHisStoreAndRight(String role, boolean anyStarter)
+            throws Exception {
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticate(actorId, role, storeId);
+        var session = InventorySession.create(storeId, InventoryScope.FULL, null, actorId);
+        session.cancel(actorId);
+        when(cancelSessionUseCase.execute(any())).thenReturn(session);
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/" + session.getId() + "/cancel"))
+                .andExpect(status().isOk());
+
+        verify(cancelSessionUseCase).execute(new CancelInventorySessionCommand(
+                session.getId(), actorId, anyStarter, storeId));
+    }
+
+    @Test
+    void POST_sessions_cancel_owner_unrestricted() throws Exception {
+        authenticateAs("OWNER");
+        var session = InventorySession.create(storeId, InventoryScope.FULL, null, actorId);
+        session.cancel(actorId);
+        when(cancelSessionUseCase.execute(any())).thenReturn(session);
+
+        mockMvc.perform(post("/api/v1/inventory/sessions/" + session.getId() + "/cancel"))
+                .andExpect(status().isOk());
+
+        verify(cancelSessionUseCase).execute(CancelInventorySessionCommand.unrestricted(session.getId(), actorId));
     }
 }
