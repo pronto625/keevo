@@ -25,7 +25,7 @@ public interface BrefCutoverUseCase {
      * Opens a cutover and starts it in the background.
      *
      * @param source      {@code DATABASE} only
-     * @param parallelism owners imported at the same time, 1–8 ({@code null} = default)
+     * @param parallelism owners imported at the same time, 1–4 ({@code null} = default 4; Story 24.12)
      * @throws com.keevo.shared.domain.exception.DomainException {@code VALIDATION_FAILED},
      *         {@code MIGRATION_SOURCE_UNAVAILABLE}, {@code INVALID_STATE} (another cutover is open)
      */

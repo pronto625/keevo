@@ -66,10 +66,16 @@ class TenantDdlLockPostgresIntegrationTest {
             holder.setAutoCommit(false);
             TenantDdlLock.acquire(holder);
             Future<T> future = pool.submit(work);
-            Thread.sleep(1_500);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            int waiting = 0;
+            while (waiting == 0 && System.nanoTime() < deadline && !future.isDone()) {
+                Thread.sleep(100);
+                waiting = jdbc.queryForObject("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"
+                        + " AND database = (SELECT oid FROM pg_database WHERE datname = current_database())",
+                        Integer.class);
+            }
+            assertThat(waiting).as("one session waits for the tenant DDL lock").isEqualTo(1);
             assertThat(future.isDone()).as("waits for the tenant DDL lock").isFalse();
-            assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted",
-                    Integer.class)).isEqualTo(1);
             holder.commit(); // releases the lock
             return future.get(60, TimeUnit.SECONDS);
         } finally {

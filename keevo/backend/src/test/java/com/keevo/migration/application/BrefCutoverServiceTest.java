@@ -102,7 +102,7 @@ class BrefCutoverServiceTest {
     void startValidatesSourceParallelismAndOpenCutover() {
         assertThatThrownBy(() -> service.start("EXPORT", null, actor)).isInstanceOf(DomainException.class)
                 .hasMessageContaining(BrefCutoverService.SOURCE_ONLY_DATABASE);
-        assertThatThrownBy(() -> service.start("DATABASE", 9, actor)).hasMessageContaining(BrefCutoverService.PARALLELISM_RANGE);
+        assertThatThrownBy(() -> service.start("DATABASE", 5, actor)).hasMessageContaining(BrefCutoverService.PARALLELISM_RANGE);
         when(store.create(any(), anyInt(), any())).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.start("DATABASE", 2, actor))
                 .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))

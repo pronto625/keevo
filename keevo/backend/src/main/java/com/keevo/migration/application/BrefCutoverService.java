@@ -74,7 +74,11 @@ public class BrefCutoverService implements BrefCutoverUseCase {
 
     static final int PAGE = 200;
     static final int DEFAULT_PARALLELISM = 4;
-    static final int MAX_PARALLELISM = 8;
+    /**
+     * Story 24.12: tenant DDL is serial (TenantDdlLock) and each owner waiting for it holds two connections of the main
+     * pool — measured: 8 with the runbook's 12 connections failed 14 owners out of 202, 4 failed none and is as fast.
+     */
+    static final int MAX_PARALLELISM = 4;
     /** A RUNNING / ROLLING_BACK cutover whose coordinator stopped beating for this long may be taken over (D7). */
     static final Duration STALE = Duration.ofMinutes(30);
     static final long HEARTBEAT_EVERY_MS = 10_000;

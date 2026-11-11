@@ -221,11 +221,17 @@ public class TenantSchemaProvisioner {
      * an {@code AccessExclusiveLock} on every table of the schema, which a concurrent tenant creation scanning the
      * catalogue would otherwise wait for in a cycle); the connection's auto-commit mode is restored.
      */
+    /** Story 24.12 — longest wait of a drop for the tenant's table locks while it holds the tenant DDL lock. */
+    static final String DROP_LOCK_TIMEOUT = "30s";
+
     private static void dropUnderDdlLock(Connection conn, String schemaName) throws SQLException {
         boolean autoCommit = conn.getAutoCommit();
         conn.setAutoCommit(false);
         try (Statement stmt = conn.createStatement()) {
             TenantDdlLock.acquire(conn);
+            // a session still using the tenant's tables must not hold every other tenant DDL behind this drop
+            stmt.execute("SET LOCAL lock_timeout = '" + DROP_LOCK_TIMEOUT + "'");
+            TenantSchema.validate(schemaName); // callers validated it; re-checked at use
             stmt.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
             conn.commit();
         } catch (SQLException | RuntimeException e) {
@@ -236,7 +242,18 @@ public class TenantSchemaProvisioner {
             }
             throw e;
         } finally {
-            conn.setAutoCommit(autoCommit);
+            try {
+                conn.setAutoCommit(autoCommit);
+            } catch (SQLException | RuntimeException restoreFailure) {
+                // never back to the pool in an unknown state; the drop's own outcome stays the reported one
+                log.warn("Tenant schema drop: connection settings not restored ({}) — connection discarded",
+                        restoreFailure.getClass().getSimpleName());
+                try {
+                    conn.abort(Runnable::run);
+                } catch (SQLException | RuntimeException ignored) {
+                    // closing by the caller
+                }
+            }
         }
     }
 

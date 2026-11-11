@@ -17,6 +17,8 @@ import java.sql.SQLException;
  */
 final class TenantDdlLockCallback implements Callback {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(TenantDdlLockCallback.class);
+
     static final TenantDdlLockCallback INSTANCE = new TenantDdlLockCallback();
 
     private TenantDdlLockCallback() {
@@ -38,6 +40,10 @@ final class TenantDdlLockCallback implements Callback {
         try {
             if (!connection.getAutoCommit()) {
                 TenantDdlLock.acquire(connection);
+            } else {
+                // a non-transactional script (none today) would run outside the lock: make it visible
+                log.warn("Module script run outside a transaction: tenant DDL lock not taken (deadlock risk with a "
+                        + "parallel tenant creation)");
             }
         } catch (SQLException e) {
             throw new FlywayException("Tenant DDL lock not acquired: " + e.getSQLState(), e);
