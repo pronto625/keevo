@@ -280,6 +280,7 @@ public enum ErrorCode {
     MIGRATION_ALREADY_RUNNING,        // HTTP 409 — an import of the same owner is running
     MIGRATION_BATCH_NOT_FOUND,        // HTTP 404 — migration batch id unknown
     MIGRATION_RECONCILIATION_NOT_FOUND, // HTTP 404 — no reconciliation yet for the batch / Bref owner (Story 24.8)
+    MIGRATION_CUTOVER_NOT_FOUND,      // HTTP 404 — Bref cutover id unknown (Story 24.9)
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

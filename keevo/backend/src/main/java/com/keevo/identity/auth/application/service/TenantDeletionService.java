@@ -203,12 +203,30 @@ public class TenantDeletionService {
      * @return {@code true} when deleted, {@code false} when skipped
      */
     boolean runTenantDeletion(UUID tenantId, boolean requireExpired) {
+        return runTenantDeletion(tenantId, requireExpired, false);
+    }
+
+    /**
+     * Story 24.9 — the rollback of a Bref cutover: the routine of {@link #deleteNow} for a company the migration created
+     * and never activated (the caller marks it DELETION_PENDING), with three differences: no final WhatsApp (nobody was
+     * told the company existed), no RGPD deletion trace (no deletion was requested), and the company row is removed
+     * with its billing rows instead of being kept anonymised (a later import with the same Bref ids must not collide).
+     *
+     * @return {@code true} when removed, {@code false} when the company was not DELETION_PENDING
+     */
+    public boolean forgetImportedNow(UUID tenantId) {
+        return runTenantDeletion(tenantId, false, true);
+    }
+
+    private boolean runTenantDeletion(UUID tenantId, boolean requireExpired, boolean forget) {
         String[] schemaName = new String[1];
         List<String> ownerPhones = transactionTemplate.execute(
-                status -> executeDeletionForTenant(tenantId, requireExpired, schemaName));
+                status -> executeDeletionForTenant(tenantId, requireExpired, forget, schemaName));
         if (ownerPhones == null) return false; // skipped (cancelled / no longer pending)
         purgeFiles(tenantId, schemaName[0]);
-        sendFinalWhatsApp(tenantId, ownerPhones);
+        if (!forget) {
+            sendFinalWhatsApp(tenantId, ownerPhones);
+        }
         return true;
     }
 
@@ -252,7 +270,8 @@ public class TenantDeletionService {
      *
      * @return the OWNER phone numbers to notify after commit, or {@code null} when skipped
      */
-    private List<String> executeDeletionForTenant(UUID tenantId, boolean requireExpired, String[] schemaOut) {
+    private List<String> executeDeletionForTenant(UUID tenantId, boolean requireExpired, boolean forget,
+                                                  String[] schemaOut) {
         // 1. Row lock + re-check of status (AND expiry for the daily run: detects a cancellation —
         //    or a cancel then a new request with a future date — since findDeletionsDueBy)
         List<Map<String, Object>> locked = jdbcTemplate.queryForList(LOCK_TENANT_SQL, tenantId);
@@ -267,7 +286,7 @@ public class TenantDeletionService {
         schemaOut[0] = schemaName;
 
         // 2. OWNER phones, captured before memberships/users are deleted
-        List<String> ownerPhones = findOwnerPhones(tenantId);
+        List<String> ownerPhones = forget ? List.of() : findOwnerPhones(tenantId);
 
         // 3. DROP schema CASCADE (propagates on failure → rollback, tenant stays DELETION_PENDING)
         schemaProvisioner.dropSchemaForDeletion(schemaName);
@@ -351,6 +370,17 @@ public class TenantDeletionService {
         jdbcTemplate.update("DELETE FROM public.global_notifications WHERE target_tenant_id = ?",
                 (Object) tenantId);
         purgeLaterPublicRows(tenantId, schemaName);
+
+        if (forget) {
+            // Story 24.9 — a company the Bref cutover created and never activated: no trace, no anonymised row; the
+            // billing rows (imported from Bref, RESTRICT on tenant_payments) go first, the rest cascades
+            jdbcTemplate.update("DELETE FROM public.tenant_payments WHERE tenant_id = ?", (Object) tenantId);
+            jdbcTemplate.update("DELETE FROM public.tenant_plan_events WHERE tenant_id = ?", (Object) tenantId);
+            jdbcTemplate.update("DELETE FROM public.tenants WHERE id = ?", (Object) tenantId);
+            log.info("[TenantDeletionService] Imported tenant {} ({}) removed by the cutover rollback: {} users "
+                    + "orphaned, schema dropped.", tenantId, schemaName, orphanedUserIds.size());
+            return ownerPhones;
+        }
 
         // 10. Durable, non-personal trace — same transaction: rolled back with a failed purge
         deletionLog.record(tenantId, AccountDeletionLogRepository.Event.EXECUTED,

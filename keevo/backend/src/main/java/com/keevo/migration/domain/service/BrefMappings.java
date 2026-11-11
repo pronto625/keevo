@@ -28,6 +28,12 @@ public final class BrefMappings {
     public static final String BREF_OWNER_ROLE = "owner";
 
     /**
+     * Suspension reason of an imported company until the cutover's « go » activates it (24.2, shown in the admin
+     * drawer); 24.9 activates and removes only the companies carrying it.
+     */
+    public static final String SUSPENSION_REASON = "Migration Bref en cours — activation en attente";
+
+    /**
      * Decision D4 — the Keevo modules matching what Bref offers (documents, catalogue, clients, expenses, finance,
      * reports, WhatsApp Business, assistant, client portal); every other owner-toggleable module starts owner-disabled
      * for an imported owner (the DOCUMENT rules already disable till, stock, counting and transfers). Entitlement stays

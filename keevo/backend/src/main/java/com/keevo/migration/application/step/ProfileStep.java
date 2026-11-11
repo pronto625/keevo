@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 class ProfileStep implements ImportStep {
 
     /** Suspension reason of an imported tenant until its wave activates it (shown in the admin drawer). */
-    static final String SUSPENSION_REASON = "Migration Bref en cours — activation en attente";
+    static final String SUSPENSION_REASON = BrefMappings.SUSPENSION_REASON;
 
     private final LegacyIdentityImportPort identity;
     private final TenantSaleFlowCommandPort saleFlow;

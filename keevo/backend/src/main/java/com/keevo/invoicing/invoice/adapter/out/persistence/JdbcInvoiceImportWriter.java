@@ -37,6 +37,9 @@ import java.util.function.Function;
 @Component
 class JdbcInvoiceImportWriter implements InvoiceImportWriter {
 
+    /** Story 24.9 — rows per insert statement (the cutover may meet an owner with tens of thousands of documents). */
+    static final int CHUNK = 2_000;
+
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
 
@@ -189,16 +192,19 @@ class JdbcInvoiceImportWriter implements InvoiceImportWriter {
         }
         String sql = "INSERT INTO " + InvoicingTables.qualified(table) + " (" + columns + ") SELECT " + columns
                 + " FROM jsonb_to_recordset(?::jsonb) AS x(" + types + ") ON CONFLICT (id) DO NOTHING RETURNING id";
-        String payload;
-        try {
-            payload = json.writeValueAsString(rows);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Import rows not serialisable", e);
-        }
         Set<UUID> inserted = new LinkedHashSet<>();
-        jdbc.query(sql, rs -> {
-            inserted.add(rs.getObject("id", UUID.class));
-        }, payload);
+        // Story 24.9 — blocks of CHUNK rows (a large owner's history), in order, in the caller's transaction
+        for (int from = 0; from < rows.size(); from += CHUNK) {
+            String payload;
+            try {
+                payload = json.writeValueAsString(rows.subList(from, Math.min(rows.size(), from + CHUNK)));
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException("Import rows not serialisable", e);
+            }
+            jdbc.query(sql, rs -> {
+                inserted.add(rs.getObject("id", UUID.class));
+            }, payload);
+        }
         return inserted;
     }
 

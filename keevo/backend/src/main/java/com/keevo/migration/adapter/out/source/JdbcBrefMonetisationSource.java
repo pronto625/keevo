@@ -149,6 +149,7 @@ class JdbcBrefMonetisationSource implements BrefMonetisationSourcePort {
                              Function<com.fasterxml.jackson.databind.JsonNode, T> mapper) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             binder.bind(ps);
+            ps.setFetchSize(JdbcBrefSource.FETCH_SIZE); // Story 24.9 — cursor reads
             try (ResultSet rs = ps.executeQuery()) {
                 List<T> rows = new ArrayList<>();
                 while (rs.next()) {

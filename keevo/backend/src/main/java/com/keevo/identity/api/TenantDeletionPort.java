@@ -20,6 +20,17 @@ public interface TenantDeletionPort {
     boolean deleteNow(UUID tenantId);
 
     /**
+     * Story 24.9 — the rollback of a Bref cutover before the « go »: the routine of {@link #deleteNow} for a company the
+     * migration created and never activated ({@code DELETION_PENDING}, marked by the caller), without the final
+     * WhatsApp nor the RGPD deletion trace (nobody ever used it), and the company row itself is removed with its billing
+     * rows ({@code tenant_payments}, {@code tenant_plan_events}): a later import with the same Bref ids must not collide.
+     *
+     * @return {@code true} when removed; {@code false} when the company was not {@code DELETION_PENDING}
+     * @throws NullPointerException if {@code tenantId} is null
+     */
+    boolean forgetImportedNow(UUID tenantId);
+
+    /**
      * Story 16.6 — records a SUPER_ADMIN deletion request (force-delete, due now) in the durable,
      * non-personal deletion trace. Joins the caller's transaction when there is one.
      *

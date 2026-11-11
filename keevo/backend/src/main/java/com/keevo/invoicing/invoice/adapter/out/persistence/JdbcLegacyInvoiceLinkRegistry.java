@@ -18,6 +18,9 @@ import java.util.UUID;
 @Component
 public class JdbcLegacyInvoiceLinkRegistry implements LegacyInvoiceLinkRegistry {
 
+    /** Story 24.9 — tokens per statement (a large owner's documents). */
+    static final int CHUNK = 2_000;
+
     private final JdbcTemplate jdbc;
 
     public JdbcLegacyInvoiceLinkRegistry(JdbcTemplate jdbc) {
@@ -63,18 +66,22 @@ public class JdbcLegacyInvoiceLinkRegistry implements LegacyInvoiceLinkRegistry 
                 + "ON CONFLICT (token) DO UPDATE SET expires_at = EXCLUDED.expires_at "
                 + "WHERE l.tenant_schema = EXCLUDED.tenant_schema AND l.invoice_id = EXCLUDED.invoice_id "
                 + "RETURNING 1) SELECT count(*) FROM w";
-        List<Integer> counts = jdbc.query(con -> {
-            java.sql.PreparedStatement ps = con.prepareStatement(sql);
-            ps.setString(1, schema);
-            ps.setArray(2, con.createArrayOf("uuid", links.stream().map(Link::token).toArray()));
-            ps.setArray(3, con.createArrayOf("uuid", links.stream().map(Link::invoiceId).toArray()));
-            ps.setArray(4, con.createArrayOf("text", links.stream()
-                    .map(l -> l.expiresAt() == null ? null : l.expiresAt().toString()).toArray()));
-            return ps;
-        }, (rs, n) -> rs.getInt(1));
-        Integer written = counts.isEmpty() ? null : counts.get(0);
-        if (written == null || written != links.size()) {
-            throw new IllegalStateException("Bref public token already attached to another invoice");
+        // Story 24.9 — blocks of CHUNK tokens, in the caller's transaction
+        for (int from = 0; from < links.size(); from += CHUNK) {
+            List<Link> block = links.subList(from, Math.min(links.size(), from + CHUNK));
+            List<Integer> counts = jdbc.query(con -> {
+                java.sql.PreparedStatement ps = con.prepareStatement(sql);
+                ps.setString(1, schema);
+                ps.setArray(2, con.createArrayOf("uuid", block.stream().map(Link::token).toArray()));
+                ps.setArray(3, con.createArrayOf("uuid", block.stream().map(Link::invoiceId).toArray()));
+                ps.setArray(4, con.createArrayOf("text", block.stream()
+                        .map(l -> l.expiresAt() == null ? null : l.expiresAt().toString()).toArray()));
+                return ps;
+            }, (rs, n) -> rs.getInt(1));
+            Integer written = counts.isEmpty() ? null : counts.get(0);
+            if (written == null || written != block.size()) {
+                throw new IllegalStateException("Bref public token already attached to another invoice");
+            }
         }
     }
 

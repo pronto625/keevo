@@ -36,9 +36,13 @@ public class AdminBrefMigrationController {
     }
 
     private final BrefOwnerImportUseCase useCase;
+    /** Story 24.9 — the batch list. */
+    private final com.keevo.migration.domain.port.in.BrefCutoverUseCase cutovers;
 
-    public AdminBrefMigrationController(BrefOwnerImportUseCase useCase) {
+    public AdminBrefMigrationController(BrefOwnerImportUseCase useCase,
+                                        com.keevo.migration.domain.port.in.BrefCutoverUseCase cutovers) {
         this.useCase = useCase;
+        this.cutovers = cutovers;
     }
 
     @Operation(summary = "Import (or complete the import of) a Bref owner: identity, company, shops, team",
@@ -50,6 +54,17 @@ public class AdminBrefMigrationController {
         MigrationBatch batch = useCase.importOwner(ownerId, body == null ? null : body.source(),
                 CurrentActor.actorId());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(MigrationBatchResponse.of(batch)));
+    }
+
+    @Operation(summary = "List the import batches, newest first (keyset: after = the last batch id of the page)",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/batches")
+    public ResponseEntity<ApiResponseWrapper<java.util.List<MigrationBatchResponse>>> batches(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) UUID after,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "50") int limit) {
+        CurrentActor.requireSuperAdmin();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(cutovers.batches(after, limit).stream()
+                .map(MigrationBatchResponse::of).toList()));
     }
 
     @Operation(summary = "Read an import batch", security = @SecurityRequirement(name = "bearerAuth"))

@@ -21,6 +21,9 @@ import java.util.function.Function;
 @Component
 class JdbcExpenseImportWriter implements ExpenseImportWriter {
 
+    /** Story 24.9 — rows per insert statement (a large owner's expenses). */
+    static final int CHUNK = 2_000;
+
     private final JdbcTemplate jdbc;
 
     JdbcExpenseImportWriter(JdbcTemplate jdbc) {
@@ -29,6 +32,15 @@ class JdbcExpenseImportWriter implements ExpenseImportWriter {
 
     @Override
     public Set<UUID> insertAbsent(List<ImportedExpense> expenses) {
+        // Story 24.9 — blocks of CHUNK rows, in order, in the caller's transaction
+        Set<UUID> inserted = new LinkedHashSet<>();
+        for (int from = 0; from < expenses.size(); from += CHUNK) {
+            inserted.addAll(insertBlock(expenses.subList(from, Math.min(expenses.size(), from + CHUNK))));
+        }
+        return inserted;
+    }
+
+    private Set<UUID> insertBlock(List<ImportedExpense> expenses) {
         if (expenses.isEmpty()) {
             return Set.of();
         }

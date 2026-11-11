@@ -142,4 +142,45 @@ public class LegacyIdentityImportService implements LegacyIdentityImportPort {
         }
         return store.insertAuthenticators(identities);
     }
+
+    @Override
+    public Set<UUID> activateImportedTenants(Collection<UUID> tenantIds, String suspensionReason) {
+        Objects.requireNonNull(suspensionReason, "suspensionReason");
+        if (tenantIds == null || tenantIds.isEmpty()) {
+            return Set.of();
+        }
+        return store.activateSuspended(tenantIds, suspensionReason);
+    }
+
+    @Override
+    public int redateImportedInvitations(Collection<UUID> invitationIds) {
+        if (invitationIds == null || invitationIds.isEmpty()) {
+            return 0;
+        }
+        return store.redateInvitations(invitationIds, INVITATION_VALIDITY);
+    }
+
+    @Override
+    public RemovalPreparation prepareImportedTenantRemoval(UUID tenantId, String suspensionReason,
+                                                           Collection<UUID> linkedAccountIds,
+                                                           Collection<UUID> authenticatorIds) {
+        Objects.requireNonNull(tenantId, "tenantId");
+        Objects.requireNonNull(suspensionReason, "suspensionReason");
+        RemovalPreparation found = store.markForRemoval(tenantId, suspensionReason);
+        if (found == RemovalPreparation.READY && linkedAccountIds != null && !linkedAccountIds.isEmpty()) {
+            store.removeMemberships(tenantId, linkedAccountIds);
+        }
+        if (found != RemovalPreparation.REFUSED && authenticatorIds != null && !authenticatorIds.isEmpty()) {
+            store.deleteAuthenticators(authenticatorIds);
+        }
+        return found;
+    }
+
+    @Override
+    public int deleteOrphanImportedAccounts(Collection<UUID> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return 0;
+        }
+        return store.deleteOrphanAccounts(accountIds);
+    }
 }

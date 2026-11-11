@@ -48,4 +48,22 @@ public interface LegacyIdentityStore {
 
     /** Sets the suspension date and reason of a suspended tenant when they are not set yet. */
     void traceSuspension(UUID tenantId, String reason);
+
+    /** Story 24.9 — SUSPENDED (with this reason) → ACTIVE, trace cleared, one statement. @return ids activated */
+    Set<UUID> activateSuspended(Collection<UUID> tenantIds, String reason);
+
+    /** Story 24.9 — PENDING invitations re-dated (now, now + validity, message window open). @return rows updated */
+    int redateInvitations(Collection<UUID> invitationIds, Duration validity);
+
+    /** Story 24.9 — marks a SUSPENDED (with this reason) tenant DELETION_PENDING, scheduled far ahead. */
+    com.keevo.identity.api.LegacyIdentityImportPort.RemovalPreparation markForRemoval(UUID tenantId, String reason);
+
+    /** Story 24.9 — removes the memberships of these accounts in the tenant. */
+    void removeMemberships(UUID tenantId, Collection<UUID> accountIds);
+
+    /** Story 24.9 — deletes these Google / Apple identities. */
+    void deleteAuthenticators(Collection<UUID> authenticatorIds);
+
+    /** Story 24.9 — deletes these accounts when no membership holds them (reset tokens first). @return deleted */
+    int deleteOrphanAccounts(Collection<UUID> accountIds);
 }

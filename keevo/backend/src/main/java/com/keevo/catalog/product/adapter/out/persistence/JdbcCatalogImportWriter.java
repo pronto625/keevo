@@ -25,6 +25,9 @@ import java.util.function.Function;
 @Component
 class JdbcCatalogImportWriter implements CatalogImportWriter {
 
+    /** Story 24.9 — rows per insert statement (a large owner's catalogue). */
+    static final int CHUNK = 2_000;
+
     private final JdbcTemplate jdbc;
 
     JdbcCatalogImportWriter(JdbcTemplate jdbc) {
@@ -112,24 +115,30 @@ class JdbcCatalogImportWriter implements CatalogImportWriter {
                 + "barcode, product_key, price_manual, merged_into_id, archived, created_at, updated_at) "
                 + "ON CONFLICT DO NOTHING RETURNING id";
         Set<UUID> inserted = new LinkedHashSet<>();
-        jdbc.query(con -> {
-            PreparedStatement ps = con.prepareStatement(sql);
-            ps.setArray(1, con.createArrayOf("uuid", column(products, ImportedProduct::id)));
-            ps.setArray(2, con.createArrayOf("varchar", column(products, ImportedProduct::name)));
-            ps.setArray(3, con.createArrayOf("varchar", skus.toArray()));
-            ps.setArray(4, con.createArrayOf("uuid", column(products, ImportedProduct::categoryId)));
-            ps.setArray(5, con.createArrayOf("integer", column(products, ImportedProduct::price)));
-            ps.setArray(6, con.createArrayOf("varchar", column(products, ImportedProduct::barcode)));
-            ps.setArray(7, con.createArrayOf("varchar", column(products, ImportedProduct::productKey)));
-            ps.setArray(8, con.createArrayOf("boolean", column(products, ImportedProduct::priceManual)));
-            ps.setArray(9, con.createArrayOf("uuid", column(products, ImportedProduct::mergedIntoId)));
-            ps.setArray(10, con.createArrayOf("boolean", column(products, ImportedProduct::archived)));
-            ps.setArray(11, con.createArrayOf("text", column(products, p -> p.createdAt().toString())));
-            ps.setArray(12, con.createArrayOf("text", column(products, p -> p.updatedAt().toString())));
-            return ps;
-        }, rs -> {
-            inserted.add(rs.getObject("id", UUID.class));
-        });
+        // Story 24.9 — blocks of CHUNK rows in the given order (the planner lists the live products before the products
+        // merged into them, so a merge target is always in an earlier or the same block), same transaction
+        for (int from = 0; from < products.size(); from += CHUNK) {
+            List<ImportedProduct> block = products.subList(from, Math.min(products.size(), from + CHUNK));
+            List<String> blockSkus = skus.subList(from, Math.min(products.size(), from + CHUNK));
+            jdbc.query(con -> {
+                PreparedStatement ps = con.prepareStatement(sql);
+                ps.setArray(1, con.createArrayOf("uuid", column(block, ImportedProduct::id)));
+                ps.setArray(2, con.createArrayOf("varchar", column(block, ImportedProduct::name)));
+                ps.setArray(3, con.createArrayOf("varchar", blockSkus.toArray()));
+                ps.setArray(4, con.createArrayOf("uuid", column(block, ImportedProduct::categoryId)));
+                ps.setArray(5, con.createArrayOf("integer", column(block, ImportedProduct::price)));
+                ps.setArray(6, con.createArrayOf("varchar", column(block, ImportedProduct::barcode)));
+                ps.setArray(7, con.createArrayOf("varchar", column(block, ImportedProduct::productKey)));
+                ps.setArray(8, con.createArrayOf("boolean", column(block, ImportedProduct::priceManual)));
+                ps.setArray(9, con.createArrayOf("uuid", column(block, ImportedProduct::mergedIntoId)));
+                ps.setArray(10, con.createArrayOf("boolean", column(block, ImportedProduct::archived)));
+                ps.setArray(11, con.createArrayOf("text", column(block, p -> p.createdAt().toString())));
+                ps.setArray(12, con.createArrayOf("text", column(block, p -> p.updatedAt().toString())));
+                return ps;
+            }, rs -> {
+                inserted.add(rs.getObject("id", UUID.class));
+            });
+        }
         return inserted;
     }
 

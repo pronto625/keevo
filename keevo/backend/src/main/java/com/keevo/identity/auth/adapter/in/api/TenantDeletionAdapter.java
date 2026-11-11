@@ -33,6 +33,12 @@ class TenantDeletionAdapter implements TenantDeletionPort {
     }
 
     @Override
+    public boolean forgetImportedNow(UUID tenantId) {
+        Objects.requireNonNull(tenantId, "tenantId");
+        return tenantDeletionService.forgetImportedNow(tenantId);
+    }
+
+    @Override
     public void recordAdminDeletionRequest(UUID tenantId) {
         Objects.requireNonNull(tenantId, "tenantId");
         // null → scheduled_for copied from the tenant row: exactly the marker forceDelete just wrote

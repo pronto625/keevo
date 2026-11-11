@@ -95,6 +95,56 @@ public interface LegacyIdentityImportPort {
      */
     List<AuthenticatorOutcome> importAuthenticators(List<SocialIdentity> identities);
 
+    /**
+     * Story 24.9 — the « go » of the Bref cutover, in one statement: the imported companies still {@code SUSPENDED} with
+     * {@code suspensionReason} (the import's own) become {@code ACTIVE} and their suspension trace is cleared. No event,
+     * no message; a company suspended for another reason, or already active, is left as is.
+     *
+     * @return the ids of the companies activated by this call
+     */
+    Set<UUID> activateImportedTenants(Collection<UUID> tenantIds, String suspensionReason);
+
+    /**
+     * Story 24.9 — the invitations the import created (19.6b, PENDING) are re-dated at the « go », in one statement:
+     * invited now, valid {@code validity} from now, and the 19.6b message window re-opened ({@code last_sent_at} one day
+     * back, so the owner may re-send at once). No message is sent.
+     *
+     * @return the number of invitations re-dated
+     */
+    int redateImportedInvitations(Collection<UUID> invitationIds);
+
+    /**
+     * Story 24.9 — prepares the removal of an imported company by the cutover's rollback, in one transaction: the
+     * company is marked {@code DELETION_PENDING} (scheduled far ahead: the daily deletion never takes it) only when it is
+     * still {@code SUSPENDED} with {@code suspensionReason} (or already being removed), the memberships of the existing
+     * Keevo accounts the import linked are removed (their accounts are never deleted), and the Google / Apple identities
+     * the import added are deleted.
+     *
+     * @param linkedAccountIds  the accounts recorded {@code linked_users} by the import
+     * @param authenticatorIds  the identities recorded {@code user_authenticators} by the import
+     */
+    RemovalPreparation prepareImportedTenantRemoval(UUID tenantId, String suspensionReason,
+                                                    Collection<UUID> linkedAccountIds,
+                                                    Collection<UUID> authenticatorIds);
+
+    /**
+     * Story 24.9 — deletes the accounts the import created ({@code users} records) that no company holds any more
+     * (their reset tokens first); an account member of another company is kept.
+     *
+     * @return the number of accounts deleted
+     */
+    int deleteOrphanImportedAccounts(Collection<UUID> accountIds);
+
+    /** Story 24.9 — what {@link #prepareImportedTenantRemoval} found. */
+    enum RemovalPreparation {
+        /** Marked for removal: {@link TenantDeletionPort#forgetImportedNow} may run. */
+        READY,
+        /** The company no longer exists (an earlier rollback removed it). */
+        ABSENT,
+        /** The company is active (or suspended for another reason): it is not removed. */
+        REFUSED
+    }
+
     /** What makes an imported identifier unusable in Keevo as is. */
     enum ConflictKind {
         /** A Keevo account already has this id. */

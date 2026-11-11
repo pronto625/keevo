@@ -352,6 +352,117 @@ class JdbcLegacyIdentityStore implements LegacyIdentityStore {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    // ── Story 24.9 — activation and rollback of the cutover ─────────────────────────────────────────────────────
+
+    /** The « go »: only the companies the import suspended (its reason), one statement; no event (direct SQL). */
+    static final String ACTIVATE_SQL = """
+            UPDATE public.tenants SET status = 'ACTIVE', suspended_at = NULL, suspended_reason = NULL
+             WHERE id = ANY (?::uuid[]) AND status = 'SUSPENDED' AND suspended_reason = ?
+            RETURNING id
+            """;
+
+    /** Invitations re-dated at the « go » (24.7 routed item): the 19.6b message window re-opened, nothing sent. */
+    static final String REDATE_INVITATIONS_SQL = """
+            UPDATE public.membership_invitations
+               SET invited_at = now(), expires_at = now() + make_interval(secs => ?),
+                   last_sent_at = now() - interval '1 day'
+             WHERE id = ANY (?::uuid[]) AND status = 'PENDING'
+            """;
+
+    /**
+     * The rollback's marker: a company the import suspended (or already being removed by an interrupted rollback)
+     * becomes DELETION_PENDING, scheduled far ahead so the daily deletion (which notifies the owner) never takes it.
+     */
+    static final String MARK_REMOVAL_SQL = """
+            UPDATE public.tenants SET status = 'DELETION_PENDING', deletion_scheduled_at = now() + interval '100 years'
+             WHERE id = ? AND status IN ('SUSPENDED', 'DELETION_PENDING') AND suspended_reason = ?
+            """;
+
+    static final String DELETE_ORPHAN_TOKENS_SQL = """
+            DELETE FROM public.password_reset_tokens p
+             WHERE p.user_id = ANY (?::uuid[])
+               AND NOT EXISTS (SELECT 1 FROM public.user_tenant_memberships m WHERE m.user_id = p.user_id)
+            """;
+
+    static final String DELETE_ORPHAN_USERS_SQL = """
+            DELETE FROM public.users u
+             WHERE u.id = ANY (?::uuid[])
+               AND NOT EXISTS (SELECT 1 FROM public.user_tenant_memberships m WHERE m.user_id = u.id)
+            """;
+
+    @Override
+    public Set<UUID> activateSuspended(Collection<UUID> tenantIds, String reason) {
+        Set<UUID> activated = new LinkedHashSet<>();
+        jdbc.query(con -> {
+            PreparedStatement ps = con.prepareStatement(ACTIVATE_SQL);
+            ps.setArray(1, con.createArrayOf("uuid", tenantIds.toArray()));
+            ps.setString(2, reason);
+            return ps;
+        }, rs -> {
+            activated.add(rs.getObject(1, UUID.class));
+        });
+        return activated;
+    }
+
+    @Override
+    public int redateInvitations(Collection<UUID> invitationIds, Duration validity) {
+        return jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(REDATE_INVITATIONS_SQL);
+            ps.setDouble(1, (double) validity.toSeconds());
+            ps.setArray(2, con.createArrayOf("uuid", invitationIds.toArray()));
+            return ps;
+        });
+    }
+
+    @Override
+    public com.keevo.identity.api.LegacyIdentityImportPort.RemovalPreparation markForRemoval(UUID tenantId,
+                                                                                          String reason) {
+        if (jdbc.update(MARK_REMOVAL_SQL, tenantId, reason) == 1) {
+            return com.keevo.identity.api.LegacyIdentityImportPort.RemovalPreparation.READY;
+        }
+        List<String> status = jdbc.queryForList("SELECT status FROM public.tenants WHERE id = ?", String.class,
+                tenantId);
+        return status.isEmpty() || "DELETED".equals(status.get(0))
+                ? com.keevo.identity.api.LegacyIdentityImportPort.RemovalPreparation.ABSENT
+                : com.keevo.identity.api.LegacyIdentityImportPort.RemovalPreparation.REFUSED;
+    }
+
+    @Override
+    public void removeMemberships(UUID tenantId, Collection<UUID> accountIds) {
+        jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(
+                    "DELETE FROM public.user_tenant_memberships WHERE tenant_id = ? AND user_id = ANY (?::uuid[])");
+            ps.setObject(1, tenantId);
+            ps.setArray(2, con.createArrayOf("uuid", accountIds.toArray()));
+            return ps;
+        });
+    }
+
+    @Override
+    public void deleteAuthenticators(Collection<UUID> authenticatorIds) {
+        jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(
+                    "DELETE FROM public.user_authenticators WHERE id = ANY (?::uuid[])");
+            ps.setArray(1, con.createArrayOf("uuid", authenticatorIds.toArray()));
+            return ps;
+        });
+    }
+
+    @Override
+    public int deleteOrphanAccounts(Collection<UUID> accountIds) {
+        Object[] ids = accountIds.toArray();
+        jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(DELETE_ORPHAN_TOKENS_SQL);
+            ps.setArray(1, con.createArrayOf("uuid", ids));
+            return ps;
+        });
+        return jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(DELETE_ORPHAN_USERS_SQL);
+            ps.setArray(1, con.createArrayOf("uuid", ids));
+            return ps;
+        });
+    }
+
     private static Array varchars(Connection con, List<String> values) throws SQLException {
         return con.createArrayOf("varchar", values.toArray());
     }

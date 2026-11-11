@@ -34,6 +34,9 @@ public interface MigrationRecordStore {
 
     Optional<MigrationBatch> findBatch(UUID batchId);
 
+    /** Story 24.9 — import batches, newest first, after the given one ({@code null} = first page), keyset. */
+    List<MigrationBatch> listBatches(UUID after, int limit);
+
     /**
      * The owner's records in the given target tables (those the pipeline's steps read), keyed by source — one read
      * on {@code (bref_owner_id, target_table)}; a mutable map the run keeps up to date.

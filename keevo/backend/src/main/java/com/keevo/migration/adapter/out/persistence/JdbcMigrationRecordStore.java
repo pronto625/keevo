@@ -109,6 +109,28 @@ class JdbcMigrationRecordStore implements MigrationRecordStore {
         return jdbc.query(FIND_BATCH_SQL, (rs, i) -> batch(rs), batchId).stream().findFirst();
     }
 
+    /** Story 24.9 — keyset on {@code idx_migration_batches_started} (V91). */
+    static final String LIST_BATCHES_SQL = """
+            SELECT id, bref_owner_id, source, status, tenant_id, started_by, started_at, finished_at,
+                   counts::text AS counts, cases::text AS cases, notes::text AS notes, error_label
+              FROM public.migration_batches
+             ORDER BY started_at DESC, id DESC LIMIT ?
+            """;
+    static final String LIST_BATCHES_AFTER_SQL = """
+            SELECT b.id, b.bref_owner_id, b.source, b.status, b.tenant_id, b.started_by, b.started_at, b.finished_at,
+                   b.counts::text AS counts, b.cases::text AS cases, b.notes::text AS notes, b.error_label
+              FROM public.migration_batches b, public.migration_batches a
+             WHERE a.id = ? AND (b.started_at, b.id) < (a.started_at, a.id)
+             ORDER BY b.started_at DESC, b.id DESC LIMIT ?
+            """;
+
+    @Override
+    public List<MigrationBatch> listBatches(UUID after, int limit) {
+        return after == null
+                ? jdbc.query(LIST_BATCHES_SQL, (rs, i) -> batch(rs), limit)
+                : jdbc.query(LIST_BATCHES_AFTER_SQL, (rs, i) -> batch(rs), after, limit);
+    }
+
     @Override
     public Map<MigrationRecord.Key, UUID> findTargets(UUID brefOwnerId, Collection<String> targetTables) {
         Map<MigrationRecord.Key, UUID> targets = new HashMap<>();
@@ -132,7 +154,17 @@ class JdbcMigrationRecordStore implements MigrationRecordStore {
         if (records.isEmpty()) {
             return;
         }
-        List<MigrationRecord> list = List.copyOf(records);
+        List<MigrationRecord> all = List.copyOf(records);
+        // Story 24.9 — blocks of CHUNK records (a large owner writes tens of thousands), same transaction
+        for (int from = 0; from < all.size(); from += CHUNK) {
+            insertBlock(batchId, brefOwnerId, all.subList(from, Math.min(all.size(), from + CHUNK)));
+        }
+    }
+
+    /** Story 24.9 — records per insert statement. */
+    static final int CHUNK = 5_000;
+
+    private void insertBlock(UUID batchId, UUID brefOwnerId, List<MigrationRecord> list) {
         jdbc.update(con -> {
             java.sql.PreparedStatement ps = con.prepareStatement(INSERT_RECORD_SQL);
             ps.setObject(1, batchId);

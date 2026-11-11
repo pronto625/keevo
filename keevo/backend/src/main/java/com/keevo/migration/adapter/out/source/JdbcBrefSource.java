@@ -97,20 +97,36 @@ class JdbcBrefSource implements BrefSourcePort {
     static final String EXPENSES_SQL = "SELECT (to_jsonb(e) || jsonb_build_object('amount', e.amount::text))::text "
             + "FROM expense e WHERE lower(btrim(e.\"shopId\")) = ANY (?::text[]) ORDER BY e.\"createdAt\", e.id";
 
+    /**
+     * Story 24.9 — rows fetched per round trip (the connection is never in auto-commit: the driver reads through a
+     * cursor instead of buffering a whole result at once).
+     */
+    static final int FETCH_SIZE = 500;
+    /** Story 24.9 — default pool: the cutover imports up to 8 owners at a time, each holding one read at a time. */
+    static final int DEFAULT_POOL_SIZE = 8;
+
     private final ObjectMapper mapper;
     private final String url;
     private final String username;
     private final String password;
+    private final int poolSize;
     private volatile HikariDataSource dataSource;
 
+    @org.springframework.beans.factory.annotation.Autowired
     JdbcBrefSource(ObjectMapper mapper,
                    @Value("${keevo.migration.bref.jdbc.url:}") String url,
                    @Value("${keevo.migration.bref.jdbc.username:}") String username,
-                   @Value("${keevo.migration.bref.jdbc.password:}") String password) {
+                   @Value("${keevo.migration.bref.jdbc.password:}") String password,
+                   @Value("${keevo.migration.bref.jdbc.pool-size:" + DEFAULT_POOL_SIZE + "}") int poolSize) {
         this.mapper = mapper;
         this.url = url == null ? "" : url.strip();
         this.username = username;
         this.password = password;
+        this.poolSize = Math.max(2, poolSize);
+    }
+
+    JdbcBrefSource(ObjectMapper mapper, String url, String username, String password) {
+        this(mapper, url, username, password, DEFAULT_POOL_SIZE);
     }
 
     @Override
@@ -225,6 +241,7 @@ class JdbcBrefSource implements BrefSourcePort {
     private static List<String> rows(Connection c, String sql, Binder binder) throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             binder.bind(ps);
+            ps.setFetchSize(FETCH_SIZE);
             try (ResultSet rs = ps.executeQuery()) {
                 List<String> rows = new ArrayList<>();
                 while (rs.next()) {
@@ -254,7 +271,7 @@ class JdbcBrefSource implements BrefSourcePort {
                     config.setUsername(username);
                     config.setPassword(password);
                     config.setReadOnly(true);
-                    config.setMaximumPoolSize(2);
+                    config.setMaximumPoolSize(poolSize);
                     config.setMinimumIdle(0);
                     config.setConnectionTimeout(5_000);
                     config.setPoolName("bref-source");

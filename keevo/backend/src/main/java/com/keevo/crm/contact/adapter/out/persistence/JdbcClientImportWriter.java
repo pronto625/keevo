@@ -24,6 +24,9 @@ import java.util.function.Function;
 @Component
 class JdbcClientImportWriter implements ClientImportWriter {
 
+    /** Story 24.9 — rows per insert statement (a large owner's clients). */
+    static final int CHUNK = 2_000;
+
     private final JdbcTemplate jdbc;
 
     JdbcClientImportWriter(JdbcTemplate jdbc) {
@@ -48,30 +51,34 @@ class JdbcClientImportWriter implements ClientImportWriter {
                 + "client_type, niu, rccm, address, contact_name, website, birth_date, consent_at, consent_by, "
                 + "opt_out_at, created_at, updated_at) ON CONFLICT (id) DO NOTHING RETURNING id";
         Set<UUID> inserted = new LinkedHashSet<>();
-        jdbc.query(con -> {
-            PreparedStatement ps = con.prepareStatement(sql);
-            ps.setArray(1, con.createArrayOf("uuid", column(clients, ImportedClient::id)));
-            ps.setArray(2, con.createArrayOf("varchar", column(clients, ImportedClient::name)));
-            ps.setArray(3, con.createArrayOf("varchar", column(clients, ImportedClient::phone)));
-            ps.setArray(4, con.createArrayOf("varchar", column(clients, ImportedClient::email)));
-            ps.setArray(5, con.createArrayOf("text", column(clients, ImportedClient::notes)));
-            ps.setArray(6, con.createArrayOf("uuid", column(clients, ImportedClient::storeId)));
-            ps.setArray(7, con.createArrayOf("varchar", column(clients, ImportedClient::clientType)));
-            ps.setArray(8, con.createArrayOf("varchar", column(clients, ImportedClient::niu)));
-            ps.setArray(9, con.createArrayOf("varchar", column(clients, ImportedClient::rccm)));
-            ps.setArray(10, con.createArrayOf("varchar", column(clients, ImportedClient::address)));
-            ps.setArray(11, con.createArrayOf("varchar", column(clients, ImportedClient::contactName)));
-            ps.setArray(12, con.createArrayOf("varchar", column(clients, ImportedClient::website)));
-            ps.setArray(13, con.createArrayOf("text", column(clients, c -> text(c.birthDate()))));
-            ps.setArray(14, con.createArrayOf("text", column(clients, c -> text(c.marketingConsentAt()))));
-            ps.setArray(15, con.createArrayOf("uuid", column(clients, ImportedClient::marketingConsentBy)));
-            ps.setArray(16, con.createArrayOf("text", column(clients, c -> text(c.marketingOptOutAt()))));
-            ps.setArray(17, con.createArrayOf("text", column(clients, c -> text(c.createdAt()))));
-            ps.setArray(18, con.createArrayOf("text", column(clients, c -> text(c.updatedAt()))));
-            return ps;
-        }, rs -> {
-            inserted.add(rs.getObject("id", UUID.class));
-        });
+        // Story 24.9 — blocks of CHUNK rows, in order, in the caller's transaction
+        for (int from = 0; from < clients.size(); from += CHUNK) {
+            List<ImportedClient> block = clients.subList(from, Math.min(clients.size(), from + CHUNK));
+            jdbc.query(con -> {
+                PreparedStatement ps = con.prepareStatement(sql);
+                ps.setArray(1, con.createArrayOf("uuid", column(block, ImportedClient::id)));
+                ps.setArray(2, con.createArrayOf("varchar", column(block, ImportedClient::name)));
+                ps.setArray(3, con.createArrayOf("varchar", column(block, ImportedClient::phone)));
+                ps.setArray(4, con.createArrayOf("varchar", column(block, ImportedClient::email)));
+                ps.setArray(5, con.createArrayOf("text", column(block, ImportedClient::notes)));
+                ps.setArray(6, con.createArrayOf("uuid", column(block, ImportedClient::storeId)));
+                ps.setArray(7, con.createArrayOf("varchar", column(block, ImportedClient::clientType)));
+                ps.setArray(8, con.createArrayOf("varchar", column(block, ImportedClient::niu)));
+                ps.setArray(9, con.createArrayOf("varchar", column(block, ImportedClient::rccm)));
+                ps.setArray(10, con.createArrayOf("varchar", column(block, ImportedClient::address)));
+                ps.setArray(11, con.createArrayOf("varchar", column(block, ImportedClient::contactName)));
+                ps.setArray(12, con.createArrayOf("varchar", column(block, ImportedClient::website)));
+                ps.setArray(13, con.createArrayOf("text", column(block, c -> text(c.birthDate()))));
+                ps.setArray(14, con.createArrayOf("text", column(block, c -> text(c.marketingConsentAt()))));
+                ps.setArray(15, con.createArrayOf("uuid", column(block, ImportedClient::marketingConsentBy)));
+                ps.setArray(16, con.createArrayOf("text", column(block, c -> text(c.marketingOptOutAt()))));
+                ps.setArray(17, con.createArrayOf("text", column(block, c -> text(c.createdAt()))));
+                ps.setArray(18, con.createArrayOf("text", column(block, c -> text(c.updatedAt()))));
+                return ps;
+            }, rs -> {
+                inserted.add(rs.getObject("id", UUID.class));
+            });
+        }
         return inserted;
     }
 
