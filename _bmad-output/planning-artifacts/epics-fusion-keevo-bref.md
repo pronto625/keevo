@@ -1317,7 +1317,7 @@ So that **les critères Bref de ciblage des campagnes clients sont repris (FUS-F
 **Portée :** 21.6 livre les campagnes clients ciblées par boutique et consentement ; les critères Bref `inactiveForDays`, `purchasedWithinDays`, `totalSpentMin/Max`, `totalInvoicesMin/Max` (`customer-campaign.service.ts` recipients) demandent des agrégats d'achat par client (ventes POS + documents) qui appartiennent à reporting / commerce / invoicing, pas à crm : un port d'agrégats par client (set-based, index sur `client_id` des ventes et documents, ou colonnes dénormalisées maintenues à l'écriture) consommé par l'audience des campagnes.
 
 **Éléments routés :**
-- [ ] [Deferred-from: 21-6, 2026-11-10] Critères d'achat du ciblage des campagnes clients (`inactiveForDays`, `purchasedWithinDays`, `totalSpentMin/Max`, `totalInvoicesMin/Max`) [whatsappcloud/campaign/application/CampaignService.preview / start, crm/api/ClientQueryPort.marketingAudience] — ajouter les critères à `POST /api/v1/whatsapp/campaigns/preview-targeting` et au corps des campagnes, sans requête par client.
+- [x] [Deferred-from: 21-6, 2026-11-10] (fait en 21-11, 2026-11-11) Critères d'achat du ciblage des campagnes clients (`inactiveForDays`, `purchasedWithinDays`, `totalSpentMin/Max`, `totalInvoicesMin/Max`) [whatsappcloud/campaign/application/CampaignService.preview / start, crm/api/ClientQueryPort.marketingAudience] — ajouter les critères à `POST /api/v1/whatsapp/campaigns/preview-targeting` et au corps des campagnes, sans requête par client.
 
 **AC provisoire :** Given des clients consentants avec et sans achat dans les 30 derniers jours, When l'owner cible « inactifs depuis 30 jours », Then seuls les seconds sont comptés et reçoivent la campagne, en une requête d'audience.
 
