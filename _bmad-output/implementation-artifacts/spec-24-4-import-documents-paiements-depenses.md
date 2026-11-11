@@ -2,10 +2,10 @@
 title: '24.4 — Bref import: documents (quotes, invoices, lines, payments) and expenses'
 type: 'feature'
 created: '2026-11-11'
-status: 'in-review'
+status: 'done'
 baseline_revision: 'd3ec4691a09d97a76b44ffc148d6553ffeae767e'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-24-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-24-3-import-produits-clients.md'
@@ -110,6 +110,59 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-11 — Review pass
+- verdicts: 44 findings — high 0, medium 10, low 28, false 6, maybe-false 0 (the 6 descriptive intent-alignment observations are counted: 1 medium, 5 low)
+- findings:
+  - **Design layer (FUS-NFR11)**
+    - `[medium]` `[patch]` Bref invoice table scanned three times per owner (items/payments sub-selects). Fixed: invoices read first, lines and payments filtered by `invoiceId = ANY(uuid[])` (one invoice scan); the unindexed line/payment scans remain → routed 24.9.
+    - `[medium]` `[defer→routed 24-9]` `EXPENSES_SQL` / invoice filters cannot use Bref indexes (`lower(btrim(shopId))`): O(owners × table) over the cutover. Same shape as the 24.3 item; one-pass read or temporary indexes on the restored copy belong to the cutover command.
+    - `[low]` `[defer→routed 24-9]` One unbounded statement per table for an owner's whole history. Chunking (2 000–5 000 rows) in the cutover command, like 24.3's item.
+    - `[low]` `[reject]` Whole-owner snapshot in memory — existing 24.2/24.3 pattern, bounded per owner; covered by the 24.9 item.
+  - **Verification gap**
+    - `[medium]` `[patch]` `registerAll` conflict / refresh paths untested. Added `legacyLinksBatch` (insert with Bref expiry, replay refreshes, other invoice or tenant → `IllegalStateException`, row unchanged).
+    - `[medium]` `[patch]` No multi-line document. s2 now has three lines (order asserted), planner `linesAndMissingValues`.
+    - `[medium]` `[patch]` Payment added to an already-imported invoice not tested. Partial re-run now settles s2 → `paymentsCreated` 2, state PAID.
+    - `[low]` `[patch]` `ExpenseImportApiAdapter.check` untested. Added `ExpenseImportApiAdapterTest`.
+    - `[low]` `[patch]` Validator: expense too large / 3 decimals. Added to `BrefSalesValidatorTest`.
+  - **Intent alignment** (descriptive)
+    - `[medium]` `[defer→routed 20-2]` Counters derived (A2): the client profile (`ClientSalesStatsAdapter`) counts sales only, so an imported DOCUMENT client shows 0 purchases there (exports and audiences count invoices). Pre-existing; routed to 20-2 (spec « Deferred items routed », story back to in-progress).
+    - `[low]` `[reject]` Cents rounded rather than stored (B2) — Keevo document columns are integer francs (D1); every rounding is noted with the Bref value.
+    - `[low]` `[reject]` `attachLegacy` replaced by its set-based equivalent (C2) — FUS-NFR11; same rule (never move a token), now tested.
+    - `[low]` `[reject]` Paper mapping in the Mobile section (D2) — Bref never stores it server-side (D7).
+    - `[low]` `[reject]` Real-dump check not in the diff (E/F) — done live, see Auto Run Result.
+    - `[low]` `[reject]` Shared core files touched — append-only (constants, enum values, one validator call, two snapshot fields with the old constructors kept).
+  - **Blind hunter**
+    - `[low]` `[reject]` Line positions from `ctid` unstable — D12: Bref lines have no other order; Bref is stopped during the cutover; the export producer is retired (ADR-10).
+    - `[false]` `[reject]` Header/line totals disagree — Keevo semantics: `total_ht` excludes delivery by definition, line VAT is a display split, document totals authoritative (`InvoiceLine` javadoc).
+    - `[medium]` `[patch]` Acompte on a quote dropped without note. Fixed: `PAYMENT_ON_QUOTE` with its value.
+    - `[low]` `[patch]` Missing names noted as « shortened ». Fixed: `DOCUMENT_VALUE_MISSING`.
+    - `[low]` `[reject]` Client phone stored in E.164 — same number, same normalisation as the imported clients (24.3 D5), needed to match the client and the portal index.
+    - `[false]` `[reject]` Due date off by one day — api-bref writes `new Date("YYYY-MM-DD")` (UTC midnight, server in UTC): the UTC civil date is exact.
+    - `[low]` `[reject]` Token already registered globally fails the step — Bref tokens are globally unique; a rollback deletes the tenant's registry rows (`ix_invoice_legacy_links_tenant`); the step fails loudly with nothing half-written.
+    - `[medium]` `[patch]` Author not mapped to Keevo accounts. Fixed through `ImportRun.accountId` (24.7, D10), tested with a linked owner.
+    - `[low]` `[patch]` Notes counted for rows not written. Fixed: notes of inserted ids only (documents, lines, payments, expenses).
+    - `[low]` `[patch]` Import adapter looser than its contract. Fixed: rate ≤ 100, unique numbers and (document, position) per call, no token on a deleted document. A foreign key violation still fails the transaction loudly (accepted).
+    - `[low]` `[reject]` `ModuleTables.ensure` without unit test — exercised by both full-context tests (tables created on a fresh tenant, no-op on re-runs).
+    - `[medium]` `[patch]` Invoice table scanned three times — same fix as the design layer.
+    - `[false]` `[reject]` VAT rate wrong when delivery is taxed — api-bref: « deliveryFee n'est pas soumis à la TVA ».
+    - `[false]` `[reject]` PAID date from `updatedAt` without note — only when no row is paid, which is already noted `DOCUMENT_PAID_NOT_COLLECTED`.
+    - `[low]` `[patch]` Fully-qualified names. Planner imports `MigrationRecord`.
+  - **Edge-case hunter**
+    - `[medium]` `[patch]` Quote acompte (same as blind hunter).
+    - `[false]` `[reject]` Due date WAT/UTC (same refutation).
+    - `[low]` `[patch]` Unparseable public token silently dropped. Fixed: `DOCUMENT_LINK_DROPPED`.
+    - `[low]` `[patch]` Tax without taxable base unnoted. Fixed: noted in `DOCUMENT_TOTAL_MISMATCH` with the value.
+    - `[low]` `[reject]` Paid payment below 0.50 F skipped — noted `PAYMENT_ZERO_SKIPPED`, within the ±1 F per document tolerance.
+    - `[low]` `[reject]` Numbering collision on re-run — numbers follow creation order; Bref is stopped (a new sale is always newer).
+    - `[low]` `[reject]` New line on an imported document — same as D12 (frozen source).
+    - `[low]` `[patch]` Duplicate positions / numbers in one call. Fixed (adapter checks).
+    - `[false]` `[reject]` Legacy token already on another invoice row — Bref `publicToken` is UNIQUE over the whole Bref table.
+    - `[low]` `[reject]` `ctid` order (duplicate of D12).
+    - `[low]` `[patch]` Notes for unwritten expenses (same fix).
+    - `[low]` `[reject]` Claim: export/database order parity — payments ordered `(createdAt, id)` on both; lines: physical order vs array order of the same save; the producer is retired.
+    - `[low]` `[patch]` Claim: Σ collected vs source — the quote acompte is now noted; sub-franc rounding stays within tolerance.
+    - `[low]` `[patch]` Claim: nothing lost without note — quote acompte and bad tokens now noted.
+
 ## Design Notes
 
 **Patterns:** Pipeline (two new `ImportStep`s, nothing earlier changed); pure domain services for planning (unit-tested without I/O); ports and adapters for writes (invoicing and expenses own their tables and rules: `payment_state` is computed inside invoicing with its own calculator); Strategy unchanged for sources (shared `BrefRows`).
@@ -124,6 +177,9 @@ deferred: []
 - **D7 Paper** — Bref's width is chosen per screen on the device (default 80 mm, never stored): nothing to import; the tenant keeps Keevo's 80 mm default. The 53 → 58 / 110 → A4 mapping belongs to the RN app's local preferences (Mobile section).
 - **D8 Lines** all `STANDARD` at the document's rate (`EXEMPT` would print a legal mention Bref never printed); `vat_mention` null; `vat_rate` = `tax / (subtotal − discount)` (2 decimals, 0 without tax).
 - **D9 Module tables** created by the module's own Flyway scripts whatever the plan.
+- **D10 Authors** (item routed by 24.7) — every Bref user reference (`invoice.userId`, payments, `expense.createdById`) goes through `ImportRun.accountId` (Bref id when created, linked Keevo account, `null` when not imported or only invited); without account → the owner's Keevo account, noted `AUTHOR_REPLACED`. Never the Bref id as is.
+- **D11 Missing values** — a blank client or line name becomes « Client » / « Article », noted `DOCUMENT_VALUE_MISSING`; an unreadable public token is noted `DOCUMENT_LINK_DROPPED`; an acompte on a quote (never taken by Bref) is noted with its value.
+- **D12 Line order** — Bref lines have neither position nor date: their physical order (`ctid`, the array order api-bref saved) gives positions 1..n. Bref is stopped during the cutover (ADR-10), so it does not move between runs.
 
 **Cost per owner:** source +4 queries (one per Bref table, per-owner scans like 24.3); documents: 1 Flyway check, 1 settings insert, 1 preferences insert, 3 inserts (documents, lines, payments), 1 payments read + 1 state update, 1 registry insert, 1 records batch; expenses: 1 Flyway check, 1 insert, 1 records batch. Planner O(n log n) (sort for numbering), all lookups by hash map. Memory: the owner's rows.
 
@@ -134,6 +190,33 @@ deferred: []
 
 **Manual checks:**
 - Live: `bref_src_t244` (dump of 03/11, read-only role) → backend on 4644 with `keevo_dev_t244`: import twice; Σ per shop/month and Σ collected vs source; then drop both databases.
+
+## Auto Run Result
+
+Status: done.
+
+**Summary.** Two new steps of the Bref import pipeline (the 24.2 slots), rebased on 24.7 (`ImportRun.accountId`):
+- `DocumentsStep` (90): tenant `invoicing_settings` from the oldest live shop and 90-day public links (once, record shop → `invoicing_settings`); quotes then invoices planned by `BrefDocumentPlanner` (BRF- numbers, statuses, civil dates, seller = the invoice's shop, `store_id`, client by (shop, phone), lines linked by Bref product key, acompte + instalments, anomalies kept and noted with their Bref values, authors through `ImportRun.accountId`), written by the new `invoicing :: api` `InvoiceImportPort` (no issue, counter, quota, event; one insert per table; `payment_state` computed by `PaymentStateCalculator`; old links registered in one statement).
+- `ExpensesStep` (100): `BrefExpenseMapper` → new `expenses :: api` `ExpenseImportPort` (exact amounts, same keys, archived when deleted).
+- Sources: `invoices` (with lines and payments) and `expenses` read by both adapters (database: 4 queries, one invoice scan; export: the contract's sections), same canonical checksums. Validator: `DOCUMENT_INVALID`, `EXPENSE_INVALID`. Paid modules' tables created whatever the plan (`ModuleTables`).
+- Invoicing module migration `V19__invoice_legacy_notes.sql` (Bref notes kept verbatim). No public Flyway migration (V85 unused), no endpoint (endpoints.md unchanged).
+
+**Files:** see Code Map; new `BrefInvoice`, `BrefInvoiceItem`, `BrefInvoicePayment`, `BrefExpense`, `BrefDocumentPlanner`, `BrefExpenseMapper`, `BrefProductKeys`, `BrefSalesValidator`, `DocumentsStep`, `ExpensesStep`, `ModuleTables`, `InvoiceImportPort` (+ `package-info`), `InvoiceImportApiAdapter`, `InvoiceImportWriter`, `JdbcInvoiceImportWriter`, `LegacyInvoiceLinkRegistry.registerAll`, `ExpenseImportPort`, `ExpenseImportApiAdapter`, `ExpenseImportWriter`, `JdbcExpenseImportWriter`; tests `BrefDocumentPlannerTest`, `BrefProductKeysTest`, `BrefSalesValidatorTest`, `BrefExpenseMapperTest`, `JsonExportBrefSourceDocumentsTest`, `InvoiceImportApiAdapterTest`, `ExpenseImportApiAdapterTest`, `BrefSalesImportFullContextTest`; pinned invoicing version 18 → 19 in three invoicing tests; contract `bref-export.json` (sections, example, mapping); test DDL `bref-source-schema.sql`.
+
+**Review.** 44 findings: 20 patched (8 medium, 12 low), 3 routed (24-9 ×2, 20-2 ×1), 21 rejected with their reasons (6 false). Patched by verdict: 0 high, 8 medium, 12 low. Routed: Bref reads in one pass / temporary indexes → 24-9; chunked writes → 24-9; client profile counts sales only → 20-2 (back to in-progress).
+
+**Verification (all green):** migration 77 (after rebase on 24.7), expenses 43, invoicing 439 (2 upgrade tests then fixed for V19 and re-run: `InvoiceSendingFullContextTest` 9, `InvoiceSyncFullContextTest` 15, `InvoicingMigrationPostgresIntegrationTest` 6), invoicing import adapter 2, architecture 173 (1 skipped, pre-existing).
+
+**Live check** (backend on 4644, `keevo_dev_t244`, source `bref_src_t244` = 03/11 dump restored read-only + one synthetic owner; aggregates only; databases and role dropped afterwards):
+- Real owner (1 shop; 19 invoices, 36 lines, 8 payments, no expense): import 201 COMPLETED in 3.9 s — 3 quotes, 16 invoices (14 PAID/PAID, 2 CANCELLED), 36 lines (36 linked to their product), 22 payments (14 acomptes + 8 instalments); no document note. Re-run: 0.05 s, nothing created, `alreadyImported` 101. Σ per store and month = source (2026-10: 957 777 F / 12 docs, 2026-11: 920 F / 2 docs); Σ collected 1 934 847 F = source.
+- Synthetic owner (2 shops, quote, paid, partial-overdue, cancelled, deleted, total anomaly with cents, 4 expenses): 201 COMPLETED in 4.1 s; notes TOTAL_MISMATCH, AMOUNT_NOT_INTEGER, DELETED, NUMBER_SUFFIXED ×4 (synthetic ids share their 8 first characters), LINE_WITHOUT_PRODUCT, EXPENSE_*; states OVERDUE / UNPAID / PAID; Σ per month = source (1 501 vs 1 500.50, within ±1 F); Σ collected 31 200 = source; expenses 35 350.50 = source; settings + 90-day links; 1 legacy link registered. Re-run: nothing created.
+
+**Follow-up review recommended:** `true` — eight medium patches touched the read path (single invoice scan), the authors (24.7 accounts) and the payment-state recompute on partial re-runs; they are covered by the full-context and live runs, but the rebased author mapping was reviewed only by these tests.
+
+**Residual risks:**
+- Bref line order comes from the physical order of `invoice_item` (no position nor date in Bref); stable while Bref is stopped (ADR-10).
+- Per-owner scans of the unindexed Bref document tables and one statement per table per owner: fine per owner, routed to 24.9 for the whole cutover.
+- The client profile does not count invoices (pre-existing, routed to 20-2).
 
 ## Mobile (React Native — dépôt AI/bref)
 
