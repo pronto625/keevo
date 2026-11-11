@@ -14,3 +14,11 @@ com/keevo/shared/infrastructure/persistence/SyncKeysetIndexJob.java :: return de
 
 # Not SQL — request-attribute cache key (Story 20.2).
 com/keevo/crm/contact/adapter/out/store/RequestScopedClientVisibleStores.java :: String key = ATTRIBUTE_PREFIX + tenantSchema + "." + storeId;   # request-attribute key, never executed
+
+# Story 19.11b — schema validated by TenantSchema.validate more than WINDOW lines above (same method / helper).
+com/keevo/admin/analytics/application/service/AdminAnalyticsService.java :: alerts = "(COALESCE((SELECT bool_or(stock_alert_enabled) FROM " + s + ".tenant_preferences), false) "   # s = TenantSchema.validate(tenant.schemaName()) at the top of the method
+com/keevo/admin/analytics/application/service/AdminAnalyticsService.java :: + "AND EXISTS (SELECT 1 FROM " + s + ".notification_cooldowns WHERE cooldown_type = 'STOCK_ALERT' "   # same validated s
+com/keevo/admin/analytics/application/service/AdminAnalyticsService.java :: sync = "EXISTS (SELECT 1 FROM " + s + ".sync_operations_log WHERE processed_at >= ? AND processed_at < ?)";   # same validated s
+com/keevo/admin/catalog/application/service/AdminCatalogService.java :: + (categories ? " LEFT JOIN " + validSchema(tenant) + ".categories c ON c.id = p.category_id"   # validSchema() returns TenantSchema.validate(...)
+com/keevo/admin/catalog/application/service/AdminCatalogService.java :: + " AS this_week FROM " + validSchema(tenant) + ".products";   # validSchema() returns TenantSchema.validate(...)
+com/keevo/admin/catalog/application/service/AdminCatalogService.java :: return validSchema(tenant) + ".products p";   # validSchema() returns TenantSchema.validate(...)
