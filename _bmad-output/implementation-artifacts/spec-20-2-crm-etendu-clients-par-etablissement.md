@@ -3,9 +3,10 @@ title: '20-2 Extended CRM — Bref client fields, clients per store (ADR-08), du
 type: 'feature'
 created: '2026-11-06'
 status: 'done'
-baseline_revision: 'a8b348a452982bcc038f2c8e76cb4798225550ed'
+baseline_revision: 'f5e864a8a9fea4540a96d5a5c5402d0c0eae7b42'
+baseline_revision_initial: 'a8b348a452982bcc038f2c8e76cb4798225550ed'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-20-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-20-1-catalogue-sans-stock-cle-fusion.md'
@@ -174,8 +175,108 @@ Code : `keevo/backend/src/main/java/com/keevo/crm/contact/adapter/in/web/ClientC
 - Given un accord retiré, when la liste des clients éligibles aux campagnes est calculée, then le client n'y figure plus.
 - Mise en place : `curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"consent":true}' $API/api/v1/clients/<id>/marketing-consent`.
 
+**Reprise 11/11/2026 — chiffres d'achat de la fiche client :** (API livrée, commit `3b35ab13`) `GET /api/v1/clients/{id}` renvoie toujours `purchaseCount` et `totalSpentXaf` (mêmes noms, mêmes types : les apps V1 2.0.1 continuent de fonctionner) mais leurs valeurs viennent désormais de la source unique du chiffre d'affaires : ventes de caisse terminées + factures émises ou payées (une vente facturée automatiquement comptée une fois), avoirs déduits du total mais pas comptés comme achats ; devis, brouillons, factures annulées, ventes annulées ou en attente exclus. Un client importé de Bref ou facturé seulement (parcours DOCUMENT) a donc enfin ses achats. Nouveau champ `lastPurchaseAt` (instant ISO, `null` sans achat). Un employé / gérant / lecteur ne voit que les achats faits dans les boutiques qu'il voit (la sienne + celles qui partagent leurs clients) ; le propriétaire voit toutes les boutiques. Mêmes chiffres que l'export « Clients » pour le propriétaire.
+À faire côté mobile : afficher « Achats », « Total des achats » (FCFA) et « Dernier achat » (date en français, « Aucun achat » si `null`) sur la fiche client ; ne jamais recalculer ces chiffres localement à partir des ventes en cache (ils incluent les factures) — les relire en ligne à l'ouverture de la fiche, garder la dernière valeur reçue hors ligne.
+Scénario : Given un client avec une facture émise de 12 000 (avoir de 2 000) et une facture payée de 8 000, when l'app ouvre sa fiche, then « 2 achats », « 18 000 FCFA » et la date de la facture payée s'affichent. Clé : `m20-2r-chiffres-achats-fiche-client`.
+
 **Clé de suivi mobile :** `m20-2-crm-etendu-clients-par-etablissement`.
 
 ### Deferred items routed 2026-11-11
 
-- [ ] [Deferred-from: 24.4 review, 2026-11-11] Purchase count and total spent of the client profile ignore invoices [keevo/backend/src/main/java/com/keevo/crm/contact/adapter/out/persistence/ClientSalesStatsAdapter.java:38-74] — `GetClientProfileUseCase` counts `sales` only, while the exports and the marketing audience (`ClientsExportDatasetProvider`, `JdbcMarketingAudienceQuery`) count sales + issued/paid invoices − credit notes (20.14 rule): a DOCUMENT-flow client (every client imported from Bref by 24.4) shows 0 purchases on its profile. Settled by using the same single revenue source as the export and a test on a client with only invoices.
+- [x] [Deferred-from: 24.4 review, 2026-11-11] Purchase count and total spent of the client profile ignore invoices [keevo/backend/src/main/java/com/keevo/crm/contact/adapter/out/persistence/ClientSalesStatsAdapter.java:38-74] — `GetClientProfileUseCase` counts `sales` only, while the exports and the marketing audience (`ClientsExportDatasetProvider`, `JdbcMarketingAudienceQuery`) count sales + issued/paid invoices − credit notes (20.14 rule): a DOCUMENT-flow client (every client imported from Bref by 24.4) shows 0 purchases on its profile. Settled by using the same single revenue source as the export and a test on a client with only invoices.
+
+## Reprise 11/11/2026 — client purchase figures on the single revenue source
+
+**Problem:** `GET /api/v1/clients/{id}` (`purchaseCount`, `totalSpentXaf`) reads `ClientSalesStatsAdapter`, which counts the `sales` table only (any status). A client invoiced only (DOCUMENT flow, every client imported from Bref by 24.4) shows 0 purchases; a cancelled or pending sale is counted; the export (20.14) and the campaign targeting (21.11) disagree with the profile.
+
+**Approach:** One crm query on the single revenue source (`RevenueQueryPort`, port doc = the definition, 21.11 « Purchase of a number » for the aggregate): count `SUM(doc_count)` (COMPLETED sales + ISSUED/PAID invoices, a bridged POS sale once; credit notes 0), net total `SUM(total_amount)` (credit notes deducted), last purchase `MAX(COALESCE(recorded_at, created_at)) FILTER (WHERE doc_count > 0)`. The aggregate expression lives in one crm helper (`ClientPurchaseAggregate`) read by the profile adapter, the clients export and the marketing audience — no third copy.
+
+### Decisions (reprise)
+
+- **R1 — store visibility of the figures (16-13 / 19-14):** the OWNER sees the figures of every store (`RevenueQueryPort.current()`, documents without store included, same as the export). A store member (EMPLOYEE, MANAGER, VIEWER) sees only the documents of their visible store set — the same set that makes the client visible (own store + sharing stores, 20.2) — through `storeScoped()` and `r.store_id = ANY(:visible)`: a legacy client (no store) seen by a member shows only what was bought in the member's stores; a member without store sees 0. Conservative default (no other store's revenue leaks to a member). On a tenant whose invoicing tables are older than V16 (no document store — module migrations bring every schema to V16 at boot, so transient only) `storeScoped()` is sales only: a member then sees POS sales only, the owner everything. The clients export is an owner-only dataset (`ExportController` `requireOwner`), so « same figures as the export » holds for the owner.
+- **R2 — `lastPurchaseAt`:** added to the profile response (ISO instant, nullable, additive); the export already carries « Dernier achat ».
+- **R3 — compatibility:** `purchaseCount` / `totalSpentXaf` keep their names and types (V1 2.0.1); values become the revenue-source values. Cancelled / pending sales, quotes, drafts, cancelled invoices are no longer counted (they never were revenue).
+- **R4 — where the figures are exposed:** only the REST profile (`ClientController#getClientProfile`) and the `clients` export carry client purchase figures; the list, the sync pull (`ClientDeltaProvider`) and the AI/MCP tool `search_clients` carry none, so nothing else changes. No migration (indexes `idx_sales_client_id`, `idx_invoices_client`, `idx_credit_notes_invoice` already serve `client_id = ?`).
+
+### I/O & Edge-Case Matrix (reprise)
+
+| Scenario | State | Expected profile figures |
+|---|---|---|
+| Invoices only | client with 1 ISSUED + 1 PAID invoice, no sale | count 2, total = sum TTC, last = latest `issued_at` |
+| Bridged POS sale | COMPLETED sale + its automatic invoice | count 1, total = sale total |
+| Credit note | ISSUED invoice 10 000 + credit note 4 000 | count 1, total 6 000, last = invoice instant (not the credit note's) |
+| Excluded | CANCELLED/PENDING sale, DRAFT/CANCELLED invoice, quote | not counted |
+| No purchase | none | count 0, total 0, `lastPurchaseAt` null |
+| Member scope | legacy client with a sale in store A and an invoice in store B, EMPLOYEE of A (no sharing) | only store A's purchase |
+| Owner | same client | both purchases |
+
+### Code Map (reprise)
+
+- `crm/contact/domain/port/out/ClientSalesStatsPort.java` → replaced by `ClientPurchaseStatsPort` (`Stats statsOf(UUID clientId, Set<UUID> storeIds)`, `storeIds == null` = every store; nested record `Stats(purchaseCount, totalSpent, lastPurchaseAt)`, `Stats.NONE`).
+- `crm/contact/adapter/out/persistence/ClientSalesStatsAdapter.java` → replaced by `JdbcClientPurchaseStats` (JdbcTemplate + `RevenueQueryPort`, `@Transactional(readOnly = true)` so the source resolves in the tenant search_path, no schema interpolation; one statement).
+- New `crm/contact/adapter/out/persistence/ClientPurchaseAggregate.java` — the aggregate select list (aliases `purchase_count`, `total_spent`, `last_purchase_at`) over a revenue `documents` alias; reused by `ClientsExportDatasetProvider#fromClause/selectList` and `JdbcMarketingAudienceQuery#from`.
+- `crm/contact/application/usecase/GetClientProfileUseCase.java` — after `ClientFinder.require`, store set from `ClientStoreScope.readScope(access, null, tenant)` (memoized per request) → `statsOf`.
+- `crm/contact/adapter/in/web/dto/ClientProfileResponseDto.java` — add `lastPurchaseAt`.
+- Tests: `GetClientProfileUseCaseTest`, new `JdbcClientPurchaseStatsTest` (unit, SQL shape and mapping), `reporting/revenue/RevenueSourceAcceptancePostgresIntegrationTest` (new scenarios on PostgreSQL: invoices only, member scope; export test renamed aliases), `ClientControllerTest`.
+
+### Tasks & Acceptance (reprise)
+
+- [x] Port, record, adapter, shared aggregate; export and audience on the helper.
+- [x] Use case with the member store set; DTO field.
+- [x] Tests (unit + PostgreSQL acceptance), endpoints doc unchanged (no new endpoint).
+- [x] Live check on `keevo_dev_t202r` port 4602.
+
+**AC:**
+- Given a client with only issued/paid invoices, when the owner reads `GET /api/v1/clients/{id}`, then `purchaseCount` and `totalSpentXaf` equal the invoices' count and net total and `lastPurchaseAt` the latest issue instant.
+- Given the same tenant, when the clients export and the profile are read, then both show the same count / total / last purchase for the owner.
+- Given an EMPLOYEE of store A and a legacy client with purchases in A and B, when they read the profile, then only A's purchases are counted.
+
+### Design Notes (reprise)
+
+Pattern: **port + adapter over the shared capability** (crm reads revenue through `shared.capability.revenue`, never reporting), with the aggregate as a **single SQL fragment** shared by the three crm readers so the definition cannot drift. Cost: profile = 1 client query + (member with store only) 1 memoized visible-store query + 1 stats statement; the statement pushes `client_id = ?` into each UNION ALL branch (`idx_sales_client_id`, `idx_invoices_client`, credit notes via `idx_credit_notes_invoice`), O(purchases of one client). No N+1: one statement per profile; export and audience unchanged in cost (same LATERAL aggregate).
+
+### Verification (reprise)
+
+- `wt-pkgs.sh <wt>/keevo/backend t202r crm reporting/revenue architecture` — all green.
+- Live: backend on port 4602, DB `keevo_dev_t202r` (WhatsApp noop, FCM/Expo off): client with invoices only → profile count/total/last correct; export row identical.
+
+### Dashboard super-admin (reprise)
+
+Aucun changement : aucune API super-admin touchée (la fiche client est une API de l'entreprise). Pas de clé `d20-2`.
+
+### Review Triage Log
+
+### 2026-11-11 — Review pass (reprise)
+- verdicts: 21 findings — high 0, medium 0, low 13, false 8, maybe-false 0
+- findings:
+  - blind: `[low]` `[patch]` Port / use-case doc claimed « same figures as the export » for every actor — reworded: owner = export (owner-only dataset), member narrowed to its stores.
+  - blind: `[low]` `[reject]` Spec Code Map named a separate record — fix is a spec edit (Code Map aligned on the nested `Stats` anyway).
+  - blind: `[low]` `[reject]` `ClientPurchaseAggregate` in persistence imported by the export adapter — same module, constant-only coupling; the design layer judged it acceptable; moving it adds a package for no caller.
+  - blind: `[false]` `[reject]` Tenant-isolation guard test removed — the new adapter interpolates no schema (search_path of the transaction, as 21.11's audience); AC7's « no SQL built from an invalid schema » has nothing left to guard.
+  - blind: `[low]` `[reject]` Stats failure now fails the profile (no 0 fallback) — the revenue source never fails for a missing module and `sales` is a foundation table; masking SQL errors as 0 purchases would hide wrong figures; covered by `ClientsPerStoreFullContextTest` (owner profile 200 in full context).
+  - blind: `[low]` `[patch]` Pre-V16 tenant: member loses invoices — documented in R1 (transient: module migrations bring every schema to V16 at boot).
+  - blind: `[low]` `[patch]` Bridged POS sale not tested on the profile path — `clientProfileInvoicesOnly` adds a COMPLETED sale + its automatic invoice: counted once.
+  - blind: `[low]` `[patch]` Member-scope test without credit note / last purchase — credit note on store B's invoice (deducted only when B is visible) and `lastPurchaseAt` per scope asserted.
+  - blind: `[false]` `[reject]` Last purchase ignoring a later credit note untested — `clientsExportReadsTheSource` asserts last = invoice instant with a credit note issued an hour later, for the export and the profile.
+  - blind: `[low]` `[reject]` Controller test checks `lastPurchaseAt` exists only — the standalone MockMvc mapper serializes instants numerically (not the app's mapper); the ISO form is the app-wide Jackson config, checked live (`2026-11-06T14:46:49.719451Z`).
+  - blind: `[low]` `[reject]` Unit test does not capture bound args / run the RowMapper — both run on PostgreSQL in the acceptance test (store-array binding and Timestamp mapping asserted).
+  - blind: `[low]` `[patch]` Use case: member reading another store's client — test added (`CLIENT_NOT_FOUND`, no figures read).
+  - blind: `[low]` `[reject]` Export column key `salesCount`, story-2.5 e2e script — renaming the key breaks the export contract (`export-datasets.json`); the e2e script only checks presence, still true.
+  - blind: `[false]` `[reject]` Missing Dashboard section / `d20-2r` key — no super-admin API changes; the dashboard repo reads no tenant client profile.
+  - edge: `[low]` `[reject]` Revenue statement error → 500 instead of degraded zeros — same as the blind finding above.
+  - edge: `[low]` `[reject]` Deleted adapter's 0 fallback — same root cause, rejected above.
+  - edge: `[false]` `[reject]` REQUIRED readOnly could poison a caller's transaction — the only caller (`GetClientProfileUseCase`) is not transactional; the export and audience use the same propagation.
+  - verification-gap: no gap found (0 findings).
+  - intent: `[false]` `[reject]` Export not store-scoped for members — the export is owner-only (`CurrentActor.requireOwner`), members never read it.
+  - intent: `[false]` `[reject]` `lastPurchaseAt` breaks « mêmes champs » — additive nullable field; V1 2.0.1 keeps its fields (the intent lists « dernier achat »).
+  - intent: `[false]` `[reject]` Values change beyond invoices (cancelled / pending sales) — this is the revenue-source definition the intent asks for.
+  - design (FUS-NFR11): `[false]` `[reject]` No N+1, one statement per profile, `idx_sales_client_id` / `idx_invoices_client` / `idx_credit_notes_invoice` reached; nit on adapter coupling rejected above.
+
+## Auto Run Result (reprise 11/11/2026)
+
+- **Change:** client profile purchase figures (`purchaseCount`, `totalSpentXaf`, new `lastPurchaseAt`) read the single revenue source through one shared aggregate (`ClientPurchaseAggregate`) also used by the clients export and the marketing audience; member figures narrowed to its visible stores.
+- **Files:** `ClientPurchaseStatsPort` (new port, replaces `ClientSalesStatsPort`), `JdbcClientPurchaseStats` (new adapter, replaces `ClientSalesStatsAdapter`), `ClientPurchaseAggregate` (shared SQL fragment), `GetClientProfileUseCase` (store set), `ClientProfileResponseDto` (`lastPurchaseAt`), `ClientsExportDatasetProvider` / `JdbcMarketingAudienceQuery` (on the helper); tests `GetClientProfileUseCaseTest`, `JdbcClientPurchaseStatsTest`, `ClientControllerTest`, `RevenueSourceAcceptancePostgresIntegrationTest` (+3 scenarios).
+- **Review:** 5 layers, 21 findings: 5 patched (all low), 0 deferred, 16 rejected (reasons above). No migration (V90 unused), no new endpoint (endpoints.md unchanged), no AI tool change.
+- **Follow-up review recommended:** false (no high, no medium patched).
+- **Verification:** crm 244, reporting/revenue 33, reporting/export 128, architecture 173 (1 skipped, pre-existing) — all green. Live on `keevo_dev_t202r` port 4602 (WhatsApp noop, FCM/Expo off): client with invoices only (ISSUED 12 000 − credit note 2 000, PAID 8 000, DRAFT and CANCELLED ignored) → profile `purchaseCount=2`, `totalSpentXaf=18000`, `lastPurchaseAt` = paid invoice instant; POS client (COMPLETED 3 000 + CANCELLED 9 000) → 1 / 3 000; clients CSV export identical. Backend stopped (`fuser -k 4602/tcp`), DB dropped.
+- **Residual risks:** a member on a not-yet-migrated (pre-V16) invoicing schema sees POS sales only until the boot migration.
