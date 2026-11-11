@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
+import com.keevo.inventory.stock.domain.model.StockReadScope;
 import java.util.List;
 import java.util.UUID;
 
@@ -47,7 +48,7 @@ class GetStoreStockDetailServiceTest {
 when(repo.getStoreStockDetail(eq(storeId), anyBoolean(), anyBoolean(), any(Pageable.class)))
                     .thenReturn(page);
 
-        var result = service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true, false));
+        var result = service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true, false, StockReadScope.ALL));
 
         assertThat(result.getContent()).hasSize(1);
     }
@@ -58,7 +59,7 @@ when(repo.getStoreStockDetail(eq(storeId), anyBoolean(), anyBoolean(), any(Pagea
 when(repo.getStoreStockDetail(any(), sortCaptor.capture(), anyBoolean(), any(Pageable.class)))
                     .thenReturn(new PageImpl<>(List.of()));
 
-        service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true, false));
+        service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true, false, StockReadScope.ALL));
 
         assertThat(sortCaptor.getValue()).isTrue();
     }
@@ -69,10 +70,32 @@ when(repo.getStoreStockDetail(any(), sortCaptor.capture(), anyBoolean(), any(Pag
 when(repo.getStoreStockDetail(any(), anyBoolean(), anyBoolean(), pageableCaptor.capture()))
                        .thenReturn(new PageImpl<>(List.of()));
 
-        service.execute(new GetStoreStockDetailQuery(storeId, 2, 10, false, false));
+        service.execute(new GetStoreStockDetailQuery(storeId, 2, 10, false, false, StockReadScope.ALL));
 
         Pageable captured = pageableCaptor.getValue();
         assertThat(captured.getPageNumber()).isEqualTo(2);
         assertThat(captured.getPageSize()).isEqualTo(10);
+    }
+
+    // ── Story 16.13 (reprise) ──
+
+    @org.junit.jupiter.api.Test
+    void member_otherStore_forbidden_noQuery() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.execute(new GetStoreStockDetailQuery(
+                        storeId, 0, 25, true, false, StockReadScope.store(UUID.randomUUID()))))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class)
+                .hasMessageContaining("votre boutique");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.execute(new GetStoreStockDetailQuery(
+                        storeId, 0, 25, true, false, StockReadScope.store(null))))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class);
+        org.mockito.Mockito.verifyNoInteractions(repo);
+    }
+
+    @org.junit.jupiter.api.Test
+    void member_ownStore_allowed() {
+        when(repo.getStoreStockDetail(eq(storeId), anyBoolean(), anyBoolean(), any(Pageable.class)))
+                .thenReturn(org.springframework.data.domain.Page.empty());
+        service.execute(new GetStoreStockDetailQuery(storeId, 0, 25, true, false, StockReadScope.store(storeId)));
+        org.mockito.Mockito.verify(repo).getStoreStockDetail(eq(storeId), anyBoolean(), anyBoolean(), any(Pageable.class));
     }
 }

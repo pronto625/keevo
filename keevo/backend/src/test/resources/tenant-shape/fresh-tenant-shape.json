@@ -408,6 +408,7 @@
     "sales: CREATE INDEX idx_sales_sync_keyset ON sales USING btree (updated_at, ((id)::text))",
     "sales: CREATE UNIQUE INDEX sales_pkey ON sales USING btree (id)",
     "stock_levels: CREATE INDEX idx_stock_levels_product_store ON stock_levels USING btree (product_id, store_id)",
+    "stock_levels: CREATE INDEX idx_stock_levels_store_sync ON stock_levels USING btree (store_id, updated_at, ((id)::text))",
     "stock_levels: CREATE INDEX idx_stock_levels_sync_keyset ON stock_levels USING btree (updated_at, ((id)::text))",
     "stock_levels: CREATE UNIQUE INDEX stock_levels_pkey ON stock_levels USING btree (id)",
     "stock_levels: CREATE UNIQUE INDEX uq_stock_level ON stock_levels USING btree (product_id, store_id)",

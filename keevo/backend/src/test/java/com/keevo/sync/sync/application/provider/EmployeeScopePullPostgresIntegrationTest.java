@@ -157,7 +157,7 @@ class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {
     // ── Scope ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("employee of A: only A's store data and its own reports; stores, stock levels, catalogue for all")
+    @DisplayName("employee of A: only A's store data (stock levels included) and its own reports; stores, catalogue for all")
     void employeeReceivesOnlyItsStore() {
         Pulled pulled = pullAll(PullScope.employee(storeA, employeeUser), false, null, null);
 
@@ -167,8 +167,9 @@ class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {
         }
         assertThat(pulled.ids("reports")).containsExactly(employeeReport);
         assertThat(pulled.ids("stores")).contains(storeA.toString(), storeB.toString());
+        // Story 16.13 (reprise 10/11/2026, D1): stock levels of the member's store only
         assertThat(pulled.rows("stockLevels")).extracting(r -> r.get("storeId"))
-                .contains(storeA.toString(), storeB.toString());
+                .containsOnly(storeA.toString());
         assertThat(pulled.ids("products")).contains(product.toString());
         assertThat(pulled.pages()).as("movements of A need two pages").isEqualTo(2);
         assertThat(pulled.last().scope()).isEqualTo(PullScope.employee(storeA, employeeUser));

@@ -19,10 +19,12 @@
     "declares": [],
     "fills": []
   },
-  "permissions": [],
+  "permissions": [
+    "PURCHASE_PRICE_VIEW"
+  ],
   "routes": [],
   "rolePermissions": {
-    "MANAGER": [],
+    "MANAGER": ["PURCHASE_PRICE_VIEW"],
     "EMPLOYEE": [],
     "VIEWER": []
   },

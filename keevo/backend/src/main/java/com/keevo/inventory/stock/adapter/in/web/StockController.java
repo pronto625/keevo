@@ -1,6 +1,8 @@
 package com.keevo.inventory.stock.adapter.in.web;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
+import com.keevo.shared.infrastructure.security.PurchasePriceVisibility;
+import com.keevo.inventory.stock.adapter.in.StockReadScopes;
 import com.keevo.inventory.stock.adapter.in.web.dto.AdjustStockRequestDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.RecordStockEntryRequestDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.ProductThresholdResponseDto;
@@ -59,13 +61,16 @@ public class StockController {
     private final SetStockThresholdUseCase setStockThresholdUseCase;
     private final GetStockMovementHistoryUseCase getStockMovementHistoryUseCase;
     private final ChangeStockTrackingUseCase changeStockTrackingUseCase;
+    private final PurchasePriceVisibility purchasePrices;
 
     public StockController(GetCurrentStockUseCase getCurrentStockUseCase,
                            RecordStockEntryUseCase recordStockEntryUseCase,
                            AdjustStockUseCase adjustStockUseCase,
                            SetStockThresholdUseCase setStockThresholdUseCase,
                            GetStockMovementHistoryUseCase getStockMovementHistoryUseCase,
-                           ChangeStockTrackingUseCase changeStockTrackingUseCase) {
+                           ChangeStockTrackingUseCase changeStockTrackingUseCase,
+                           PurchasePriceVisibility purchasePrices) {
+        this.purchasePrices                = purchasePrices;
         this.changeStockTrackingUseCase    = changeStockTrackingUseCase;
         this.getCurrentStockUseCase        = getCurrentStockUseCase;
         this.recordStockEntryUseCase       = recordStockEntryUseCase;
@@ -79,7 +84,7 @@ public class StockController {
     // ──────────────────────────────────────────────────────────────────
 
     /**
-     * Returns all stock levels for the product across all stores.
+     * Returns the stock levels of the product: every store for the OWNER, the member's own store only (Story 16.13).
      * Response includes minimumThreshold and isLow per level.
      */
     @RequiresEntitlement(value = "inventory", access = RequiresEntitlement.Access.READ)
@@ -87,7 +92,7 @@ public class StockController {
     public ResponseEntity<ApiResponseWrapper<List<StockLevelResponseDto>>> getCurrentStock(
             @PathVariable UUID productId) {
 
-        var snapshot = getCurrentStockUseCase.execute(productId);
+        var snapshot = getCurrentStockUseCase.execute(productId, StockReadScopes.current()); // 16.13: member → own store
         int threshold = snapshot.product().minimumThreshold();
 
         List<StockLevelResponseDto> dtos = snapshot.stockLevels().stream()
@@ -170,7 +175,9 @@ public class StockController {
 
         UUID actorId = CurrentActor.actorId();
         var product = setStockThresholdUseCase.execute(productId, request.minimumThreshold(), actorId);
-        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductThresholdResponseDto.from(product)));
+        // Story 16.13 (reprise, D2): purchase price only for the actors holding PURCHASE_PRICE_VIEW
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                ProductThresholdResponseDto.from(product, purchasePrices.currentActorCanView())));
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -220,8 +227,10 @@ public class StockController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
+        // Story 16.13 (reprise): a store member reads their own store's history only (another store → 403)
+        UUID readable = StockReadScopes.current().requireReadable(storeId);
         Page<StockMovementResponseDto> dtos = getStockMovementHistoryUseCase
-                .execute(productId, type, from, to, storeId, page, size)
+                .execute(productId, type, from, to, readable, page, size)
                 .map(StockMovementResponseDto::from);
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));

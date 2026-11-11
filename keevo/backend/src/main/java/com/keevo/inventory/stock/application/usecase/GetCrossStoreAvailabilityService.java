@@ -42,8 +42,9 @@ public class GetCrossStoreAvailabilityService implements GetCrossStoreAvailabili
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + query.productId()));
 
         // Story 17.12: a product without stock tracking has no availability to show (never its frozen levels)
-        List<CrossStoreAvailabilityEntry> entries = product.trackStock()
-                ? multiStoreStockRepository.getProductAvailability(query.productId())
+        // Story 16.13 (reprise): a store member only gets their own store's line (none without a store)
+        List<CrossStoreAvailabilityEntry> entries = product.trackStock() && !query.scope().excludesEveryStore()
+                ? multiStoreStockRepository.getProductAvailability(query.productId(), query.scope().onlyStoreId())
                 : List.of();
 
         return new Result(product, entries);

@@ -32,7 +32,7 @@ class ProductThresholdResponseDtoTest {
                     Instant.parse("2026-01-01T08:00:00Z"), Instant.parse("2026-02-01T08:00:00Z"));
 
             String expected = mapper.writeValueAsString(ProductResponseDto.fromDomain(product));
-            String actual = mapper.writeValueAsString(ProductThresholdResponseDto.from(CatalogProductApiTestSupport.view(product)));
+            String actual = mapper.writeValueAsString(ProductThresholdResponseDto.from(CatalogProductApiTestSupport.view(product), true));
 
             assertThat(actual).isEqualTo(expected);
         }
@@ -45,7 +45,7 @@ class ProductThresholdResponseDtoTest {
                 Instant.parse("2026-01-01T08:00:00Z"), Instant.parse("2026-02-01T08:00:00Z"));
 
         String expected = mapper.writeValueAsString(ProductResponseDto.fromDomain(product));
-        String actual = mapper.writeValueAsString(ProductThresholdResponseDto.from(CatalogProductApiTestSupport.view(product)));
+        String actual = mapper.writeValueAsString(ProductThresholdResponseDto.from(CatalogProductApiTestSupport.view(product), true));
 
         assertThat(actual).isEqualTo(expected)
                 .contains("\"barcode\":\"6111234567890\"")

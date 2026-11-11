@@ -53,6 +53,7 @@ class ProductImportControllerSecurityTest {
     @MockitoBean CreateDraftProductUseCase draftUseCase;
     @MockitoBean GenerateCsvTemplateUseCase templateUseCase;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
+    @MockitoBean com.keevo.shared.infrastructure.security.PurchasePriceVisibility purchasePrices; // 16.13 reprise
 
     @AfterEach
     void clearSecurityContext() {

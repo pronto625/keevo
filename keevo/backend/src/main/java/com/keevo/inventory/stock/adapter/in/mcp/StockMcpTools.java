@@ -1,15 +1,14 @@
 package com.keevo.inventory.stock.adapter.in.mcp;
 
 import com.keevo.shared.ai.AiToolArguments;
+import com.keevo.inventory.stock.adapter.in.StockReadScopes;
+import com.keevo.inventory.stock.domain.model.StockReadScope;
 import com.keevo.inventory.stock.domain.model.StoreProductStockEntry;
 import com.keevo.inventory.stock.domain.model.StoreStockSummary;
 import com.keevo.inventory.stock.domain.port.in.GetMultiStoreOverviewQuery;
 import com.keevo.inventory.stock.domain.port.in.GetMultiStoreOverviewUseCase;
 import com.keevo.inventory.stock.domain.port.in.GetStoreStockDetailQuery;
 import com.keevo.inventory.stock.domain.port.in.GetStoreStockDetailUseCase;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
 import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.store.api.StoreType;
@@ -24,9 +23,9 @@ import java.util.UUID;
 
 /**
  * Story 21.8 — AI tools of the {@code inventory} module, mirroring {@code MultiStoreStockController} (every member
- * role, module {@code multi-store} READ). Stricter than those endpoints, which apply no store scope (gap routed to
- * 16-13): a store member (MANAGER, EMPLOYEE, VIEWER) only gets their assigned store, any other {@code storeId} is
- * refused, nothing without store (16-13 rule); the owner every store. The store id is returned by the overview as the
+ * role, module {@code multi-store} READ) and their store scope (Story 16.13 reprise, {@code StockReadScopes}): a store
+ * member (MANAGER, EMPLOYEE, VIEWER) only gets their assigned store, any other {@code storeId} is refused, nothing
+ * without store; the owner every store. The store id is returned by the overview as the
  * key of {@code low_stock_products}; no product or variant id.
  */
 @Component
@@ -34,7 +33,7 @@ public class StockMcpTools {
 
     static final int DEFAULT_SIZE = 25;
     static final int MAX_SIZE = 50;
-    static final String OTHER_STORE_MESSAGE = "Vous ne pouvez consulter que le stock de votre boutique.";
+    static final String OTHER_STORE_MESSAGE = StockReadScope.OTHER_STORE_MESSAGE;
 
     private final GetMultiStoreOverviewUseCase overview;
     private final GetStoreStockDetailUseCase detail;
@@ -54,10 +53,8 @@ public class StockMcpTools {
     @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     @RequiresEntitlement(value = "multi-store", access = RequiresEntitlement.Access.READ)
     public List<StoreStock> stockByStore() {
-        boolean member = CurrentActor.isStoreMember();
-        UUID own = member ? CurrentActor.assignedStoreIdOrNull() : null;
-        return overview.execute(new GetMultiStoreOverviewQuery()).stream()
-                .filter(s -> !member || (own != null && own.equals(s.storeId())))
+        // Story 16.13 (reprise): the scope is applied in SQL (one store for a member), no in-memory filtering
+        return overview.execute(new GetMultiStoreOverviewQuery(StockReadScopes.current())).stream()
                 .map(StockMcpTools::store).toList();
     }
 
@@ -85,13 +82,8 @@ public class StockMcpTools {
             Boolean lowOnly,
             @ToolParam(required = false, description = "Numéro de page, à partir de 0") Integer page,
             @ToolParam(required = false, description = "Produits par page, 1 à 50 (défaut 25)") Integer size) {
-        UUID store = storeId != null ? storeId : CurrentActor.assignedStoreIdOrNull();
-        if (CurrentActor.isStoreMember()) {
-            UUID own = CurrentActor.assignedStoreIdOrNull();
-            if (own == null || !own.equals(store)) {
-                throw DomainException.userFacing(ErrorCode.FORBIDDEN, OTHER_STORE_MESSAGE);
-            }
-        }
+        StockReadScope scope = StockReadScopes.current();
+        UUID store = scope.requireReadable(storeId); // member: own store by default, another one → 403
         if (store == null) {
             throw new InvalidRequestParameterException("storeId", "store required",
                     "Précisez la boutique (outil stock_by_store).");
@@ -99,7 +91,7 @@ public class StockMcpTools {
         int pageNumber = AiToolArguments.page(page);
         int pageSize = size == null ? DEFAULT_SIZE : Math.max(1, Math.min(size, MAX_SIZE));
         Page<StoreProductStockEntry> result = detail.execute(new GetStoreStockDetailQuery(store, pageNumber, pageSize,
-                true, lowOnly == null || lowOnly));
+                true, lowOnly == null || lowOnly, scope));
         return new StoreStockPage(result.getTotalElements(), pageNumber, pageSize,
                 result.getContent().stream().map(StockMcpTools::product).toList());
     }

@@ -169,9 +169,11 @@ class ModulePermissionsTest {
                 .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND");
         assertThat(permissions.permissionsFor(Role.MANAGER))
                 .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "EXPENSE_VIEW",
-                        "EXPENSE_CREATE", "EXPENSE_DELETE");
+                        "EXPENSE_CREATE", "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW");
         assertThat(permissions.permissionsFor(Role.VIEWER)).containsExactlyInAnyOrder("INVOICE_VIEW");
         assertThat(permissions.permissionsFor(Role.OWNER)).contains("EXPENSE_VIEW", "EXPENSE_CREATE",
-                "EXPENSE_DELETE");
+                "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW");
+        // 16.13 reprise (user decision 2026-11-10): purchase prices for the OWNER and the MANAGER only
+        assertThat(permissions.permissionsFor(Role.EMPLOYEE)).doesNotContain("PURCHASE_PRICE_VIEW");
     }
 }

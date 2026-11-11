@@ -2,6 +2,7 @@ package com.keevo.catalog.product.adapter.in.web;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
+import com.keevo.shared.infrastructure.security.PurchasePriceVisibility;
 import com.keevo.crm.api.SupplierQueryPort;
 import com.keevo.catalog.product.adapter.in.web.dto.CreateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.UpdateProductRequestDto;
@@ -35,6 +36,10 @@ import java.util.UUID;
  * Product REST Controller
  * 
  * Handles CRUD operations for products with JWT authentication and tenant isolation
+ *
+ * <p>Story 16.13 (reprise 10/11/2026, D2): {@code buyPrice} / {@code transportCost} (and the pricing endpoint's costs
+ * and margins) are {@code null} for a reader without {@code PURCHASE_PRICE_VIEW} (EMPLOYEE, VIEWER); an update from
+ * such an actor never changes them (UpdateProductUseCase).
  */
 @RestController
 @RequestMapping("/api/v1/products")
@@ -50,6 +55,7 @@ public class ProductController {
     private final StoreQueryPort storeQuery; // Story 14.10: resolve store names
     private final LookupProductByBarcodeUseCase lookupByBarcode; // Story 20.1
     private final MergeProductsUseCase mergeProducts;            // Story 20.1
+    private final PurchasePriceVisibility purchasePrices;        // Story 16.13 (reprise, D2)
 
     public ProductController(CreateOrRestoreProductUseCase createOrRestoreProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
@@ -59,7 +65,9 @@ public class ProductController {
                            SupplierQueryPort supplierQueryPort,
                            StoreQueryPort storeQuery,
                            LookupProductByBarcodeUseCase lookupByBarcode,
-                           MergeProductsUseCase mergeProducts) {
+                           MergeProductsUseCase mergeProducts,
+                           PurchasePriceVisibility purchasePrices) {
+        this.purchasePrices = purchasePrices;
         this.lookupByBarcode = lookupByBarcode;
         this.mergeProducts = mergeProducts;
         this.createOrRestoreProductUseCase = createOrRestoreProductUseCase;
@@ -114,12 +122,12 @@ public class ProductController {
         // product as is (200, no marker); a visible product's name keeps the 409.
         var outcome = createOrRestoreProductUseCase.execute(dto);
         if (outcome.restored()) {
-            return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(outcome.product(), true)));
+            return ResponseEntity.ok(ApiResponseWrapper.ok(respond(outcome.product(), true)));
         }
         if (outcome.merged()) {
-            return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(outcome.product())));
+            return ResponseEntity.ok(ApiResponseWrapper.ok(respond(outcome.product())));
         }
-        ProductResponseDto response = ProductResponseDto.fromDomain(outcome.product());
+        ProductResponseDto response = respond(outcome.product());
         
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(response));
@@ -133,8 +141,9 @@ public class ProductController {
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<ProductResponseDto>>> listProducts() {
         List<Product> products = productRepository.findAllActive();
+        boolean purchasePriceVisible = purchasePrices.currentActorCanView(); // once for the whole list
         List<ProductResponseDto> response = products.stream()
-                .map(ProductResponseDto::fromDomain)
+                .map(p -> ProductResponseDto.fromDomain(p).forReader(purchasePriceVisible))
                 .toList();
         
         return ResponseEntity.ok(ApiResponseWrapper.ok(response));
@@ -149,7 +158,7 @@ public class ProductController {
     @GetMapping("/lookup")
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> lookupByBarcode(
             @RequestParam(name = "barcode", required = false) String barcode) {
-        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(lookupByBarcode.execute(barcode))));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(respond(lookupByBarcode.execute(barcode))));
     }
 
     /**
@@ -162,7 +171,7 @@ public class ProductController {
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> mergeProduct(
             @PathVariable UUID id, @Valid @RequestBody MergeProductRequestDto request) {
         Product target = mergeProducts.execute(id, request.targetId(), CurrentActor.actorId());
-        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(target)));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(respond(target)));
     }
 
     /**
@@ -174,7 +183,7 @@ public class ProductController {
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> getProduct(@PathVariable UUID id) {
         return productRepository.findById(id)
                 .map(product -> {
-                    ProductResponseDto response = ProductResponseDto.fromDomain(product);
+                    ProductResponseDto response = respond(product);
                     return ResponseEntity.ok(ApiResponseWrapper.ok(response));
                 })
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -213,7 +222,7 @@ public class ProductController {
         // handler: catching IllegalArgumentException here labelled every validation error
         // « Produit introuvable ».
         Product product = updateProductUseCase.execute(dto);
-        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product)));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(respond(product)));
     }
 
     /**
@@ -229,7 +238,7 @@ public class ProductController {
         archiveProductUseCase.execute(dto);
         // Return the archived product so the caller sees archived=true
         return productRepository.findById(id)
-                .map(product -> ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product))))
+                .map(product -> ResponseEntity.ok(ApiResponseWrapper.ok(respond(product))))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null)));
     }
@@ -267,11 +276,24 @@ public class ProductController {
             @PathVariable UUID id) {
         try {
             var pricing = getProductPricingUseCase.execute(id);
+            if (!purchasePrices.currentActorCanView()) {
+                pricing = pricing.withoutCosts(); // Story 16.13 (reprise, D2): no cost nor margin
+            }
             return ResponseEntity.ok(ApiResponseWrapper.ok(pricing));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponseWrapper.error("Produit introuvable", "NOT_FOUND", "PRODUCT_NOT_FOUND", null));
         }
+    }
+
+    // ── Story 16.13 (reprise, D2) — purchase prices only for PURCHASE_PRICE_VIEW holders ──────────────
+
+    private ProductResponseDto respond(Product product) {
+        return respond(product, null);
+    }
+
+    private ProductResponseDto respond(Product product, Boolean restored) {
+        return ProductResponseDto.fromDomain(product, restored).forReader(purchasePrices.currentActorCanView());
     }
 
     // ── Story 14.10 helpers ─────────────────────────────────────────────

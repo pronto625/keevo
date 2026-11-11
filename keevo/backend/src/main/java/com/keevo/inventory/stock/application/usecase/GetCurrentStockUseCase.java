@@ -1,5 +1,6 @@
 package com.keevo.inventory.stock.application.usecase;
 
+import com.keevo.inventory.stock.domain.model.StockReadScope;
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
@@ -55,13 +56,20 @@ public class GetCurrentStockUseCase {
      * @return StockSnapshot with product + all stock levels
      * @throws DomainException PRODUCT_NOT_FOUND if product does not exist
      */
+    /**
+     * Story 16.13 (reprise) — the same, limited to the stores readable in {@code scope}: a store member only gets their
+     * own store's level (none without a store). The product's levels are one row per store: filtered in memory, O(S).
+     */
     @Transactional(readOnly = true)
-    public StockSnapshot execute(UUID productId) {
+    public StockSnapshot execute(UUID productId, StockReadScope scope) {
         ProductView product = productQuery.findById(TenantContext.getCurrentTenant(), productId)
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + productId));
 
         List<StockLevel> levels = stockLevelRepository.findAllByProduct(productId);
+        if (scope.restricted()) {
+            levels = levels.stream().filter(l -> scope.allows(l.getStoreId())).toList();
+        }
         return new StockSnapshot(product, levels);
     }
 }

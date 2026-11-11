@@ -14,15 +14,17 @@ import java.util.UUID;
  *
  * <p>Implementation uses native SQL (JdbcTemplate) to avoid cross-module
  * JPA entity imports (stores/products/stock_levels are in separate modules).
- * Story 3.2. Extended in Story 3.4 with cross-store availability query.
+ * Story 3.2. Extended in Story 3.4 with cross-store availability query. Story 16.13 (reprise): every multi-store read
+ * takes an optional single-store filter (a store member's scope), applied in SQL.
  */
 public interface MultiStoreStockRepository {
 
     /**
-     * Returns aggregated stock summary for ALL active stores in the current tenant.
-     * Native SQL: JOIN stores + stock_levels + products, GROUP BY store.
+     * Aggregated stock summary of the active stores of the current tenant — every one when {@code onlyStoreId} is
+     * {@code null}, else that store only (empty when it is not an active store of the tenant). One set-based query:
+     * {@code stock_levels} aggregated per store, then joined to {@code stores}.
      */
-    List<StoreStockSummary> getStoreOverviews();
+    List<StoreStockSummary> getStoreOverviews(UUID onlyStoreId);
 
     /**
      * Returns paginated product stock entries for a specific store.
@@ -31,10 +33,9 @@ public interface MultiStoreStockRepository {
     Page<StoreProductStockEntry> getStoreStockDetail(UUID storeId, boolean sortLowFirst, boolean lowOnly, Pageable pageable);
 
     /**
-     * Returns stock availability for {@code productId} across ALL active stores.
-     * Includes stores with quantity = 0.
-     * Sorted by store created_at ASC (consistent ordering; client sorts by quantity).
+     * Stock availability for {@code productId} across the active stores — every one when {@code onlyStoreId} is
+     * {@code null}, else that store only. Includes stores with quantity = 0. Sorted by store created_at ASC.
      * Story 3.4.
      */
-    List<CrossStoreAvailabilityEntry> getProductAvailability(UUID productId);
+    List<CrossStoreAvailabilityEntry> getProductAvailability(UUID productId, UUID onlyStoreId);
 }

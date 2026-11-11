@@ -57,6 +57,7 @@ public class InventoryCountController {
     public ResponseEntity<ApiResponseWrapper<List<InventoryProductRowResponseDto>>> getProducts(
             @PathVariable UUID sessionId) {
 
+        CountingReadScope.requireSessionReadable(sessionRepository, sessionId); // 16.13: member → own store only
         List<InventoryProductRow> rows = getCountingProductsUseCase.execute(
                 new GetCountingProductsQuery(sessionId));
 
@@ -127,6 +128,7 @@ public class InventoryCountController {
     public ResponseEntity<ApiResponseWrapper<List<InventoryCountResponseDto>>> getCounts(
             @PathVariable UUID sessionId) {
 
+        CountingReadScope.requireSessionReadable(sessionRepository, sessionId); // 16.13: member → own store only
         List<InventoryCount> counts = getSessionCountsUseCase.execute(
                 new GetSessionCountsQuery(sessionId));
 

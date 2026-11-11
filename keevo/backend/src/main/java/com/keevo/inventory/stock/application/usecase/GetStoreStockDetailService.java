@@ -25,6 +25,8 @@ public class GetStoreStockDetailService implements GetStoreStockDetailUseCase {
     @Override
     @Transactional(readOnly = true)
     public Page<StoreProductStockEntry> execute(GetStoreStockDetailQuery query) {
+        // Story 16.13 (reprise): a store outside the reader's scope is refused (403, French message)
+        query.scope().requireReadable(query.storeId());
         var pageable = PageRequest.of(query.page(), query.size());
         return repo.getStoreStockDetail(query.storeId(), query.sortLowFirst(), query.lowOnly(), pageable);
     }

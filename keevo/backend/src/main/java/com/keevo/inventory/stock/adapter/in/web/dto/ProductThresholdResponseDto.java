@@ -33,10 +33,15 @@ public record ProductThresholdResponseDto(
         boolean priceManual,
         UUID mergedIntoId
 ) {
-    public static ProductThresholdResponseDto from(ProductView p) {
+    /**
+     * Story 16.13 (reprise, D2) — {@code purchasePriceVisible = false}: {@code buyPrice} and {@code transportCost} are
+     * {@code null} (V1 2.0.1 reads a missing / null price as 0).
+     */
+    public static ProductThresholdResponseDto from(ProductView p, boolean purchasePriceVisible) {
         return new ProductThresholdResponseDto(
                 p.id(), p.name(), p.description(), p.sku(), p.categoryId(),
-                p.price(), p.buyPrice(), p.transportCost(), p.stockQuantity(),
+                p.price(), purchasePriceVisible ? p.buyPrice() : null,
+                purchasePriceVisible ? p.transportCost() : null, p.stockQuantity(),
                 p.archived(), p.status(), p.minimumThreshold(),
                 p.createdAt(), p.updatedAt(), p.trackStock(),
                 p.barcode(), p.productKey(), p.priceManual(), p.mergedIntoId());

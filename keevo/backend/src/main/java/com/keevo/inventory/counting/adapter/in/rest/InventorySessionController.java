@@ -86,6 +86,7 @@ public class InventorySessionController {
     public ResponseEntity<ApiResponseWrapper<InventorySessionResponseDto>> getActiveSession(
             @RequestParam UUID storeId) {
 
+        CountingReadScope.requireStoreReadable(storeId); // 16.13 (reprise): member → own store only
         return getActiveSessionUseCase.execute(new GetActiveSessionQuery(storeId))
                 .map(session -> ResponseEntity.ok(
                         ApiResponseWrapper.ok(InventorySessionResponseDto.fromDomain(session))))
@@ -126,8 +127,9 @@ public class InventorySessionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
+        // Story 16.13 (reprise): a store member lists their own store's sessions only (another store → 403)
         var sessions = listSessionsUseCase.execute(
-                new ListInventorySessionsQuery(storeId, page, size));
+                new ListInventorySessionsQuery(CountingReadScope.readableStore(storeId), page, size));
         var dtos = sessions.stream()
                 .map(InventorySessionResponseDto::fromDomain)
                 .toList();

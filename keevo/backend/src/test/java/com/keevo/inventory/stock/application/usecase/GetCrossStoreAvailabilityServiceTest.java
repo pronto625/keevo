@@ -19,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import com.keevo.inventory.stock.domain.model.StockReadScope;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -69,10 +70,10 @@ class GetCrossStoreAvailabilityServiceTest {
         var product = sampleProduct();
         var entries = List.of(sampleEntry(storeId1, 10), sampleEntry(storeId2, 0));
         when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.of(product));
-        when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(entries);
+        when(multiStoreStockRepository.getProductAvailability(productId, null)).thenReturn(entries);
 
         GetCrossStoreAvailabilityUseCase.Result result =
-                service.execute(new GetCrossStoreAvailabilityQuery(productId));
+                service.execute(new GetCrossStoreAvailabilityQuery(productId, StockReadScope.ALL));
 
         assertThat(result.product()).isEqualTo(product);
         assertThat(result.entries()).hasSize(2);
@@ -83,7 +84,7 @@ class GetCrossStoreAvailabilityServiceTest {
     void execute_shouldThrowProductNotFound_whenProductIdUnknown() {
         when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.execute(new GetCrossStoreAvailabilityQuery(productId)))
+        assertThatThrownBy(() -> service.execute(new GetCrossStoreAvailabilityQuery(productId, StockReadScope.ALL)))
                 .isInstanceOf(DomainException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
@@ -94,10 +95,10 @@ class GetCrossStoreAvailabilityServiceTest {
     @Test
     void execute_shouldReturnEmptyList_whenNoStockLevelsExist() {
         when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.of(sampleProduct()));
-        when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(List.of());
+        when(multiStoreStockRepository.getProductAvailability(productId, null)).thenReturn(List.of());
 
         GetCrossStoreAvailabilityUseCase.Result result =
-                service.execute(new GetCrossStoreAvailabilityQuery(productId));
+                service.execute(new GetCrossStoreAvailabilityQuery(productId, StockReadScope.ALL));
 
         assertThat(result.entries()).isEmpty();
     }
@@ -105,11 +106,31 @@ class GetCrossStoreAvailabilityServiceTest {
     @Test
     void execute_shouldDelegateToRepository_withCorrectProductId() {
         when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.of(sampleProduct()));
-        when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(List.of());
+        when(multiStoreStockRepository.getProductAvailability(productId, null)).thenReturn(List.of());
 
-        service.execute(new GetCrossStoreAvailabilityQuery(productId));
+        service.execute(new GetCrossStoreAvailabilityQuery(productId, StockReadScope.ALL));
 
         verify(productQuery).findById(TenantContext.getCurrentTenant(), productId);
-        verify(multiStoreStockRepository).getProductAvailability(productId);
+        verify(multiStoreStockRepository).getProductAvailability(productId, null);
+    }
+
+    // ── Story 16.13 (reprise) ──
+
+    @Test
+    void member_getsOnlyOwnStoreLine_filteredInSql() {
+        when(productQuery.findById(any(), eq(productId))).thenReturn(java.util.Optional.of(sampleProduct()));
+        when(multiStoreStockRepository.getProductAvailability(productId, storeId1))
+                .thenReturn(List.of(sampleEntry(storeId1, 3)));
+        var result = service.execute(new GetCrossStoreAvailabilityQuery(productId, StockReadScope.store(storeId1)));
+        org.assertj.core.api.Assertions.assertThat(result.entries()).extracting(CrossStoreAvailabilityEntry::storeId)
+                .containsExactly(storeId1);
+    }
+
+    @Test
+    void memberWithoutStore_getsNoLine_noQuery() {
+        when(productQuery.findById(any(), eq(productId))).thenReturn(java.util.Optional.of(sampleProduct()));
+        var result = service.execute(new GetCrossStoreAvailabilityQuery(productId, StockReadScope.store(null)));
+        org.assertj.core.api.Assertions.assertThat(result.entries()).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(multiStoreStockRepository);
     }
 }

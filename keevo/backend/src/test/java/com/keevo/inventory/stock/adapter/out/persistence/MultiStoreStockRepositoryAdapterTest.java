@@ -60,7 +60,7 @@ class MultiStoreStockRepositoryAdapterTest {
         when(jdbc.query(anyString(), any(RowMapper.class)))
             .thenReturn(List.of(summary));
 
-        var result = adapter.getStoreOverviews();
+        var result = adapter.getStoreOverviews(null);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).storeName()).isEqualTo("Boutique A");
@@ -73,7 +73,7 @@ class MultiStoreStockRepositoryAdapterTest {
         when(jdbc.query(anyString(), any(RowMapper.class)))
             .thenReturn(List.of(summary));
 
-        var result = adapter.getStoreOverviews();
+        var result = adapter.getStoreOverviews(null);
 
         assertThat(result.get(0).lowStockCount()).isEqualTo(3);
     }
@@ -84,8 +84,7 @@ class MultiStoreStockRepositoryAdapterTest {
             UUID.randomUUID(), "Chaussures", null, null, storeId, 10, 5);
         when(jdbc.query(anyString(), any(RowMapper.class), any()))
             .thenReturn(List.of(entry));
-        when(jdbc.queryForObject(anyString(), eq(Long.class), any()))
-            .thenReturn(1L);
+        // Story 16.13 (reprise): the total comes from the page query (COUNT(*) OVER ()), no second count query
 
         var result = adapter.getStoreStockDetail(storeId, false, false, PageRequest.of(0, 25));
 
@@ -97,13 +96,12 @@ class MultiStoreStockRepositoryAdapterTest {
     void getStoreStockDetail_sortsLowStockFirst_whenFlagSet() {
         when(jdbc.query(anyString(), any(RowMapper.class), any()))
             .thenReturn(List.of());
-        when(jdbc.queryForObject(anyString(), eq(Long.class), any()))
-            .thenReturn(0L);
 
         // sortLowFirst = true — should use the low-first SQL variant
         adapter.getStoreStockDetail(storeId, true, false, PageRequest.of(0, 25));
 
         // Verify JdbcTemplate was called (SQL choice is internal — validated by cURL E2E)
         verify(jdbc).query(anyString(), any(RowMapper.class), any());
+        verify(jdbc, org.mockito.Mockito.never()).queryForObject(anyString(), eq(Long.class), any());
     }
 }

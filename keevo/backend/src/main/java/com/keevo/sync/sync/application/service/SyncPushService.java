@@ -9,6 +9,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ModuleState;
+import com.keevo.shared.infrastructure.security.PurchasePriceVisibility;
 import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
 import com.keevo.sync.sync.application.strategy.LastWriteWinsStrategy;
 import com.keevo.sync.sync.domain.model.*;
@@ -744,23 +745,41 @@ public class SyncPushService implements SyncUseCase {
      * Story 16.13 — the part of a pull scope that decides what the device holds: restricted + store. Story 20.2 —
      * plus {@code clientStores}: a fingerprint of a restricted pull's client visible stores (sorted ids, SHA-256 hex),
      * {@code null} when unrestricted or unknown; a known-and-different fingerprint re-seeds like a scope change (a
-     * store started / stopped sharing its clients, a sharing store was (de)activated).
+     * store started / stopped sharing its clients, a sharing store was (de)activated). Story 16.13 (reprise) — plus
+     * {@code visibility}: what a restricted pull's rows reveal ({@link #visibilityMarker}), {@code null} when
+     * unrestricted or unknown; known-and-different also re-seeds.
      */
-    record ScopeKey(boolean restricted, UUID storeId, String clientStores) {
+    record ScopeKey(boolean restricted, UUID storeId, String clientStores, String visibility) {
         ScopeKey(boolean restricted, UUID storeId) {
-            this(restricted, storeId, null);
+            this(restricted, storeId, null, null);
+        }
+
+        ScopeKey(boolean restricted, UUID storeId, String clientStores) {
+            this(restricted, storeId, clientStores, null);
         }
 
         static ScopeKey of(PullScope scope) {
             return new ScopeKey(scope.restricted(), scope.storeId(),
-                    scope.restricted() ? fingerprint(scope.clientStoreIds()) : null);
+                    scope.restricted() ? fingerprint(scope.clientStoreIds()) : null,
+                    scope.restricted() ? visibilityMarker(scope) : null);
         }
 
-        /** Same restricted + store, and same fingerprint when both are known. */
+        /**
+         * Story 16.13 (reprise 10/11/2026) — version of the data-visibility rules of a restricted pull: stock levels of
+         * the member's store only (D1) and whether purchase prices are shown (D2, {@code PURCHASE_PRICE_VIEW}). A device
+         * whose last completed pull had another marker — or none (pulled before this rule) — is re-seeded once, so it
+         * drops other stores' levels (RN purge) and overwrites the purchase prices it pulled before.
+         */
+        static String visibilityMarker(PullScope scope) {
+            return VISIBILITY_RULES + ";pp=" + (scope.holds(PurchasePriceVisibility.PERMISSION) ? '1' : '0');
+        }
+
+        /** Same restricted + store, and same fingerprint / visibility when both are known. */
         boolean sameAs(ScopeKey other) {
             return other != null && restricted == other.restricted && Objects.equals(storeId, other.storeId)
                     && (clientStores == null || other.clientStores == null
-                        || clientStores.equals(other.clientStores));
+                        || clientStores.equals(other.clientStores))
+                    && (visibility == null || other.visibility == null || visibility.equals(other.visibility));
         }
 
         static String fingerprint(java.util.Set<UUID> ids) {
@@ -794,7 +813,8 @@ public class SyncPushService implements SyncUseCase {
     }
 
     private static ScopeKey storedScope(UserSyncState stored) {
-        return new ScopeKey(stored.lastScopeRestricted(), stored.lastScopeStoreId(), stored.lastScopeClientStores());
+        return new ScopeKey(stored.lastScopeRestricted(), stored.lastScopeStoreId(), stored.lastScopeClientStores(),
+                stored.lastScopeVisibility());
     }
 
     /**
@@ -803,7 +823,15 @@ public class SyncPushService implements SyncUseCase {
      * row, or unreadable state: not a change.
      */
     private static boolean scopeChanged(Optional<UserSyncState> stored, ScopeKey scope, PullCommand command) {
-        if (!ownRow(stored, command) || !stored.get().lastScopeKnown()) {
+        if (!ownRow(stored, command)) {
+            return false;
+        }
+        if (visibilityChanged(stored.get(), scope, command)) {
+            log.info("[Sync] Data visibility rules of the device changed since its last pull — pull answered from the "
+                    + "beginning (reseed)");
+            return true;
+        }
+        if (!stored.get().lastScopeKnown()) {
             return false;
         }
         boolean changed = !storedScope(stored.get()).sameAs(scope);
@@ -814,6 +842,16 @@ public class SyncPushService implements SyncUseCase {
         return changed;
     }
 
+    /**
+     * Story 16.13 (reprise) — a restricted pull that continues from a {@code since} on a device whose stored visibility
+     * marker differs (or is unknown: the device pulled before these rules) must be re-seeded. A pull without
+     * {@code since} is already complete; an owner's pull carries no marker.
+     */
+    private static boolean visibilityChanged(UserSyncState stored, ScopeKey scope, PullCommand command) {
+        return scope.restricted() && scope.visibility() != null && command.since() != null
+                && !scope.visibility().equals(stored.lastScopeVisibility());
+    }
+
     /** Story 16.13 — the scope is written at the end of the pull only when unknown or different. */
     private static boolean mustRemember(Optional<UserSyncState> stored, ScopeKey scope, PullCommand command) {
         if (command.deviceId() == null || command.deviceId().isBlank() || command.actorId() == null) {
@@ -821,7 +859,8 @@ public class SyncPushService implements SyncUseCase {
         }
         if (stored.isEmpty()) return true; // unreadable or not registered yet: the guarded update decides
         return ownRow(stored, command)
-                && (!stored.get().lastScopeKnown() || !storedScope(stored.get()).equals(scope));
+                && (!stored.get().lastScopeKnown() || !storedScope(stored.get()).equals(scope)
+                    || !Objects.equals(stored.get().lastScopeVisibility(), scope.visibility()));
         // Story 20.2: equals (not sameAs) — a newly known or changed client-stores fingerprint is written too
     }
 
@@ -835,6 +874,8 @@ public class SyncPushService implements SyncUseCase {
                 userSyncStateRepository.rememberPullScope(command.deviceId(), command.actorId(),
                         scope.restricted(), scope.storeId(), scope.clientStores());
             }
+            // Story 16.13 (reprise) — the visibility marker (null for an owner) of the completed pull
+            userSyncStateRepository.rememberPullVisibility(command.deviceId(), command.actorId(), scope.visibility());
         } catch (RuntimeException e) {
             log.warn("[Sync] Device pull scope not saved ({}) — next pull compares with the previous one",
                     e.getClass().getSimpleName());
@@ -862,6 +903,9 @@ public class SyncPushService implements SyncUseCase {
      * was started with ({@code null} for a cursor from before 16.13), and each provider's keyset
      * position (or DONE).
      */
+    /** Story 16.13 (reprise) — version of the restricted pull's visibility rules (bump to re-seed every member). */
+    static final String VISIBILITY_RULES = "v1613r";
+
     record PullCursor(Instant startedAt, boolean failed, boolean reseed, boolean remember, ScopeKey scope,
                       Map<String, DeltaEntityProvider.Position> positions) {
 
@@ -884,7 +928,10 @@ public class SyncPushService implements SyncUseCase {
             if (scope != null) {
                 sb.append('|').append(scope.restricted() ? '1' : '0').append('|')
                         .append(scope.storeId() != null ? scope.storeId().toString() : "-");
-                if (scope.clientStores() != null) sb.append('|').append(scope.clientStores()); // Story 20.2
+                if (scope.clientStores() != null || scope.visibility() != null) { // Story 20.2 / 16.13 reprise
+                    sb.append('|').append(scope.clientStores() != null ? scope.clientStores() : "-");
+                }
+                if (scope.visibility() != null) sb.append('|').append(scope.visibility());
             }
             positions.forEach((key, pos) -> {
                 sb.append('\n').append(key).append('=');
@@ -909,7 +956,8 @@ public class SyncPushService implements SyncUseCase {
                 boolean remember = flags.length() <= 2 || flags.charAt(2) == '1';
                 ScopeKey scope = header.length >= 3
                         ? new ScopeKey("1".equals(header[1]), "-".equals(header[2]) ? null : UUID.fromString(header[2]),
-                                header.length >= 4 ? header[3] : null)
+                                header.length >= 4 && !"-".equals(header[3]) ? header[3] : null,
+                                header.length >= 5 ? header[4] : null)
                         : null;
                 Map<String, DeltaEntityProvider.Position> positions = new HashMap<>();
                 for (int i = 2; i < lines.length; i++) {

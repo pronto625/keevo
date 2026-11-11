@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.adapter.in.rest;
 
+import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.inventory.counting.adapter.in.rest.dto.InventoryGapReportResponseDto;
 import com.keevo.shared.event.catalog.counting.InventoryReportGeneratedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryGapReport;
@@ -35,10 +36,13 @@ public class InventoryReportController {
     private final GenerateGapReportUseCase generateGapReportUseCase;
     private final InventoryReportTextFormatter textFormatter;
     private final ApplicationEventPublisher eventPublisher;
+    private final InventorySessionRepository sessionRepository; // Story 16.13 (reprise): read scope
 
     public InventoryReportController(GenerateGapReportUseCase generateGapReportUseCase,
                                       InventoryReportTextFormatter textFormatter,
-                                      ApplicationEventPublisher eventPublisher) {
+                                      ApplicationEventPublisher eventPublisher,
+                                      InventorySessionRepository sessionRepository) {
+        this.sessionRepository = sessionRepository;
         this.generateGapReportUseCase = generateGapReportUseCase;
         this.textFormatter = textFormatter;
         this.eventPublisher = eventPublisher;
@@ -54,6 +58,7 @@ public class InventoryReportController {
     public ResponseEntity<ApiResponseWrapper<InventoryGapReportResponseDto>> getGapReport(
             @PathVariable UUID sessionId) {
         UUID actorId = extractActorId();
+        CountingReadScope.requireSessionReadable(sessionRepository, sessionId); // 16.13 (reprise): before computing
         InventoryGapReport report = generateGapReportUseCase.execute(
                 new GenerateGapReportQuery(sessionId, actorId));
 
@@ -69,6 +74,7 @@ public class InventoryReportController {
     public ResponseEntity<ApiResponseWrapper<String>> getGapReportText(
             @PathVariable UUID sessionId) {
         UUID actorId = extractActorId();
+        CountingReadScope.requireSessionReadable(sessionRepository, sessionId); // 16.13 (reprise): before computing
         InventoryGapReport report = generateGapReportUseCase.execute(
                 new GenerateGapReportQuery(sessionId, actorId));
         String text = textFormatter.formatWhatsApp(report, "Utilisateur");

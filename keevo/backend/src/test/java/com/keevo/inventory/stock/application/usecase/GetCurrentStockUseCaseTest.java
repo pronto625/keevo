@@ -71,7 +71,7 @@ class GetCurrentStockUseCaseTest {
         when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(product));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(levels);
 
-        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
+        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL);
 
         assertThat(result.product()).isEqualTo(product);
         assertThat(result.stockLevels()).hasSize(1);
@@ -82,7 +82,7 @@ class GetCurrentStockUseCaseTest {
     void should_throw_PRODUCT_NOT_FOUND_when_product_absent() {
         when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> useCase.execute(PRODUCT_ID))
+        assertThatThrownBy(() -> useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL))
             .isInstanceOf(DomainException.class)
             .satisfies(ex -> assertThat(((DomainException) ex).getErrorCode())
                 .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
@@ -95,7 +95,7 @@ class GetCurrentStockUseCaseTest {
         when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(0)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of());
 
-        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
+        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL);
 
         assertThat(result.stockLevels()).isEmpty();
     }
@@ -105,7 +105,7 @@ class GetCurrentStockUseCaseTest {
         when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(0)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of(makeLevel(0)));
 
-        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
+        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL);
 
         assertThat(result.isLowInAnyStore()).isFalse();
     }
@@ -115,7 +115,7 @@ class GetCurrentStockUseCaseTest {
         when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(5)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of(makeLevel(5)));
 
-        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
+        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL);
 
         assertThat(result.isLowInAnyStore()).isTrue();
     }
@@ -125,7 +125,7 @@ class GetCurrentStockUseCaseTest {
         when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(10)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of(makeLevel(3)));
 
-        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
+        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL);
 
         assertThat(result.isLowInAnyStore()).isTrue();
     }
@@ -136,7 +136,7 @@ class GetCurrentStockUseCaseTest {
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(
             List.of(makeLevel(6), makeLevel(20)));
 
-        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
+        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL);
 
         assertThat(result.isLowInAnyStore()).isFalse();
     }
@@ -147,7 +147,7 @@ class GetCurrentStockUseCaseTest {
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(
             List.of(makeLevel(20), makeLevel(2))); // one above, one below
 
-        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
+        GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID, com.keevo.inventory.stock.domain.model.StockReadScope.ALL);
 
         assertThat(result.isLowInAnyStore()).isTrue();
     }

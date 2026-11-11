@@ -57,7 +57,8 @@ class ProductControllerBrefTest {
                 new UsernamePasswordAuthenticationToken(actor, null, List.of()));
         var controller = new ProductController(createOrRestore, update, mock(ArchiveProductUseCase.class),
                 repository, mock(GetProductPricingUseCase.class), mock(SupplierQueryPort.class),
-                mock(StoreQueryPort.class), lookup, merge);
+                mock(StoreQueryPort.class), lookup, merge,
+                com.keevo.shared.infrastructure.security.PurchasePriceVisibility.withoutRoleMapping());
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }

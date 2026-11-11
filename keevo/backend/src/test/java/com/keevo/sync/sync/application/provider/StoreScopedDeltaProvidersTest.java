@@ -49,6 +49,7 @@ class StoreScopedDeltaProvidersTest {
                 new Case("inventoryCounts", InventoryCountDeltaProvider::new,
                         "session_id IN (SELECT s.id FROM inventory_sessions s WHERE s.store_id = :scopeStoreId)"),
                 new Case("employees", EmployeeDeltaProvider::new, "store_id = :scopeStoreId"),
+                new Case("stockLevels", StockLevelDeltaProvider::new, "store_id = :scopeStoreId"), // 16.13 reprise D1
                 new Case("stockTransfers", StockTransferDeltaProvider::new,
                         "source_store_id = :scopeStoreId OR destination_store_id = :scopeStoreId"));
     }
@@ -146,7 +147,7 @@ class StoreScopedDeltaProvidersTest {
     static Stream<Case> tenantWide() {
         return Stream.of(
                 new Case("stores", StoreDeltaProvider::new, null),
-                new Case("stockLevels", StockLevelDeltaProvider::new, null),
+                // stockLevels: store-scoped since Story 16.13 (reprise 10/11/2026, user decision D1) — storeScoped()
                 new Case("products", ProductDeltaProvider::new, null),
                 new Case("categories", CategoryDeltaProvider::new, null),
                 // clients: store-scoped since Story 20.2 (ClientDeltaProviderTest)

@@ -266,10 +266,14 @@ class SyncPullServiceTest {
         return stored(true, storeId, known);
     }
 
+    /** Story 16.13 (reprise) — the visibility marker of an employee pull without permissions (this test's pulls). */
+    private static final String CURRENT_VISIBILITY = SyncPushService.ScopeKey.visibilityMarker(
+            com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID));
+
     private static com.keevo.sync.sync.domain.model.UserSyncState stored(boolean restricted, UUID storeId,
                                                                          boolean known) {
         return new com.keevo.sync.sync.domain.model.UserSyncState(DEVICE, ACTOR_ID, TENANT_ID, null, null,
-                Instant.now(), restricted, storeId, known);
+                Instant.now(), restricted, storeId, known, null, restricted ? CURRENT_VISIBILITY : null);
     }
 
     private static SyncUseCase.PullCommand ownerPull(Instant since, String cursor) {
@@ -488,7 +492,7 @@ class SyncPullServiceTest {
 
     private static com.keevo.sync.sync.domain.model.UserSyncState storedWithClients(java.util.Set<UUID> visible) {
         return new com.keevo.sync.sync.domain.model.UserSyncState(DEVICE, ACTOR_ID, TENANT_ID, null, null,
-                Instant.now(), true, STORE_A, true, SyncPushService.ScopeKey.fingerprint(visible));
+                Instant.now(), true, STORE_A, true, SyncPushService.ScopeKey.fingerprint(visible), CURRENT_VISIBILITY);
     }
 
     @Test
@@ -558,5 +562,91 @@ class SyncPullServiceTest {
         assertThat(new SyncPushService.ScopeKey(true, STORE_A).sameAs(key)).isTrue();
         assertThat(key.sameAs(new SyncPushService.ScopeKey(true, STORE_A,
                 SyncPushService.ScopeKey.fingerprint(java.util.Set.of(STORE_A, STORE_B))))).isFalse();
+    }
+
+    // ── Story 16.13 (reprise 10/11/2026) — visibility rules (store-scoped stock, purchase prices) ─────────────
+
+    private static com.keevo.sync.sync.domain.model.UserSyncState storedVisibility(String visibility) {
+        return new com.keevo.sync.sync.domain.model.UserSyncState(DEVICE, ACTOR_ID, TENANT_ID, null, null,
+                Instant.now(), true, STORE_A, true, null, visibility);
+    }
+
+    @Test
+    void story1613r_restrictedDeviceFromBeforeTheRules_reseedsOnce_andRemembersTheMarker() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        when(userSyncStateRepository.findByDeviceId(DEVICE)).thenReturn(java.util.Optional.of(storedVisibility(null)));
+        when(productProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+
+        var result = service.pull(employeePull(STORE_A, since, null));
+
+        assertThat(result.reseed()).isTrue();
+        verify(userSyncStateRepository).rememberPullVisibility(DEVICE, ACTOR_ID, CURRENT_VISIBILITY);
+    }
+
+    @Test
+    void story1613r_purchasePricePermissionGranted_reseeds() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        when(userSyncStateRepository.findByDeviceId(DEVICE))
+                .thenReturn(java.util.Optional.of(storedVisibility(CURRENT_VISIBILITY))); // pulled as an employee
+        when(productProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        var manager = com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID)
+                .withPermissions(java.util.Set.of("PURCHASE_PRICE_VIEW"));
+
+        var result = service.pull(new SyncUseCase.PullCommand(ACTOR_ID, TENANT_ID, since, null, false, manager, DEVICE));
+
+        assertThat(result.reseed()).isTrue();
+        verify(userSyncStateRepository).rememberPullVisibility(DEVICE, ACTOR_ID,
+                SyncPushService.ScopeKey.visibilityMarker(manager));
+    }
+
+    @Test
+    void story1613r_sameRules_incremental_nothingWritten() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        when(userSyncStateRepository.findByDeviceId(DEVICE))
+                .thenReturn(java.util.Optional.of(storedVisibility(CURRENT_VISIBILITY)));
+        when(productProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+
+        var result = service.pull(employeePull(STORE_A, since, null));
+
+        assertThat(result.reseed()).isFalse();
+        verify(userSyncStateRepository, never()).rememberPullVisibility(any(), any(), any());
+    }
+
+    @Test
+    void story1613r_fullPullWithoutSince_isNotFlaggedReseed_butRemembersTheMarker() {
+        when(userSyncStateRepository.findByDeviceId(DEVICE)).thenReturn(java.util.Optional.of(storedVisibility(null)));
+        when(productProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+
+        var result = service.pull(employeePull(STORE_A, null, null));
+
+        assertThat(result.reseed()).isFalse();
+        verify(userSyncStateRepository).rememberPullVisibility(DEVICE, ACTOR_ID, CURRENT_VISIBILITY);
+    }
+
+    @Test
+    void story1613r_ownerPull_carriesNoMarker_neverReseedsForIt() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        when(userSyncStateRepository.findByDeviceId(DEVICE)).thenReturn(java.util.Optional.of(stored(false, null, true)));
+        when(productProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+
+        var result = service.pull(ownerPull(since, null));
+
+        assertThat(result.reseed()).isFalse();
+    }
+
+    @Test
+    void story1613r_cursorKeepsTheMarker_evenWithoutClientStores() {
+        var key = new SyncPushService.ScopeKey(true, STORE_A, null, CURRENT_VISIBILITY);
+        var cursor = new SyncPushService.PullCursor(Instant.parse("2026-03-20T10:00:00Z"), false, false, true, key,
+                new java.util.HashMap<>());
+        assertThat(SyncPushService.PullCursor.decode(cursor.encode()).scope()).isEqualTo(key);
+        var other = new SyncPushService.ScopeKey(true, STORE_A, null, "v1613r;pp=1");
+        assertThat(key.sameAs(other)).isFalse();
+        assertThat(key.sameAs(new SyncPushService.ScopeKey(true, STORE_A))).isTrue(); // unknown marker: same
     }
 }

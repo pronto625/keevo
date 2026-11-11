@@ -53,6 +53,14 @@ public interface UserSyncStateRepository {
     boolean rememberPullScope(String deviceId, UUID userId, boolean restricted, UUID storeId, String clientStores);
 
     /**
+     * Story 16.13 (reprise) — remembers the visibility-rules marker of the device's last completed pull ({@code null}
+     * for an unrestricted pull). Only on the device's own row.
+     *
+     * @return {@code true} if the row was updated
+     */
+    boolean rememberPullVisibility(String deviceId, UUID userId, String visibility);
+
+    /**
      * Returns all device sync states for the given tenant.
      * Story 5.5 — AC4.
      */

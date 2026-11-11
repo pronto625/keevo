@@ -15,7 +15,9 @@ import java.util.UUID;
  * device's last completed pull (restricted = employee; null store = unrestricted or employee without a store). Unknown until the device completes
  * a pull; a later pull whose scope differs is answered from the beginning (re-seed). Story 20.2 —
  * {@code lastScopeClientStores}: fingerprint of the client visible stores of that pull (restricted only), null when
- * unknown.
+ * unknown. Story 16.13 (reprise 10/11/2026) — {@code lastScopeVisibility}: the visibility-rules marker of that pull
+ * (restricted only: store-scoped stock levels, purchase prices shown or not), null when unknown (pulled before the rule
+ * or unrestricted); a restricted device whose marker differs is re-seeded once.
  */
 public record UserSyncState(
         String deviceId,
@@ -27,8 +29,17 @@ public record UserSyncState(
         boolean lastScopeRestricted,
         UUID lastScopeStoreId,
         boolean lastScopeKnown,
-        String lastScopeClientStores
+        String lastScopeClientStores,
+        String lastScopeVisibility
 ) {
+    /** Story 20.2 arity — no visibility marker. */
+    public UserSyncState(String deviceId, UUID userId, String tenantId, Instant lastPushAt, Instant lastPullAt,
+                         Instant updatedAt, boolean lastScopeRestricted, UUID lastScopeStoreId,
+                         boolean lastScopeKnown, String lastScopeClientStores) {
+        this(deviceId, userId, tenantId, lastPushAt, lastPullAt, updatedAt, lastScopeRestricted, lastScopeStoreId,
+                lastScopeKnown, lastScopeClientStores, null);
+    }
+
     /** Pre-20.2 arity — no client-stores fingerprint. */
     public UserSyncState(String deviceId, UUID userId, String tenantId, Instant lastPushAt, Instant lastPullAt,
                          Instant updatedAt, boolean lastScopeRestricted, UUID lastScopeStoreId,

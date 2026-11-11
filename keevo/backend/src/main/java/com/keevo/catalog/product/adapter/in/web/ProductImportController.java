@@ -2,6 +2,8 @@ package com.keevo.catalog.product.adapter.in.web;
 
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.security.CurrentActor;
+import com.keevo.shared.infrastructure.security.PurchasePriceVisibility;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.adapter.in.web.dto.CsvColumnMappingRequestDto;
@@ -52,12 +54,25 @@ public class ProductImportController {
     private final CreateDraftProductUseCase   draftUseCase;
     private final GenerateCsvTemplateUseCase  templateUseCase;
     private final ObjectMapper                objectMapper;
+    private final PurchasePriceVisibility     purchasePrices; // Story 16.13 (reprise, D2)
 
+    /** Without the purchase-price policy wiring: only an OWNER sees purchase prices (fail closed). */
     public ProductImportController(
             ImportCsvProductsUseCase importUseCase,
             CreateDraftProductUseCase draftUseCase,
             GenerateCsvTemplateUseCase templateUseCase,
             ObjectMapper objectMapper) {
+        this(importUseCase, draftUseCase, templateUseCase, objectMapper, PurchasePriceVisibility.withoutRoleMapping());
+    }
+
+    @Autowired
+    public ProductImportController(
+            ImportCsvProductsUseCase importUseCase,
+            CreateDraftProductUseCase draftUseCase,
+            GenerateCsvTemplateUseCase templateUseCase,
+            ObjectMapper objectMapper,
+            PurchasePriceVisibility purchasePrices) {
+        this.purchasePrices     = purchasePrices;
         this.importUseCase      = importUseCase;
         this.draftUseCase       = draftUseCase;
         this.templateUseCase    = templateUseCase;
@@ -181,7 +196,8 @@ public class ProductImportController {
 
         var saved = draftUseCase.execute(command);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(saved)));
+                .body(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(saved)
+                        .forReader(purchasePrices.currentActorCanView())));
     }
 
     // ── Private helpers ─────────────────────────────────────────────────────── 

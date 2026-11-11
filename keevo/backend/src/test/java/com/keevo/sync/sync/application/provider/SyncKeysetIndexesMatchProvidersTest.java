@@ -147,7 +147,8 @@ class SyncKeysetIndexesMatchProvidersTest {
                     .endsWith(" ORDER BY " + p.cursor() + ", CAST(id AS text)");
             if (sql.contains(":scopeStoreId") || sql.contains(":scopeActorId")) scoped++;
         }
-        // stockMovements, sales, dayClosures, inventorySessions, inventoryCounts, employees, reports, stockTransfers
-        assertThat(scoped).as("providers filtered for an employee").isEqualTo(8);
+        // stockMovements, sales, dayClosures, inventorySessions, inventoryCounts, employees, reports, stockTransfers,
+        // stockLevels (Story 16.13 reprise, D1)
+        assertThat(scoped).as("providers filtered for an employee").isEqualTo(9);
     }
 }

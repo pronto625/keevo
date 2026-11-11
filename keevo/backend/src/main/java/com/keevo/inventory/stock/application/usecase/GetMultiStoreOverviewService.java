@@ -25,6 +25,10 @@ public class GetMultiStoreOverviewService implements GetMultiStoreOverviewUseCas
     @Override
     @Transactional(readOnly = true)
     public List<StoreStockSummary> execute(GetMultiStoreOverviewQuery query) {
-        return repo.getStoreOverviews();
+        // Story 16.13 (reprise): a member without a store reads nothing — no query at all
+        if (query.scope().excludesEveryStore()) {
+            return List.of();
+        }
+        return repo.getStoreOverviews(query.scope().onlyStoreId());
     }
 }

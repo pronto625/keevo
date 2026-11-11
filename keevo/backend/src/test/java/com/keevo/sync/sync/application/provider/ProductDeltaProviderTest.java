@@ -52,12 +52,15 @@ class ProductDeltaProviderTest {
                 Timestamp.from(since), Timestamp.from(Instant.now())};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var result = provider.queryDelta(since);
+        var result = provider.queryDeltaPage(since, null, 1000,
+                com.keevo.shared.application.port.sync.PullScope.UNRESTRICTED).rows();
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("name", "TestProduct");
         assertThat(result.get(0)).containsEntry("price", 5000);
         assertThat(result.get(0)).containsEntry("buyPrice", 3000);
+        assertThat(result.get(0)).containsEntry("transportCost", 100);
+        assertThat(result.get(0)).containsEntry("purchasePriceHidden", false);
         verify(query).setParameter("since", Timestamp.from(since));
     }
 
@@ -87,7 +90,8 @@ class ProductDeltaProviderTest {
                 true, "DRAFT", 5, now, now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var result = provider.queryDelta(Instant.EPOCH);
+        var result = provider.queryDeltaPage(Instant.EPOCH, null, 1000,
+                com.keevo.shared.application.port.sync.PullScope.UNRESTRICTED).rows();
 
         var map = result.get(0);
         assertThat(map.get("id")).isEqualTo(id.toString());
@@ -137,5 +141,41 @@ class ProductDeltaProviderTest {
                 .containsEntry("mergedIntoId", target.toString());
         assertThat(result.get(1)).containsEntry("barcode", null).containsEntry("mergedIntoId", null)
                 .containsEntry("priceManual", false);
+    }
+
+    // ── Story 16.13 (reprise, D2) — purchase prices only with PURCHASE_PRICE_VIEW ──
+
+    private List<java.util.Map<String, Object>> pullAs(com.keevo.shared.application.port.sync.PullScope scope) {
+        when(em.createNativeQuery(anyString())).thenReturn(query);
+        when(query.setParameter(anyString(), any())).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
+        Object[] row = {UUID.randomUUID(), "Riz", 5000, 3000, 100, "SKU001", null, null, null, false, "ACTIVE", 10,
+                Timestamp.from(Instant.now()), Timestamp.from(Instant.now())};
+        when(query.getResultList()).thenReturn(Collections.singletonList(row));
+        return provider.queryDeltaPage(Instant.EPOCH, null, 1000, scope).rows();
+    }
+
+    @Test
+    void employeeOrViewer_withoutPermission_getsZeroAndHiddenFlag() {
+        var employee = com.keevo.shared.application.port.sync.PullScope.employee(UUID.randomUUID(), UUID.randomUUID())
+                .withPermissions(java.util.Set.of("INVOICE_VIEW"));
+        var row = pullAs(employee).get(0);
+        assertThat(row).containsEntry("buyPrice", 0).containsEntry("transportCost", 0)
+                .containsEntry("purchasePriceHidden", true).containsEntry("price", 5000);
+    }
+
+    @Test
+    void manager_withPermission_getsRealPrices() {
+        var manager = com.keevo.shared.application.port.sync.PullScope.employee(UUID.randomUUID(), UUID.randomUUID())
+                .withPermissions(java.util.Set.of("PURCHASE_PRICE_VIEW"));
+        var row = pullAs(manager).get(0);
+        assertThat(row).containsEntry("buyPrice", 3000).containsEntry("transportCost", 100)
+                .containsEntry("purchasePriceHidden", false);
+    }
+
+    @Test
+    void legacyUnscopedCall_failsClosed() {
+        var row = pullAs(null).get(0);
+        assertThat(row).containsEntry("buyPrice", 0).containsEntry("purchasePriceHidden", true);
     }
 }

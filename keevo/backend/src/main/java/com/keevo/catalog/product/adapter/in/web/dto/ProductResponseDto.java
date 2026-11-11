@@ -36,6 +36,22 @@ public record ProductResponseDto(
         @JsonInclude(JsonInclude.Include.NON_NULL) Boolean restored
 ) {
     /**
+     * Story 16.13 (reprise, D2) — the same payload for a reader who may not see purchase prices
+     * ({@code PurchasePriceVisibility}): {@code buyPrice} and {@code transportCost} are {@code null} (additive for V1
+     * 2.0.1, whose DTO reads a null / missing price as 0); every other field unchanged.
+     */
+    public ProductResponseDto withoutPurchasePrices() {
+        return new ProductResponseDto(id, name, description, sku, categoryId, price, null, null, stockQuantity,
+                archived, status, minimumThreshold, createdAt, updatedAt, trackStock, barcode, productKey,
+                priceManual, mergedIntoId, restored);
+    }
+
+    /** {@link #withoutPurchasePrices()} unless {@code purchasePriceVisible}. */
+    public ProductResponseDto forReader(boolean purchasePriceVisible) {
+        return purchasePriceVisible ? this : withoutPurchasePrices();
+    }
+
+    /**
      * Factory method to create DTO from domain entity
      */
     public static ProductResponseDto fromDomain(Product product) {

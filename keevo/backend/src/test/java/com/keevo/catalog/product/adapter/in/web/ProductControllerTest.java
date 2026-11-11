@@ -74,8 +74,17 @@ class ProductControllerTest {
     @Mock
     private com.keevo.crm.api.SupplierQueryPort supplierQueryPort;
 
+    /** Story 16.13 (reprise): the policy itself is PurchasePriceVisibilityTest's; here every reader sees prices. */
+    @Mock
+    private com.keevo.shared.infrastructure.security.PurchasePriceVisibility purchasePrices;
+
     @InjectMocks
     private ProductController productController;
+
+    @org.junit.jupiter.api.BeforeEach
+    void purchasePricesVisible() {
+        org.mockito.Mockito.lenient().when(purchasePrices.currentActorCanView()).thenReturn(true);
+    }
 
     private MockMvc mockMvc;
     private Product sampleProduct;

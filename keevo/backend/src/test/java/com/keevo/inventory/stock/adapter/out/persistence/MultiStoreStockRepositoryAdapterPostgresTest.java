@@ -136,7 +136,7 @@ class MultiStoreStockRepositoryAdapterPostgresTest {
     @Test
     // J29 (device test): never-stocked products made the Catalogue badge « 9+ » for good.
     void overview_lowStockCount_onlyStockedProducts_negativeIncluded_excludesArchived() {
-        List<StoreStockSummary> overviews = adapter.getStoreOverviews();
+        List<StoreStockSummary> overviews = adapter.getStoreOverviews(null);
 
         StoreStockSummary boutique = overviews.stream().filter(o -> o.storeId().equals(store)).findFirst().orElseThrow();
         assertThat(boutique.productCount()).isEqualTo(2);     // stocked + negative (archived excluded)
@@ -157,10 +157,60 @@ class MultiStoreStockRepositoryAdapterPostgresTest {
         assertThat(find(page, untracked)).isNull();
         assertThat(page.getTotalElements()).isEqualTo(3);
 
-        StoreStockSummary boutique = adapter.getStoreOverviews().stream()
+        StoreStockSummary boutique = adapter.getStoreOverviews(null).stream()
                 .filter(o -> o.storeId().equals(store)).findFirst().orElseThrow();
         assertThat(boutique.productCount()).isEqualTo(2);
         assertThat(boutique.lowStockCount()).isEqualTo(1);
         assertThat(boutique.totalValueXaf()).isEqualTo(10 * 100 + (-1) * 300);
+    }
+
+    // ── Story 16.13 (reprise 10/11/2026) ─────────────────────────────────────────────────────────────
+
+    @Test
+    void overview_storeFilter_returnsOnlyThatStore_unknownStoreNothing() {
+        List<StoreStockSummary> only = adapter.getStoreOverviews(store);
+        assertThat(only).extracting(StoreStockSummary::storeId).containsExactly(store);
+        assertThat(only.get(0).productCount()).isEqualTo(2);
+        assertThat(only.get(0).lowStockCount()).isEqualTo(1);
+        assertThat(only.get(0).totalValueXaf()).isEqualTo(10 * 100 + (-1) * 300);
+        assertThat(adapter.getStoreOverviews(UUID.randomUUID())).isEmpty(); // e.g. another tenant's store
+    }
+
+    @Test
+    void overview_storeWithoutAnyLevel_isListedAtZero() {
+        UUID empty = UUID.randomUUID();
+        jdbc.update("INSERT INTO " + SCHEMA + ".stores VALUES (?, 'Vide', 'STORE', true, now())", empty);
+        StoreStockSummary s = adapter.getStoreOverviews(null).stream()
+                .filter(o -> o.storeId().equals(empty)).findFirst().orElseThrow();
+        assertThat(s.productCount()).isZero();
+        assertThat(s.totalValueXaf()).isZero();
+        assertThat(s.lowStockCount()).isZero();
+    }
+
+    @Test
+    void overview_valueSummedIn64Bits() {
+        UUID costly = UUID.randomUUID();
+        jdbc.update("INSERT INTO " + SCHEMA + ".products VALUES (?, 'Groupe électrogène', 2000000, false, 0, true)",
+                costly);
+        level(costly, otherStore, 2000); // 2 000 × 2 000 000 = 4e9 > 2^31
+        StoreStockSummary entrepot = adapter.getStoreOverviews(otherStore).get(0);
+        assertThat(entrepot.totalValueXaf()).isEqualTo(4_000_000_000L + 7L * 200);
+    }
+
+    @Test
+    void detail_pagePastTheEnd_keepsTheRealTotal() {
+        Page<StoreProductStockEntry> page = adapter.getStoreStockDetail(store, false, false, PageRequest.of(5, 2));
+        assertThat(page.getContent()).isEmpty();
+        assertThat(page.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    void availability_storeFilter_onlyThatStore() {
+        assertThat(adapter.getProductAvailability(rowless, null)).hasSize(2);
+        var only = adapter.getProductAvailability(rowless, otherStore);
+        assertThat(only).hasSize(1);
+        assertThat(only.get(0).storeId()).isEqualTo(otherStore);
+        assertThat(only.get(0).quantity()).isEqualTo(7);
+        assertThat(adapter.getProductAvailability(rowless, UUID.randomUUID())).isEmpty();
     }
 }

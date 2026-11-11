@@ -11,6 +11,8 @@ import com.keevo.shared.event.catalog.product.DraftProductValidatedEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.security.PurchasePriceVisibility;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.capability.entitlement.PlanLimitCheck;
 import com.keevo.shared.capability.entitlement.TenantPlanQuery;
@@ -22,6 +24,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -43,6 +46,7 @@ public class UpdateProductUseCase {
     private final PlanLimitCheck              planLimit;
     private final TransactionLockPort         transactionLock;
     private final SetProductStockTrackingUseCase stockTracking; // Story 17.12
+    private final PurchasePriceVisibility purchasePrices;       // Story 16.13 (reprise, D2)
 
     public UpdateProductUseCase(ProductRepository productRepository,
                                 ApplicationEventPublisher eventPublisher,
@@ -52,6 +56,21 @@ public class UpdateProductUseCase {
                                 PlanLimitCheck planLimit,
                                 TransactionLockPort transactionLock,
                                 SetProductStockTrackingUseCase stockTracking) {
+        this(productRepository, eventPublisher, objectMapper, productCountPort, tenantPlanQuery, planLimit,
+                transactionLock, stockTracking, PurchasePriceVisibility.withoutRoleMapping());
+    }
+
+    @Autowired
+    public UpdateProductUseCase(ProductRepository productRepository,
+                                ApplicationEventPublisher eventPublisher,
+                                ObjectMapper objectMapper,
+                                ProductCountPort productCountPort,
+                                TenantPlanQuery tenantPlanQuery,
+                                PlanLimitCheck planLimit,
+                                TransactionLockPort transactionLock,
+                                SetProductStockTrackingUseCase stockTracking,
+                                PurchasePriceVisibility purchasePrices) {
+        this.purchasePrices    = purchasePrices;
         this.stockTracking     = stockTracking;
         this.productRepository = productRepository;
         this.eventPublisher    = eventPublisher;
@@ -95,6 +114,17 @@ public class UpdateProductUseCase {
         // v1s-12-10: the 10-arg constructor defaulting actorRole to "OWNER" was removed
         // (fail open — any caller skipped the draft guard). Callers pass the real role.
 
+        /** Story 16.13 (reprise) — the same edit without purchase price nor transport cost (both unchanged). */
+        public UpdateProductDto withoutPurchasePrices() {
+            return new UpdateProductDto(id, name, description, sku, categoryId, price, null, null, stockQuantity,
+                    actorId, actorRole, trackStock, barcode);
+        }
+
+        /** Story 16.13 (reprise) — the edit carries no field at all. */
+        public boolean isEmptyEdit() {
+            return onlyTrackStock() && trackStock == null;
+        }
+
         /** Story 17.12 — the edit carries nothing but the stock-tracking setting. */
         public boolean onlyTrackStock() {
             return name == null && description == null && sku == null && categoryId == null && price == null
@@ -111,7 +141,17 @@ public class UpdateProductUseCase {
     }
 
     @Transactional
-    public Product execute(UpdateProductDto dto) {
+    public Product execute(UpdateProductDto request) {
+        // Story 16.13 (reprise, D2): an actor who may not see purchase prices never changes them — its device holds the
+        // masked value (sync 0, REST null) and would otherwise erase the real price; every other field still applies.
+        final UpdateProductDto dto = (request.buyPrice() != null || request.transportCost() != null)
+                && !purchasePrices.canView(request.actorRole() == null ? List.of() : List.of(request.actorRole()))
+                ? request.withoutPurchasePrices() : request;
+        if (dto != request && dto.isEmptyEdit()) {
+            // only the (ignored) purchase price was sent: nothing to write
+            return productRepository.findById(dto.id()).orElseThrow(() -> new DomainException(
+                    ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + dto.id()));
+        }
         // Find existing product
         var existing = productRepository.findById(dto.id())
             .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,

@@ -396,4 +396,49 @@ class UpdateProductUseCaseTest {
                             && "kv_test".equals(u.tenantId())));
         }
     }
+
+    // ── Story 16.13 (reprise, D2): an actor without PURCHASE_PRICE_VIEW never changes purchase prices ─────────
+
+    @Test
+    void employee_update_keeps_the_stored_purchase_price_but_applies_the_rest() {
+        var productId = UUID.randomUUID();
+        var existing = new Product(productId, "Riz 5kg", null, "KEV-RIZ5KG", null,
+                3500, 2800, 150, null, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(existing));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        TenantContext.setCurrentTenant("kv_test01");
+        try {
+            var result = useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                    3700, 0, 0, null, UUID.randomUUID(), "EMPLOYEE"));
+            assertEquals(2800, result.getBuyPriceValue());
+            assertEquals(150, result.getTransportCostValue());
+            assertEquals("3700 XAF", String.valueOf(result.getPrice()));
+
+            var owner = useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                    null, 3000, 100, null, UUID.randomUUID(), "OWNER"));
+            assertEquals(3000, owner.getBuyPriceValue());
+            assertEquals(100, owner.getTransportCostValue());
+
+            var unknownRole = useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null,
+                    null, null, 1, 1, null, UUID.randomUUID(), null));
+            assertEquals(2800, unknownRole.getBuyPriceValue()); // fail closed (stored = existing mock row)
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    @Test
+    void employee_update_with_only_a_purchase_price_writes_nothing() {
+        var productId = UUID.randomUUID();
+        var existing = new Product(productId, "Riz 5kg", null, "KEV-RIZ5KG", null,
+                3500, 2800, 150, null, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(existing));
+
+        var result = useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                null, 0, 0, null, UUID.randomUUID(), "VIEWER"));
+
+        assertEquals(2800, result.getBuyPriceValue());
+        verify(productRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
 }

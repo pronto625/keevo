@@ -482,6 +482,37 @@ class AiToolsFullContextTest extends FullContextIntegrationTest {
         as(schema, employee1);
         assertThat(ok("search_products", "{\"search\":\"riz\"}").path("products").get(0).path("purchasePrice")
                 .isNull()).isTrue();
+        // Story 16.13 (reprise, D2): the MANAGER (Bref « admin ») sees purchase prices too — same policy as REST
+        as(schema, managerB);
+        assertThat(ok("search_products", "{\"search\":\"riz\"}").path("products").get(0).path("purchasePrice")
+                .asInt()).isEqualTo(600);
+    }
+
+    @Test
+    @DisplayName("16.13 reprise: search_products stock = real stock levels, every store for the owner, own store for a member")
+    void productSearchStockScope() throws Exception {
+        UUID riz = UUID.randomUUID();
+        jdbc.update("INSERT INTO \"" + schema + "\".products (id, name, sku, status, price, buy_price, stock_quantity) "
+                + "VALUES (?, 'Riz brisé', 'KEV-RIZ010', 'ACTIVE', 1000, 600, 999)", riz); // 999: legacy column
+        jdbc.update("INSERT INTO \"" + schema + "\".stock_levels (product_id, store_id, quantity) VALUES (?, ?, 4), "
+                + "(?, ?, 6)", riz, storeA, riz, storeB);
+        as(schema, owner);
+        assertThat(ok("search_products", "{\"search\":\"brisé\"}").path("products").get(0).path("stock").asInt())
+                .isEqualTo(10);
+        as(schema, employee1);
+        assertThat(ok("search_products", "{\"search\":\"brisé\"}").path("products").get(0).path("stock").asInt())
+                .isEqualTo(4);
+        as(schema, managerB);
+        assertThat(ok("search_products", "{\"search\":\"brisé\"}").path("products").get(0).path("stock").asInt())
+                .isEqualTo(6);
+        // a member without a store sees no stock at all; an untracked product never shows a stock
+        as(schema, new Member(UUID.randomUUID(), "EMPLOYEE", null, null));
+        assertThat(ok("search_products", "{\"search\":\"brisé\"}").path("products").get(0).path("stock").isNull())
+                .isTrue();
+        jdbc.update("UPDATE \"" + schema + "\".products SET track_stock = false WHERE id = ?", riz);
+        as(schema, owner);
+        assertThat(ok("search_products", "{\"search\":\"brisé\"}").path("products").get(0).path("stock").isNull())
+                .isTrue();
     }
 
     @Test

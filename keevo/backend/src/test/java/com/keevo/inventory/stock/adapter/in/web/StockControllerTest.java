@@ -63,6 +63,8 @@ class StockControllerTest {
     @Mock private SetStockThresholdUseCase setStockThresholdUseCase;
     @Mock private GetStockMovementHistoryUseCase getStockMovementHistoryUseCase;
 
+    @Mock private com.keevo.shared.infrastructure.security.PurchasePriceVisibility purchasePrices; // 16.13 reprise
+
     @InjectMocks private StockController stockController;
 
     private MockMvc mockMvc;
@@ -82,7 +84,8 @@ class StockControllerTest {
 
         // Wire SecurityContext so actorIdFromContext() works
         SecurityContextHolder.getContext().setAuthentication(
-            new UsernamePasswordAuthenticationToken(actorId, null, List.of()));
+            new UsernamePasswordAuthenticationToken(actorId, null, List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
+        org.mockito.Mockito.lenient().when(purchasePrices.currentActorCanView()).thenReturn(true);
     }
 
     private void authenticateAsEmployee(UUID storeId) {
@@ -119,7 +122,7 @@ class StockControllerTest {
     void get_current_stock_should_return_200() throws Exception {
         var snapshot = new GetCurrentStockUseCase.StockSnapshot(
             CatalogProductApiTestSupport.view(sampleProduct()), List.of(sampleLevel()));
-        when(getCurrentStockUseCase.execute(productId)).thenReturn(snapshot);
+        when(getCurrentStockUseCase.execute(eq(productId), any())).thenReturn(snapshot);
 
         mockMvc.perform(get("/api/v1/products/{id}/stock", productId))
             .andExpect(status().isOk());
@@ -287,5 +290,45 @@ class StockControllerTest {
             .andExpect(status().isForbidden());
 
         verify(adjustStockUseCase, never()).execute(any(), any(), any(), anyInt(), any(), any());
+    }
+
+    // ── Story 16.13 (reprise 10/11/2026) — store scope of the reads, masked purchase price ──────────────
+
+    @Test
+    void get_current_stock_member_passesOwnStoreScope() throws Exception {
+        authenticateAsEmployee(storeId);
+        var snapshot = new GetCurrentStockUseCase.StockSnapshot(
+            CatalogProductApiTestSupport.view(sampleProduct()), List.of(sampleLevel()));
+        when(getCurrentStockUseCase.execute(productId,
+                com.keevo.inventory.stock.domain.model.StockReadScope.store(storeId))).thenReturn(snapshot);
+
+        mockMvc.perform(get("/api/v1/products/{id}/stock", productId)).andExpect(status().isOk());
+    }
+
+    @Test
+    void get_history_member_otherStore_403_ownStoreByDefault() throws Exception {
+        authenticateAsEmployee(storeId);
+        mockMvc.perform(get("/api/v1/products/{id}/stock/history", productId)
+                .param("storeId", UUID.randomUUID().toString()))
+            .andExpect(status().isForbidden());
+
+        var page = new PageImpl<>(List.of(sampleMovement(MovementType.STOCK_ENTRY)), PageRequest.of(0, 20), 1);
+        when(getStockMovementHistoryUseCase.execute(any(), any(), any(), any(), eq(storeId), anyInt(), anyInt()))
+            .thenReturn(page);
+        mockMvc.perform(get("/api/v1/products/{id}/stock/history", productId)).andExpect(status().isOk());
+    }
+
+    @Test
+    void set_threshold_withoutPermission_masksPurchasePrice() throws Exception {
+        when(purchasePrices.currentActorCanView()).thenReturn(false);
+        when(setStockThresholdUseCase.execute(eq(productId), anyInt(), any()))
+            .thenReturn(CatalogProductApiTestSupport.view(sampleProduct()));
+
+        mockMvc.perform(patch("/api/v1/products/{id}/threshold", productId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{ \"minimumThreshold\": 5 }"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.buyPrice").value(org.hamcrest.Matchers.nullValue()))
+            .andExpect(jsonPath("$.data.price").value(1000));
     }
 }

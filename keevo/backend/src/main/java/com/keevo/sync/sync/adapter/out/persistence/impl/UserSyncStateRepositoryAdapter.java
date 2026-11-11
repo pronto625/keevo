@@ -25,8 +25,8 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
 
     private static final String FIND_BY_DEVICE =
             "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at, "
-                    + "last_scope_restricted, last_scope_store_id, last_scope_known, last_scope_client_stores "
-                    + "FROM public.user_sync_state WHERE device_id = ?";
+                    + "last_scope_restricted, last_scope_store_id, last_scope_known, last_scope_client_stores, "
+                    + "last_scope_visibility FROM public.user_sync_state WHERE device_id = ?";
 
     /**
      * Story 12.12 — closes the TOCTOU between the controller's ownership check and the write:
@@ -53,13 +53,17 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
 
     private static final String FIND_ALL_BY_TENANT =
             "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at, "
-                    + "last_scope_restricted, last_scope_store_id, last_scope_known, last_scope_client_stores "
-                    + "FROM public.user_sync_state WHERE tenant_id = ? ORDER BY updated_at DESC";
+                    + "last_scope_restricted, last_scope_store_id, last_scope_known, last_scope_client_stores, "
+                    + "last_scope_visibility FROM public.user_sync_state WHERE tenant_id = ? ORDER BY updated_at DESC";
 
     private static final String REMEMBER_PULL_SCOPE =
             "UPDATE public.user_sync_state SET last_scope_restricted = ?, last_scope_store_id = ?, "
                     + "last_scope_known = TRUE, last_scope_client_stores = ? "
                     + "WHERE device_id = ? AND user_id = ?";
+
+    private static final String REMEMBER_PULL_VISIBILITY =
+            "UPDATE public.user_sync_state SET last_scope_visibility = ? WHERE device_id = ? AND user_id = ? "
+                    + "AND last_scope_visibility IS DISTINCT FROM ?";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -95,6 +99,11 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
     }
 
     @Override
+    public boolean rememberPullVisibility(String deviceId, UUID userId, String visibility) {
+        return jdbcTemplate.update(REMEMBER_PULL_VISIBILITY, visibility, deviceId, userId, visibility) > 0;
+    }
+
+    @Override
     public List<UserSyncState> findAllByTenantId(String tenantId) {
         return jdbcTemplate.query(FIND_ALL_BY_TENANT, rowMapper(), tenantId);
     }
@@ -111,7 +120,8 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
                 rs.getString("last_scope_store_id") != null
                         ? UUID.fromString(rs.getString("last_scope_store_id")) : null,
                 rs.getBoolean("last_scope_known"),
-                rs.getString("last_scope_client_stores"));
+                rs.getString("last_scope_client_stores"),
+                rs.getString("last_scope_visibility"));
     }
 
     private static Instant toInstant(ResultSet rs, String column) throws SQLException {

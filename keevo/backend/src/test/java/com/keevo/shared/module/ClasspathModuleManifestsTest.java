@@ -123,8 +123,13 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("client-portal").displayName()).isEqualTo("Portail client");
         assertThat(byId.get("client-portal").free()).isTrue();
         assertThat(byId.get("client-portal").ownerCanToggle()).isTrue();
+        // 16.13 reprise (2026-11-10): catalog — purchase prices for OWNER and MANAGER only
+        assertThat(byId.get("catalog").permissions()).containsExactly("PURCHASE_PRICE_VIEW");
+        assertThat(byId.get("catalog").rolePermissions().get("MANAGER")).containsExactly("PURCHASE_PRICE_VIEW");
+        assertThat(byId.get("catalog").rolePermissions().get("EMPLOYEE")).isEmpty();
+        assertThat(byId.get("catalog").rolePermissions().get("VIEWER")).isEmpty();
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing") && !m.id().equals("expenses")
-                        && !m.id().equals("finance"))
+                        && !m.id().equals("finance") && !m.id().equals("catalog"))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm") && !m.id().equals("catalog"))
                 .allSatisfy(m -> assertThat(m.provides()).isEmpty());

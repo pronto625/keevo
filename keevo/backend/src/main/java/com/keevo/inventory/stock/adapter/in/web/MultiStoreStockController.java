@@ -1,5 +1,6 @@
 package com.keevo.inventory.stock.adapter.in.web;
 
+import com.keevo.inventory.stock.adapter.in.StockReadScopes;
 import com.keevo.inventory.stock.adapter.in.web.dto.CrossStoreAvailabilityResponseDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.StoreProductStockEntryDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.StoreStockSummaryDto;
@@ -30,7 +31,9 @@ import java.util.UUID;
  * GET /api/v1/stock/products/{productId}/availability                → cross-store availability
  * </pre>
  *
- * Stories 3.2 & 3.4.
+ * Stories 3.2 & 3.4. Story 16.13 (reprise 10/11/2026, D1): a store member (MANAGER, EMPLOYEE, VIEWER) only reads
+ * their own store — overview and availability limited to it, another store's detail refused (403 « Vous ne pouvez
+ * consulter que le stock de votre boutique. »); the OWNER reads every store.
  */
 @Tag(name = "Multi-Store Stock", description = "Centralized multi-store stock overview")
 @RestController
@@ -55,7 +58,7 @@ public class MultiStoreStockController {
     @GetMapping("/overview")
     public ResponseEntity<ApiResponseWrapper<List<StoreStockSummaryDto>>> getOverview() {
         List<StoreStockSummaryDto> dtos = overviewUseCase
-                .execute(new GetMultiStoreOverviewQuery())
+                .execute(new GetMultiStoreOverviewQuery(StockReadScopes.current()))
                 .stream()
                 .map(StoreStockSummaryDto::from)
                 .toList();
@@ -75,7 +78,8 @@ public class MultiStoreStockController {
         if (size < 1 || size > 100) size = 25; // safety clamp
 
         Page<StoreProductStockEntryDto> result = detailUseCase
-                .execute(new GetStoreStockDetailQuery(storeId, page, size, sortLowFirst, lowOnly))
+                .execute(new GetStoreStockDetailQuery(storeId, page, size, sortLowFirst, lowOnly,
+                        StockReadScopes.current()))
                 .map(StoreProductStockEntryDto::from);
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(result));
@@ -86,7 +90,7 @@ public class MultiStoreStockController {
     @GetMapping("/products/{productId}/availability")
     public ResponseEntity<ApiResponseWrapper<CrossStoreAvailabilityResponseDto>> getProductAvailability(
             @PathVariable UUID productId) {
-        var result = availabilityUseCase.execute(new GetCrossStoreAvailabilityQuery(productId));
+        var result = availabilityUseCase.execute(new GetCrossStoreAvailabilityQuery(productId, StockReadScopes.current()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(CrossStoreAvailabilityResponseDto.from(result)));
     }
 }

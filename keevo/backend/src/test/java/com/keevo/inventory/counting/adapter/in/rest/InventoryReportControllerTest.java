@@ -41,6 +41,7 @@ class InventoryReportControllerTest {
 
     @Mock private GenerateGapReportUseCase generateGapReportUseCase;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.keevo.inventory.counting.domain.port.out.InventorySessionRepository sessionRepository;
 
     private final InventoryReportTextFormatter textFormatter = new InventoryReportTextFormatter();
     private MockMvc mockMvc;
@@ -51,7 +52,7 @@ class InventoryReportControllerTest {
     @BeforeEach
     void setUp() {
         var controller = new InventoryReportController(
-                generateGapReportUseCase, textFormatter, eventPublisher);
+                generateGapReportUseCase, textFormatter, eventPublisher, sessionRepository);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -110,10 +111,40 @@ class InventoryReportControllerTest {
         mockMvc.perform(get("/api/v1/inventory/sessions/{sessionId}/gap-report", sessionId))
                 .andExpect(status().isOk());
 
-        // EMPLOYEE
-        authenticateAs("EMPLOYEE");
+        // EMPLOYEE of the session's store (Story 16.13 reprise: a member only reads its own store's sessions)
+        sessionInReportStore();
+        authenticateAsMember("EMPLOYEE", reportStore);
         mockMvc.perform(get("/api/v1/inventory/sessions/{sessionId}/gap-report", sessionId))
                 .andExpect(status().isOk());
+    }
+
+    private void sessionInReportStore() {
+        var session = org.mockito.Mockito.mock(com.keevo.inventory.counting.domain.model.InventorySession.class);
+        org.mockito.Mockito.lenient().when(session.getStoreId()).thenReturn(reportStore);
+        org.mockito.Mockito.lenient().when(sessionRepository.findById(sessionId))
+                .thenReturn(java.util.Optional.of(session));
+    }
+
+    @Test
+    void getGapReport_memberOfAnotherStore_403_beforeTheReportIsComputed() throws Exception {
+        sessionInReportStore();
+        for (String role : List.of("EMPLOYEE", "MANAGER", "VIEWER")) {
+            authenticateAsMember(role, UUID.randomUUID());
+            mockMvc.perform(get("/api/v1/inventory/sessions/{sessionId}/gap-report", sessionId))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/v1/inventory/sessions/{sessionId}/gap-report/text", sessionId))
+                    .andExpect(status().isForbidden());
+        }
+        org.mockito.Mockito.verifyNoInteractions(generateGapReportUseCase);
+    }
+
+    private final UUID reportStore = UUID.randomUUID();
+
+    private void authenticateAsMember(String role, UUID store) {
+        var auth = new UsernamePasswordAuthenticationToken(actorId.toString(), null,
+                List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        auth.setDetails(new com.keevo.shared.infrastructure.security.AuthDetails("Awa", store));
+        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     // ── Helpers ──
@@ -127,7 +158,7 @@ class InventoryReportControllerTest {
                 null, null, 10, 5, -5, 5000, 25000);
 
         return new InventoryGapReport(
-                sessionId, UUID.randomUUID(), "Boutique Centrale",
+                sessionId, reportStore, "Boutique Centrale",
                 InventoryScope.FULL,
                 new InventoryGapSummary(2, 1, 0, 1, 0, 25000),
                 List.of(concordant), List.of(), List.of(shortage),

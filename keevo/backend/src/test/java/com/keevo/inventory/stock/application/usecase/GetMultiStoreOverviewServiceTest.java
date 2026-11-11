@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.keevo.inventory.stock.domain.model.StockReadScope;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,9 +36,9 @@ class GetMultiStoreOverviewServiceTest {
     void execute_shouldReturnAllActiveStoresSummaries() {
         var summary1 = new StoreStockSummary(UUID.randomUUID(), "Boutique A", StoreType.STORE, 5, 100000L, 1);
         var summary2 = new StoreStockSummary(UUID.randomUUID(), "Entrepôt", StoreType.WAREHOUSE, 20, 500000L, 0);
-        when(repo.getStoreOverviews()).thenReturn(List.of(summary1, summary2));
+        when(repo.getStoreOverviews(null)).thenReturn(List.of(summary1, summary2));
 
-        var result = service.execute(new GetMultiStoreOverviewQuery());
+        var result = service.execute(new GetMultiStoreOverviewQuery(StockReadScope.ALL));
 
         assertThat(result).hasSize(2);
         assertThat(result).containsExactly(summary1, summary2);
@@ -45,19 +46,37 @@ class GetMultiStoreOverviewServiceTest {
 
     @Test
     void execute_shouldReturnEmptyList_whenNoStores() {
-        when(repo.getStoreOverviews()).thenReturn(List.of());
+        when(repo.getStoreOverviews(null)).thenReturn(List.of());
 
-        var result = service.execute(new GetMultiStoreOverviewQuery());
+        var result = service.execute(new GetMultiStoreOverviewQuery(StockReadScope.ALL));
 
         assertThat(result).isEmpty();
     }
 
     @Test
     void execute_shouldDelegateToRepository() {
-        when(repo.getStoreOverviews()).thenReturn(List.of());
+        when(repo.getStoreOverviews(null)).thenReturn(List.of());
 
-        service.execute(new GetMultiStoreOverviewQuery());
+        service.execute(new GetMultiStoreOverviewQuery(StockReadScope.ALL));
 
-        verify(repo).getStoreOverviews();
+        verify(repo).getStoreOverviews(null);
+    }
+
+    // ── Story 16.13 (reprise) ──
+
+    @org.junit.jupiter.api.Test
+    void member_readsOnlyOwnStore_inSql() {
+        java.util.UUID own = java.util.UUID.randomUUID();
+        when(repo.getStoreOverviews(own)).thenReturn(List.of());
+        service.execute(new GetMultiStoreOverviewQuery(StockReadScope.store(own)));
+        verify(repo).getStoreOverviews(own);
+    }
+
+    @org.junit.jupiter.api.Test
+    void memberWithoutStore_orNullScope_readsNothing_noQuery() {
+        org.assertj.core.api.Assertions.assertThat(
+                service.execute(new GetMultiStoreOverviewQuery(StockReadScope.store(null)))).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(service.execute(new GetMultiStoreOverviewQuery(null))).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(repo);
     }
 }

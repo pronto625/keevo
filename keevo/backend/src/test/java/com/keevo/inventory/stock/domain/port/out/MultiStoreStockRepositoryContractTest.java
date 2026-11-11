@@ -20,7 +20,7 @@ class MultiStoreStockRepositoryContractTest {
 
     @Test
     void repository_shouldDefineGetStoreOverviews() throws NoSuchMethodException {
-        Method method = MultiStoreStockRepository.class.getMethod("getStoreOverviews");
+        Method method = MultiStoreStockRepository.class.getMethod("getStoreOverviews", UUID.class);
         assertThat(method.getReturnType()).isEqualTo(List.class);
     }
 

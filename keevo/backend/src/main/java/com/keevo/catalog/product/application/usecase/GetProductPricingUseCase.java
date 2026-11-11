@@ -32,19 +32,25 @@ public class GetProductPricingUseCase {
     }
 
     /**
-     * Pricing result DTO for the REST endpoint and frontend.
+     * Pricing result DTO for the REST endpoint and frontend. Story 16.13 (reprise, D2): every field derived from the
+     * purchase price is {@code null} for a reader without {@code PURCHASE_PRICE_VIEW} ({@link #withoutCosts()}).
      */
     public record ProductPricingDto(
             UUID productId,
             int sellingPrice,
-            int buyPrice,
-            int transportCostValue,
-            int totalCost,
-            int grossMarginXaf,
-            double marginPercentage,
-            boolean isLoss,
+            Integer buyPrice,
+            Integer transportCostValue,
+            Integer totalCost,
+            Integer grossMarginXaf,
+            Double marginPercentage,
+            Boolean isLoss,
             MarginThreshold marginThreshold
-    ) {}
+    ) {
+        /** The selling price only: purchase price, transport cost, total cost and margins hidden (null). */
+        public ProductPricingDto withoutCosts() {
+            return new ProductPricingDto(productId, sellingPrice, null, null, null, null, null, null, null);
+        }
+    }
 
     /**
      * Execute the pricing calculation.

@@ -44,7 +44,7 @@ class StockLevelDeltaProviderTest {
                 Timestamp.from(Instant.now())};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var result = provider.queryDelta(since);
+        var result = provider.queryDeltaPage(since, null, 1000, com.keevo.shared.application.port.sync.PullScope.UNRESTRICTED).rows();
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("quantity", 10);
         assertThat(result.get(0)).containsEntry("minimumThreshold", 5);
@@ -62,9 +62,15 @@ class StockLevelDeltaProviderTest {
         Object[] row = {id, prodId, null, storeId, 25, 3, Timestamp.from(Instant.now())};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var map = provider.queryDelta(Instant.EPOCH).get(0);
+        var map = provider.queryDeltaPage(Instant.EPOCH, null, 1000, com.keevo.shared.application.port.sync.PullScope.UNRESTRICTED).rows().get(0);
         assertThat(map.get("id")).isEqualTo(id.toString());
         assertThat(map.get("productId")).isEqualTo(prodId.toString());
         assertThat(map.get("storeId")).isEqualTo(storeId.toString());
+    }
+
+    @Test
+    void legacyUnscopedCall_failsClosed_noQuery() {
+        assertThat(provider.queryDelta(Instant.EPOCH)).isEmpty(); // Story 16.13 (reprise): the pull passes its scope
+        verify(em, never()).createNativeQuery(anyString());
     }
 }
