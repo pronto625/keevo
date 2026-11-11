@@ -142,6 +142,8 @@ public class TenantSchemaProvisioner {
             boolean autoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
+                // Story 24.12: no other tenant DDL transaction overlaps this one (deadlocks between parallel creations)
+                TenantDdlLock.acquire(conn);
                 createSchema(conn, schemaName);
                 createTables(conn, schemaName);
                 seedData(conn, schemaName, trialPlan, trialMonths, seedDefaultStore);
@@ -182,9 +184,8 @@ public class TenantSchemaProvisioner {
      */
     public void dropSchemaIfExists(String schemaName) {
         if (!TenantSchema.isValid(schemaName)) return;
-        try (Connection conn = dataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
+        try (Connection conn = dataSource.getConnection()) {
+            dropUnderDdlLock(conn, schemaName);
             log.info("Dropped orphaned tenant schema: {}", schemaName);
         } catch (SQLException e) {
             log.warn("Failed to drop orphaned schema '{}': {}", schemaName, e.getMessage());
@@ -206,13 +207,36 @@ public class TenantSchemaProvisioner {
      */
     public void dropSchemaForDeletion(String schemaName) {
         TenantSchema.validate(schemaName); // IllegalArgumentException (length only, no raw value)
-        try (Connection conn = dataSource.getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
+        try (Connection conn = dataSource.getConnection()) {
+            dropUnderDdlLock(conn, schemaName);
             log.info("Dropped tenant schema for deletion: {}", schemaName);
         } catch (SQLException e) {
             log.error("Failed to drop schema '{}' for deletion: {}", schemaName, e.getMessage(), e);
             throw new RuntimeException("Failed to drop schema: " + schemaName, e);
+        }
+    }
+
+    /**
+     * Story 24.12 — {@code DROP SCHEMA … CASCADE} in its own transaction under the {@link TenantDdlLock} (the drop takes
+     * an {@code AccessExclusiveLock} on every table of the schema, which a concurrent tenant creation scanning the
+     * catalogue would otherwise wait for in a cycle); the connection's auto-commit mode is restored.
+     */
+    private static void dropUnderDdlLock(Connection conn, String schemaName) throws SQLException {
+        boolean autoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try (Statement stmt = conn.createStatement()) {
+            TenantDdlLock.acquire(conn);
+            stmt.execute("DROP SCHEMA IF EXISTS \"" + schemaName + "\" CASCADE");
+            conn.commit();
+        } catch (SQLException | RuntimeException e) {
+            try {
+                conn.rollback();
+            } catch (SQLException | RuntimeException rollbackFailure) {
+                e.addSuppressed(rollbackFailure);
+            }
+            throw e;
+        } finally {
+            conn.setAutoCommit(autoCommit);
         }
     }
 

@@ -63,7 +63,10 @@ import java.util.regex.Pattern;
  *
  * <p>Concurrency: Flyway's lock on the history table serialises concurrent runs on the same (schema, module); each
  * migration runs in its own transaction (PostgreSQL DDL is transactional), so a failed script leaves the previous
- * version in place — the failure reports the highest version applied so far.
+ * version in place — the failure reports the highest version applied so far. Story 24.12: each script's transaction
+ * first takes the cluster-wide {@link com.keevo.shared.infrastructure.persistence.TenantDdlLock}
+ * ({@link TenantDdlLockCallback}): scripts of different schemas no longer overlap (they deadlocked on the catalogue
+ * scan of the foundation scripts when tenants were created in parallel).
  */
 @Component
 public class FlywayModuleMigrations implements ModuleMigrationPort {
@@ -380,6 +383,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
                 .validateMigrationNaming(true)
                 .validateOnMigrate(true) // Story 13.9: an edited applied script fails loudly (checksum mismatch)
                 .outOfOrder(false)       // Story 13.9: a version lower than the applied one is never run late
+                .callbacks(TenantDdlLockCallback.INSTANCE) // Story 24.12: one tenant DDL transaction at a time
                 .load();
         try {
             MigrateResult result = flyway.migrate();
