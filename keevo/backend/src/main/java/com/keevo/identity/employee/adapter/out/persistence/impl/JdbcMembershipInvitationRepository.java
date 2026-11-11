@@ -26,7 +26,8 @@ import java.util.UUID;
  * read-then-write race): the conditional upsert on {@code uq_membership_invitations_tenant_user}, the guarded
  * {@code UPDATE … WHERE status = 'PENDING'}, the {@code FOR UPDATE} of the acceptance. The message cooldown is carried
  * by {@code last_sent_at}, moved only when the previous message is older than the window (the upsert answers whether a
- * message is due).
+ * message is due). Reprise 11/11/2026 — a DECLINED row blocks the renewal only once the person refused
+ * {@link MembershipInvitation#DECLINES_BEFORE_COOLDOWN} times ({@code decline_count}, V82) and less than the cooldown ago.
  */
 @Component
 public class JdbcMembershipInvitationRepository implements MembershipInvitationRepository {
@@ -43,7 +44,8 @@ public class JdbcMembershipInvitationRepository implements MembershipInvitationR
             + "invited_by = EXCLUDED.invited_by, status = 'PENDING', invited_at = EXCLUDED.invited_at, "
             + "expires_at = EXCLUDED.expires_at, responded_at = NULL, "
             + "last_sent_at = CASE WHEN i.last_sent_at < ? THEN EXCLUDED.last_sent_at ELSE i.last_sent_at END "
-            + "WHERE i.status <> 'DECLINED' OR i.responded_at < ? "
+            + "WHERE i.status <> 'DECLINED' OR i.decline_count < " + MembershipInvitation.DECLINES_BEFORE_COOLDOWN
+            + " OR i.responded_at < ? "
             + "RETURNING i.last_sent_at = ? AS due";
     static final String COUNT_SINCE_SQL =
             "SELECT count(*) FROM public.membership_invitations WHERE tenant_id = ? AND invited_at >= ?";
@@ -62,7 +64,10 @@ public class JdbcMembershipInvitationRepository implements MembershipInvitationR
     static final String HAS_ACCEPTED_SQL = "SELECT EXISTS (SELECT 1 FROM public.membership_invitations "
             + "WHERE tenant_id = ? AND user_id = ? AND status = 'ACCEPTED')";
     static final String LOCK_FOR_USER_SQL = PENDING_FOR_USER_BASE + " AND i.id = ? FOR UPDATE OF i";
-    static final String MARK_RESPONDED_SQL = "UPDATE public.membership_invitations SET status = ?, responded_at = ? "
+    /** Story 19.6b reprise 11/11/2026 — a refusal is counted, an acceptance resets the count (V82). */
+    static final String MARK_RESPONDED_SQL = "UPDATE public.membership_invitations SET status = ?, responded_at = ?, "
+            + "decline_count = CASE CAST(? AS varchar) WHEN 'DECLINED' THEN decline_count + 1 "
+            + "WHEN 'ACCEPTED' THEN 0 ELSE decline_count END "
             + "WHERE id = ? AND status = 'PENDING'";
     static final String CANCEL_SQL = "UPDATE public.membership_invitations SET status = 'CANCELLED', responded_at = ? "
             + "WHERE id = ? AND tenant_id = ? AND status = 'PENDING' AND expires_at > ? "
@@ -124,7 +129,7 @@ public class JdbcMembershipInvitationRepository implements MembershipInvitationR
 
     @Override
     public boolean markResponded(UUID id, Status status, Instant now) {
-        return jdbc.update(MARK_RESPONDED_SQL, status.name(), Timestamp.from(now), id) == 1;
+        return jdbc.update(MARK_RESPONDED_SQL, status.name(), Timestamp.from(now), status.name(), id) == 1;
     }
 
     @Override

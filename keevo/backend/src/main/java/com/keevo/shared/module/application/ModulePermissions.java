@@ -144,8 +144,7 @@ public class ModulePermissions implements SmartInitializingSingleton {
         Set<String> declared = mapping().declared();
         Set<String> held = new TreeSet<>();
         for (String permission : grant.permissions()) {
-            if (declared.contains(permission) && !PermissionCatalog.isOwnerReserved(permission)
-                    && (!viewer || permission.endsWith(READ_SUFFIX))) {
+            if (declared.contains(permission) && (!viewer || permission.endsWith(READ_SUFFIX))) {
                 held.add(permission);
             }
         }

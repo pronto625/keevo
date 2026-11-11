@@ -112,8 +112,6 @@ class CustomRoleServiceTest {
                 ErrorCode.VALIDATION_FAILED, CustomRoleService.NAME_INVALID);
         refused(() -> service.create(SCHEMA, OWNER, input("Patron", "OWNER", List.of(), null)),
                 ErrorCode.VALIDATION_FAILED, CustomRoleService.BASE_ROLE_INVALID);
-        refused(() -> service.create(SCHEMA, OWNER, input("Comptable", "MANAGER", List.of("FINANCE_VIEW"), null)),
-                ErrorCode.VALIDATION_FAILED, CustomRoleService.PERMISSION_UNAVAILABLE);
         refused(() -> service.create(SCHEMA, OWNER, input("Facturier", "MANAGER", List.of("INVOICE_VIEW"), null)),
                 ErrorCode.VALIDATION_FAILED, CustomRoleService.PERMISSION_UNAVAILABLE); // invoicing not usable
         refused(() -> service.create(SCHEMA, OWNER, input("Contrôleur", "VIEWER", List.of("EXPENSE_CREATE"), null)),

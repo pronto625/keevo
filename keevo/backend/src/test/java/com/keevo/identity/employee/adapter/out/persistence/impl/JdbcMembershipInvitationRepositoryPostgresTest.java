@@ -109,25 +109,78 @@ class JdbcMembershipInvitationRepositoryPostgresTest extends PostgresIntegration
     }
 
     @Test
-    @DisplayName("upsert after a refusal: silent for 30 days, renewed after; after an acceptance (member removed): "
-            + "renewed")
+    @DisplayName("reprise 11/11/2026 — after ONE refusal the company may invite again at once; after the SECOND one: "
+            + "silent for 30 days, renewed after; an acceptance (member removed since) resets the count")
     void upsert_afterDeclineAndAccept() {
         upsert(invitation(tenant, user, NOW), NOW);
         UUID id = repository.findPendingForUser(user, NOW).get(0).invitation().id();
         assertThat(repository.markResponded(id, Status.DECLINED, NOW)).isTrue();
         assertThat(repository.markResponded(id, Status.ACCEPTED, NOW)).isFalse(); // no longer PENDING
+        assertThat(declineCount()).isEqualTo(1);
 
-        Instant in10Days = NOW.plus(Duration.ofDays(10));
-        assertThat(upsert(invitation(tenant, user, in10Days), in10Days)).isFalse();
-        assertThat(status()).isEqualTo("DECLINED");
-        Instant in31Days = NOW.plus(Duration.ofDays(31));
-        assertThat(upsert(invitation(tenant, user, in31Days), in31Days)).isTrue();
+        Instant in2Hours = NOW.plus(Duration.ofHours(2));
+        assertThat(upsert(invitation(tenant, user, in2Hours), in2Hours)).isFalse(); // renewed, message cooldown 24 h
         assertThat(status()).isEqualTo("PENDING");
+        Instant in2Days = NOW.plus(Duration.ofDays(2));
+        assertThat(upsert(invitation(tenant, user, in2Days), in2Days)).isTrue(); // live pending renewed, 24 h passed
+        assertThat(repository.markResponded(id, Status.DECLINED, in2Days)).isTrue(); // second refusal
+        assertThat(declineCount()).isEqualTo(2);
 
-        repository.markResponded(id, Status.ACCEPTED, in31Days);
+        Instant in12Days = NOW.plus(Duration.ofDays(12));
+        assertThat(upsert(invitation(tenant, user, in12Days), in12Days)).isFalse();
+        assertThat(status()).isEqualTo("DECLINED");
         Instant in33Days = NOW.plus(Duration.ofDays(33));
         assertThat(upsert(invitation(tenant, user, in33Days), in33Days)).isTrue();
         assertThat(status()).isEqualTo("PENDING");
+
+        repository.markResponded(id, Status.ACCEPTED, in33Days);
+        assertThat(declineCount()).isZero();
+        Instant in35Days = NOW.plus(Duration.ofDays(35));
+        assertThat(upsert(invitation(tenant, user, in35Days), in35Days)).isTrue();
+        assertThat(status()).isEqualTo("PENDING");
+        assertThat(repository.markResponded(id, Status.DECLINED, in35Days)).isTrue();
+        Instant in36Days = NOW.plus(Duration.ofDays(36));
+        // first refusal since the acceptance: renewed at once (no message: the last one is not 24 h old)
+        assertThat(upsert(invitation(tenant, user, in36Days), in36Days)).isFalse();
+        assertThat(status()).isEqualTo("PENDING");
+    }
+
+    @Test
+    @DisplayName("reprise 11/11/2026 — once a person refused twice, every later refusal starts a new 30-day wait "
+            + "(the count does not decay; only an acceptance resets it)")
+    void thirdRefusal_waitsAgain() {
+        upsert(invitation(tenant, user, NOW), NOW);
+        UUID id = repository.findPendingForUser(user, NOW).get(0).invitation().id();
+        repository.markResponded(id, Status.DECLINED, NOW);
+        Instant in1Day = NOW.plus(Duration.ofDays(1));
+        upsert(invitation(tenant, user, in1Day), in1Day);
+        repository.markResponded(id, Status.DECLINED, in1Day); // second refusal
+        Instant in32Days = NOW.plus(Duration.ofDays(32));
+        assertThat(upsert(invitation(tenant, user, in32Days), in32Days)).isTrue(); // wait over: renewed
+        assertThat(repository.findPendingForUser(user, in32Days)).hasSize(1);
+        repository.markResponded(id, Status.DECLINED, in32Days); // third refusal
+        assertThat(declineCount()).isEqualTo(3);
+        Instant in33Days = NOW.plus(Duration.ofDays(33));
+        assertThat(upsert(invitation(tenant, user, in33Days), in33Days)).isFalse();
+        assertThat(status()).isEqualTo("DECLINED");
+    }
+
+    @Test
+    @DisplayName("reprise 11/11/2026 — a cancellation neither counts as a refusal nor resets the count")
+    void cancelKeepsDeclineCount() {
+        upsert(invitation(tenant, user, NOW), NOW);
+        UUID id = repository.findPendingForUser(user, NOW).get(0).invitation().id();
+        repository.markResponded(id, Status.DECLINED, NOW);
+        Instant in1Hour = NOW.plus(Duration.ofHours(1));
+        upsert(invitation(tenant, user, in1Hour), in1Hour);
+        assertThat(repository.cancel(id, tenant, null, in1Hour)).isTrue();
+        assertThat(declineCount()).isEqualTo(1);
+    }
+
+    private int declineCount() {
+        Integer count = jdbc.queryForObject("SELECT decline_count FROM public.membership_invitations WHERE tenant_id = ? "
+                + "AND user_id = ?", Integer.class, tenant, user);
+        return count == null ? -1 : count;
     }
 
     @Test

@@ -84,7 +84,8 @@ public class InvitationController {
     }
 
     @Operation(summary = "Decline an invitation (login step)",
-            description = "Story 19.6b — nobody is notified; the same company cannot invite again for 30 days.")
+            description = "Story 19.6b — nobody is notified; after a second refusal the same company cannot invite again for "
+                    + "30 days (reprise 11/11/2026).")
     @ApiResponses({
             @ApiResponse(responseCode = "204", description = "Declined"),
             @ApiResponse(responseCode = "401", description = "TOKEN_EXPIRED or TOKEN_INVALID"),

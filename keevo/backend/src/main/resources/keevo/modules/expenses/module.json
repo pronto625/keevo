@@ -23,7 +23,7 @@
   ],
   "routes": [],
   "rolePermissions": {
-    "MANAGER": ["EXPENSE_VIEW", "EXPENSE_CREATE", "EXPENSE_DELETE"],
+    "MANAGER": [],
     "EMPLOYEE": [],
     "VIEWER": []
   },

@@ -222,7 +222,7 @@ class ExpenseSyncHandlerTest {
                 assertThat(r.status()).as("%s %s", role, o.operationType()).isEqualTo(SyncOperationStatus.REJECTED);
                 assertThat(r.reason()).isEqualTo("FORBIDDEN");
                 assertThat(r.conflictData()).containsEntry("message",
-                        "Les dépenses sont réservées au propriétaire et au gérant.");
+                        "Les dépenses sont réservées au propriétaire : demandez-lui le droit de les gérer.");
             }
         }
         verifyNoInteractions(manage);

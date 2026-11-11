@@ -14,8 +14,9 @@ import org.springframework.stereotype.Component;
  * in the schemas of tenants that use the module, reached through a JDBC adapter — no JPA entity, nothing in
  * {@code public}. The offer (which plans include it) is data: public migration V56.
  *
- * <p>Permissions ({@code rolePermissions}): {@code OWNER} holds all three; {@code MANAGER} views, records, edits and
- * deletes; {@code EMPLOYEE} views, records and edits (their store only); {@code VIEWER} views only.
+ * <p>Permissions ({@code rolePermissions}): {@code OWNER} holds all three; no built-in member role holds any (user
+ * decision 2026-11-11: expenses are the owner's by default, like Bref). An owner-defined role (19.14) may tick them —
+ * its member then acts on their own store's expenses only.
  */
 @Component
 public class ExpensesModule implements KeevoModule {

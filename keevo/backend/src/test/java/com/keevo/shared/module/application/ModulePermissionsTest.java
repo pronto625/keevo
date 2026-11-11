@@ -163,13 +163,12 @@ class ModulePermissionsTest {
                 new org.springframework.core.io.support.PathMatchingResourcePatternResolver());
         ModulePermissions permissions = permissions(catalog);
         permissions.afterSingletonsInstantiated();
-        // 20.10 (user decision 2026-11-08): expenses for the OWNER and the MANAGER only — no EXPENSE_* for an
-        // EMPLOYEE or a VIEWER
+        // 20.10 / 19.14 reprise (user decision 2026-11-11): expenses for the OWNER only — no EXPENSE_* for any
+        // built-in member role (an owner-defined role may grant them)
         assertThat(permissions.permissionsFor(Role.EMPLOYEE))
                 .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "SALE_CREATE");
         assertThat(permissions.permissionsFor(Role.MANAGER))
-                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "EXPENSE_VIEW",
-                        "EXPENSE_CREATE", "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW",
+                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "PURCHASE_PRICE_VIEW",
                         // 19.5b — fine rights of the store manager
                         "STORE_SALES_VIEW", "INVENTORY_SESSION_MANAGE", "PRODUCT_MERGE", "TEAM_MANAGE",
                         // 19.14 — selling and the store's documents, as permissions (same holders as before)

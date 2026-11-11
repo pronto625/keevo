@@ -608,10 +608,24 @@ class SyncPullServiceTest {
         var employee = com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID)
                 .withPermissions(java.util.Set.of("SALE_CREATE"));
 
-        // a holder keeps the 16-13 marker: devices of MANAGER / VIEWER are not re-seeded by 19.14
-        assertThat(SyncPushService.ScopeKey.visibilityMarker(viewer)).isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=0");
+        // a holder keeps the 16-13 marker part for sales / documents (19.14); reprise 11/11/2026 — without « Voir les
+        // dépenses » (every built-in member, the MANAGER included) « ;ex=0 »: every member device re-seeds once
+        assertThat(SyncPushService.ScopeKey.visibilityMarker(viewer))
+                .isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=0;ex=0");
         assertThat(SyncPushService.ScopeKey.visibilityMarker(employee))
+                .isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=0;ss=0;ds=0;ex=0");
+        var cashierWithExpenses = com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID)
+                .withPermissions(java.util.Set.of("SALE_CREATE", "EXPENSE_VIEW"));
+        assertThat(SyncPushService.ScopeKey.visibilityMarker(cashierWithExpenses))
                 .isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=0;ss=0;ds=0");
+        var managerBefore = com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID)
+                .withPermissions(java.util.Set.of("PURCHASE_PRICE_VIEW", "STORE_SALES_VIEW", "DOCUMENT_STORE_VIEW",
+                        "EXPENSE_VIEW"));
+        var managerNow = com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID)
+                .withPermissions(java.util.Set.of("PURCHASE_PRICE_VIEW", "STORE_SALES_VIEW", "DOCUMENT_STORE_VIEW"));
+        // the built-in manager lost the expenses: his device's marker changes, so it is re-seeded once
+        assertThat(SyncPushService.ScopeKey.visibilityMarker(managerNow))
+                .isNotEqualTo(SyncPushService.ScopeKey.visibilityMarker(managerBefore));
         assertThat(SyncPushService.ScopeKey.visibilityMarker(
                 com.keevo.shared.application.port.sync.PullScope.unrestricted(ACTOR_ID)))
                 .isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=1");

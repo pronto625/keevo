@@ -262,7 +262,7 @@ class MultiCompanyMemberFullContextTest extends FullContextIntegrationTest {
 
     @Test
     @DisplayName("19.6b — invited by username, accepted from an open session in B: the "
-            + "company sees the username, never the phone (list); a decline notifies nobody and blocks re-invitations")
+            + "company sees the username, never the phone (list); a decline notifies nobody; the second one blocks re-invitations (reprise 11/11/2026)")
     void invitedByUsername_phoneHidden_andDecline() throws Exception {
         jdbc.update("UPDATE public.users SET username = ? WHERE id = ?", "awa" + personId.toString().substring(0, 6),
                 personId);
@@ -301,7 +301,14 @@ class MultiCompanyMemberFullContextTest extends FullContextIntegrationTest {
             MvcResult declined = send(post("/api/v1/account/invitations/" + fromC.get(0).get("id").asText()
                     + "/decline"), sessionB, null);
             assertThat(declined.getResponse().getStatus()).isEqualTo(204);
-            // re-invited at once → same neutral answer, but nothing pending for her
+            // reprise 11/11/2026 — one refusal: re-invited at once, the invitation is pending again
+            assertThat(send(post("/api/v1/employees"), ownerCToken, body).getResponse().getStatus()).isEqualTo(202);
+            JsonNode again = json(send(get("/api/v1/account/invitations"), sessionB, null)).get("data");
+            assertThat(again).hasSize(1);
+            assertThat(json(send(get("/api/v1/employees/invitations"), ownerCToken, null)).get("data")).hasSize(1);
+            assertThat(send(post("/api/v1/account/invitations/" + again.get(0).get("id").asText() + "/decline"),
+                    sessionB, null).getResponse().getStatus()).isEqualTo(204);
+            // second refusal → 30-day wait: same neutral answer, but nothing pending for her
             assertThat(send(post("/api/v1/employees"), ownerCToken, body).getResponse().getStatus()).isEqualTo(202);
             assertThat(json(send(get("/api/v1/account/invitations"), sessionB, null)).get("data")).isEmpty();
             assertThat(json(send(get("/api/v1/employees/invitations"), ownerCToken, null)).get("data")).isEmpty();

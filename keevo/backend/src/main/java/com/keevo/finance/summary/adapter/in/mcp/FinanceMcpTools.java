@@ -85,15 +85,17 @@ public class FinanceMcpTools {
             + "avec la période précédente de même durée ; dépenses par catégorie ; évolution par jour ou par mois ; "
             + "résultat par boutique. Pour le détail des dépenses, utiliser list_expenses ; pour la marge brute, "
             + "revenue_summary. Période : period = AAAA-MM ou AAAA, ou startDate et endDate (AAAA-MM-JJ) ; par défaut "
-            + "le mois en cours. Réservé au propriétaire. Montants en FCFA.")
+            + "le mois en cours. Propriétaire : toutes les boutiques ; membre autorisé : sa boutique seulement. "
+            + "Montants en FCFA.")
     @RequiresPermission(FinanceModule.FINANCE_VIEW)
     @RequiresEntitlement(value = FinanceModule.ID, access = RequiresEntitlement.Access.READ)
     public FinancialResult financialResult(
             @ToolParam(required = false, description = "Mois AAAA-MM ou année AAAA") String period,
             @ToolParam(required = false, description = "Premier jour inclus (AAAA-MM-JJ)") String startDate,
             @ToolParam(required = false, description = "Dernier jour inclus (AAAA-MM-JJ)") String endDate,
-            @ToolParam(required = false, description = "Identifiant d'une boutique (outil list_stores) ; absent = "
-                    + "toutes les boutiques") UUID storeId) {
+            @ToolParam(required = false, description = "Identifiant d'une boutique (outil list_stores), pour le "
+                    + "propriétaire ; absent = toutes les boutiques. Ignoré pour un membre autorisé : toujours sa "
+                    + "boutique") UUID storeId) {
         FinancePeriods.Resolved resolved;
         try {
             resolved = FinancePeriods.resolve(period, startDate, endDate, LocalDate.now(clock.withZone(KeevoZones.WAT)));

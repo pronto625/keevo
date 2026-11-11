@@ -777,7 +777,12 @@ public class SyncPushService implements SyncUseCase {
             // a device whose rights narrow or widen is re-seeded once.
             return VISIBILITY_RULES + ";pp=" + (scope.holds(PurchasePriceVisibility.PERMISSION) ? '1' : '0')
                     + (scope.holds(STORE_SALES_PERMISSION) ? "" : ";ss=0")
-                    + (scope.holds(DOCUMENT_STORE_PERMISSION) ? "" : ";ds=0");
+                    + (scope.holds(DOCUMENT_STORE_PERMISSION) ? "" : ";ds=0")
+                    // Reprise 11/11/2026 — expenses are the owner's by default: every member without « Voir les
+                    // dépenses » (every built-in MANAGER, EMPLOYEE and VIEWER) gets « ;ex=0 », so each member device is
+                    // re-seeded once at deploy (before the refonte go-live) and the built-in MANAGER's stops receiving
+                    // expenses (the device purges its local expenses on that re-seed, Mobile section of spec 19-14).
+                    + (scope.holds(EXPENSE_VIEW_PERMISSION) ? "" : ";ex=0");
         }
 
         /** Same restricted + store, and same fingerprint / visibility when both are known. */
@@ -917,6 +922,9 @@ public class SyncPushService implements SyncUseCase {
 
     /** Story 19.14 — « Voir les documents de toute la boutique » ({@code invoicing} manifest). */
     public static final String DOCUMENT_STORE_PERMISSION = "DOCUMENT_STORE_VIEW";
+
+    /** Story 19.14 reprise 11/11/2026 — « Voir les dépenses » ({@code expenses} manifest). */
+    public static final String EXPENSE_VIEW_PERMISSION = "EXPENSE_VIEW";
 
     record PullCursor(Instant startedAt, boolean failed, boolean reseed, boolean remember, ScopeKey scope,
                       Map<String, DeltaEntityProvider.Position> positions) {

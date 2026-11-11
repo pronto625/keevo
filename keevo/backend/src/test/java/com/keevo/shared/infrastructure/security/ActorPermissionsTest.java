@@ -67,6 +67,7 @@ class ActorPermissionsTest {
                 com.keevo.sync.sync.application.provider.SaleDeltaProvider.STORE_SALES_PERMISSION,
                 com.keevo.sync.sync.application.service.SyncPushService.STORE_SALES_PERMISSION,
                 com.keevo.sync.sync.application.service.SyncPushService.DOCUMENT_STORE_PERMISSION,
+                com.keevo.sync.sync.application.service.SyncPushService.EXPENSE_VIEW_PERMISSION,
                 com.keevo.invoicing.invoice.application.usecase.DocumentAccess.STORE_PERMISSION)) {
             assertThat(permissions.isDeclared(permission)).as(permission).isTrue();
         }
@@ -84,7 +85,7 @@ class ActorPermissionsTest {
         assertThat(permissions.currentActorHolds("SALE_CREATE")).isTrue();
         assertThat(permissions.currentActorHolds("INVOICE_VIEW")).isFalse(); // built-in EMPLOYEE default not added
         assertThat(permissions.currentActorHolds("UNKNOWN_PERMISSION")).isFalse(); // not declared
-        assertThat(permissions.currentActorHolds("FINANCE_VIEW")).isFalse(); // owner-reserved, never granted
+        assertThat(permissions.currentActorHolds("FINANCE_VIEW")).isTrue(); // reprise 11/11/2026: grantable
     }
 
     @Test

@@ -18,9 +18,10 @@ import static java.util.Map.entry;
  * the manifests of the modules his company can use ({@link EntitlementService#enabledModules}), grouped by module
  * (manifest display name), each with its French label — the screen never shows a permission code.
  *
- * <p>A permission is <b>grantable</b> when it is declared by an installed manifest, has a label here and is not
- * {@linkplain #OWNER_RESERVED reserved to the owner}. A declared permission without a label is never offered (a test
- * pins that every shipped permission has one).
+ * <p>A permission is <b>grantable</b> when it is declared by an installed manifest and has a label here. A declared
+ * permission without a label is never offered (a test pins that every shipped permission has one). Reprise 11/11/2026
+ * (user decision, DD4 reversed): « Voir la situation financière » is grantable too — the finance summary of a member
+ * is computed on their own store only (20.11 {@code FinanceAccess}), never the company's other stores.
  */
 @Service
 public class PermissionCatalog {
@@ -42,12 +43,6 @@ public class PermissionCatalog {
             entry("INVOICE_MANAGE", "Gérer les factures (annulation, avoirs, réglages)"),
             entry("DOCUMENT_STORE_VIEW", "Voir les documents de toute la boutique"),
             entry("FINANCE_VIEW", "Voir la situation financière"));
-
-    /**
-     * Permissions an owner-defined role may not carry: the finance summary covers every store of the company (it is
-     * not limited to the member's store yet), so it stays the owner's.
-     */
-    static final Set<String> OWNER_RESERVED = Set.of("FINANCE_VIEW");
 
     /**
      * One permission of the catalogue.
@@ -78,10 +73,9 @@ public class PermissionCatalog {
         return permission == null ? null : LABELS.get(permission);
     }
 
-    /** Whether an owner-defined role may carry {@code permission} at all (declared, labelled, not owner-reserved). */
+    /** Whether an owner-defined role may carry {@code permission} at all (declared and labelled). */
     public boolean isGrantable(String permission) {
-        return permission != null && permissions.isDeclared(permission) && LABELS.containsKey(permission)
-                && !OWNER_RESERVED.contains(permission);
+        return permission != null && permissions.isDeclared(permission) && LABELS.containsKey(permission);
     }
 
     /** As {@link #isGrantable(String)}, and its module is usable by the company {@code tenantSchema}. */
@@ -97,11 +91,6 @@ public class PermissionCatalog {
     /** The modules the company can use (one entitlement read). */
     public Set<String> enabledModules(String tenantSchema) {
         return entitlements.enabledModules(tenantSchema);
-    }
-
-    /** Whether {@code permission} may never be held by an owner-defined role (the single evaluator drops it). */
-    static boolean isOwnerReserved(String permission) {
-        return OWNER_RESERVED.contains(permission);
     }
 
     /**

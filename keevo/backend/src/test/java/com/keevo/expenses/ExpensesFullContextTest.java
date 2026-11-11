@@ -40,8 +40,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Story 20.10 — the « Dépenses » module end to end with the production security filter, JWTs, module gate and the
- * real sync chain: provisioning on first use, Bref rules, roles (user decision 2026-11-08: OWNER and MANAGER only,
- * an EMPLOYEE or a VIEWER refused everywhere), store scope (owner / manager), keyset list with totals, edit / delete,
+ * real sync chain: provisioning on first use, Bref rules, roles (user decision 2026-11-11: the OWNER only by default,
+ * a built-in MANAGER, EMPLOYEE or VIEWER refused everywhere; a member whose owner-defined role grants the rights acts
+ * in their store), store scope (owner / authorised manager), keyset list with totals, edit / delete,
  * offline operations (DUPLICATE, last write wins, tombstones), module disabled.
  */
 @AutoConfigureMockMvc
@@ -64,7 +65,10 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
     private UUID storeB;
     private String ownerToken;
     private String employeeToken;
+    /** Reprise 11/11/2026 — a MANAGER whose owner-defined role ticks the three expense rights (store scope tests). */
     private String managerToken;
+    /** Reprise 11/11/2026 — a built-in MANAGER: expenses are the owner's by default. */
+    private String plainManagerToken;
     private String viewerToken;
     private Instant clock = Instant.now().minusSeconds(600);
     private final Map<String, String> devices = new HashMap<>();
@@ -83,12 +87,16 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         employeeToken = TestAccess.token(jdbc, jwtTokenProvider, employeeId, schema, "EMPLOYEE", "ACTIVE", storeB,
                 false);
         managerToken = memberToken("MANAGER", "Marie", storeB);
+        grantExpenses(managerToken);
+        plainManagerToken = memberToken("MANAGER", "Luc", storeB);
         viewerToken = memberToken("VIEWER", "Jean", storeB);
     }
 
     @AfterEach
     void tearDown() {
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId);
+        jdbc.update("UPDATE public.user_tenant_memberships SET custom_role_id = NULL WHERE tenant_id = ?", tenantId);
+        jdbc.update("DELETE FROM public.tenant_roles WHERE tenant_id = ?", tenantId);
         TenantContext.clear();
         SecurityContextHolder.clearContext();
     }
@@ -201,6 +209,17 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
     private boolean live(String id) {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT archived_at IS NULL FROM \"" + schema
                 + "\".expenses WHERE id = ?", Boolean.class, UUID.fromString(id)));
+    }
+
+    /** The member of {@code token} gets an owner-defined MANAGER role with the three expense rights (19.14). */
+    private void grantExpenses(String token) {
+        UUID user = UUID.fromString(jwtTokenProvider.parseToken(token).getSubject());
+        UUID role = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.tenant_roles (id, tenant_id, name, base_role, permissions) VALUES (?, ?, "
+                + "'Gérant dépenses', 'MANAGER', ARRAY['EXPENSE_VIEW','EXPENSE_CREATE','EXPENSE_DELETE'])", role,
+                tenantId);
+        jdbc.update("UPDATE public.user_tenant_memberships SET custom_role_id = ? WHERE tenant_id = ? AND user_id = ?",
+                role, tenantId, user);
     }
 
     private String memberToken(String role, String firstName, UUID store) {
@@ -610,16 +629,17 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
                 .path("data").path("id").asText()).isEqualTo(id);
     }
 
-    // ── user decision 2026-11-08: expenses for the OWNER and the MANAGER only ────────────────────────────
+    // ── user decision 2026-11-11: expenses for the OWNER only by default (a custom role may grant them) ──
 
     @Test
-    @DisplayName("an EMPLOYEE or a VIEWER is refused on every REST route (403 FORBIDDEN, French message), every sync "
-            + "operation is REJECTED FORBIDDEN (never superseded) and their pull carries no expense")
+    @DisplayName("an EMPLOYEE, a VIEWER or a built-in MANAGER (reprise 11/11/2026) is refused on every REST route "
+            + "(403 FORBIDDEN, French message), every sync operation is REJECTED FORBIDDEN (never superseded) and "
+            + "their pull carries no expense")
     void employeeAndViewerRefused() throws Exception {
         Map<String, Object> inB = expense(5000, "transport", null);
         inB.put("storeId", storeB.toString());
         String b = create(ownerToken, inB).path("id").asText();
-        for (String token : List.of(employeeToken, viewerToken)) {
+        for (String token : List.of(employeeToken, viewerToken, plainManagerToken)) {
             List<MvcResult> refused = List.of(
                     call(token, HttpMethod.GET, "/api/v1/expenses", null),
                     call(token, HttpMethod.GET, "/api/v1/expenses/options", null),
@@ -645,10 +665,11 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
             for (var op : List.of(create, update, delete)) {
                 assertThat(result(results, op).path("status").asText()).isEqualTo("REJECTED");
                 assertThat(result(results, op).path("reason").asText()).isEqualTo("FORBIDDEN");
-                if (token.equals(employeeToken)) {
+                if (!token.equals(viewerToken)) {
                     // a VIEWER's batch is refused as a whole before any handler (Story 19.5: read-only role)
                     assertThat(result(results, op).path("conflictData").path("message").asText())
-                            .isEqualTo("Les dépenses sont réservées au propriétaire et au gérant.");
+                            .isEqualTo("Les dépenses sont réservées au propriétaire : demandez-lui le droit de "
+                                    + "les gérer.");
                 }
             }
             assertThat(pullExpenses(token)).isEmpty();

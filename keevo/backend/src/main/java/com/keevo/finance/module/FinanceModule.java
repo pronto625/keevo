@@ -14,8 +14,9 @@ import org.springframework.stereotype.Component;
  * {@code reporting}). No table: it reads the revenue source of 20.9 and the expense totals of the expenses module.
  * The offer (which plans include it) is data: public migration V58.
  *
- * <p>Permission {@code FINANCE_VIEW}: held by {@code OWNER} only (Bref keeps the margins to the owner) — no role of
- * {@code rolePermissions} receives it.
+ * <p>Permission {@code FINANCE_VIEW}: held by {@code OWNER} by default (Bref keeps the margins to the owner) — no
+ * built-in role of {@code rolePermissions} receives it. Reprise 11/11/2026 (user decision): the owner may tick it in an
+ * owner-defined role (19.14); such a member reads the summary of their own store only ({@code FinanceAccess}).
  */
 @Component
 public class FinanceModule implements KeevoModule {

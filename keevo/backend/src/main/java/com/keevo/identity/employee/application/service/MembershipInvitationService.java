@@ -29,8 +29,9 @@ import java.util.UUID;
  * person's acceptance creates the membership ({@link InvitationAcceptance}).
  *
  * <p>Privacy (decisions D2–D3 of the spec): the inviting company learns nothing about the account — the platform
- * administrator, an inactive account, a pending invitation and a refusal younger than {@link #DECLINE_COOLDOWN} all get
- * the same neutral answer as a new invitation, without any message; at most one message per invitation; at most
+ * administrator, an inactive account, a pending invitation and a second (or later) refusal younger than
+ * {@link #DECLINE_COOLDOWN} all get the same neutral answer as a new invitation, without any message; at most one
+ * message per invitation; at most
  * {@code keevo.invitations.daily-limit-per-tenant} invitations created or renewed per company per rolling 24 h.
  *
  * <p>Complexity: invite = one count on {@code (tenant_id, invited_at)} + one conditional upsert on the unique
@@ -41,7 +42,10 @@ public class MembershipInvitationService implements MembershipInvitationUseCase 
 
     /** How long an invitation can be answered. */
     static final Duration TTL = Duration.ofDays(7);
-    /** After a refusal, the same company cannot re-invite the person (silently) for this long. */
+    /**
+     * After the {@link MembershipInvitation#DECLINES_BEFORE_COOLDOWN}-th refusal (reprise 11/11/2026: not after the
+     * first one), the same company cannot re-invite the person (silently) for this long.
+     */
     static final Duration DECLINE_COOLDOWN = Duration.ofDays(30);
     /** At most one invitation message per (company, person) in this window, whatever the re-additions/cancels. */
     static final Duration MESSAGE_COOLDOWN = Duration.ofDays(1);

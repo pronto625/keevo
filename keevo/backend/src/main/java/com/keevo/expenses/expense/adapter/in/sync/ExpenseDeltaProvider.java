@@ -21,9 +21,10 @@ import java.util.Map;
  * Story 20.10 — the {@code expenses} delta of the sync pull: the expenses changed since the device's cursor, each one
  * exactly as the REST API returns it ({@link ExpenseResponseDto}), a deleted one as a tombstone
  * {@code {id, deleted: true, updatedAt}}. Keyset paged on ({@code updated_at}, id as text) —
- * {@code idx_expenses_sync_keyset}. Guarded by {@code EXPENSE_VIEW} (user decision 2026-11-08: OWNER and MANAGER
- * only): an EMPLOYEE's or a VIEWER's pull gets nothing ({@link #requiredPermission()}, checked again here). Store
- * scope: a MANAGER's pull carries their store's expenses only (bound parameter), a manager without store none.
+ * {@code idx_expenses_sync_keyset}. Guarded by {@code EXPENSE_VIEW} (user decision 2026-11-11: the OWNER only by
+ * default, or a member whose owner-defined role grants it): a built-in member's pull gets nothing
+ * ({@link #requiredPermission()}, checked again here; the visibility marker re-seeds a device that lost the right).
+ * Store scope: a member's pull carries their store's expenses only (bound parameter), a member without store none.
  * Owned by {@code expenses}: skipped while the module is DISABLED; a tenant whose table was never provisioned has no
  * delta.
  */

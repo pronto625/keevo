@@ -24,7 +24,8 @@ import java.util.UUID;
 
 /**
  * Finance summary — Story 20.11 (Bref {@code GET /v1/finance/summary}, FUS-FR26). Gated by the {@code finance} module
- * ({@code @RequiresEntitlement}, READ) and {@code FINANCE_VIEW} (OWNER only).
+ * ({@code @RequiresEntitlement}, READ) and {@code FINANCE_VIEW} (OWNER by default; a member whose owner-defined role
+ * grants it reads their own store only — {@link FinanceAccess}).
  *
  * <pre>
  * GET /api/v1/finance/summary?period=yyyy-MM|yyyy            → that month / year, vs the previous month / year

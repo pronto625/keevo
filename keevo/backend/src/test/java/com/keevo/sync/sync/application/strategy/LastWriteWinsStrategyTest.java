@@ -237,13 +237,14 @@ class LastWriteWinsStrategyTest {
     }
 
     @Test
-    @DisplayName("20.10: an older expense edit from a MANAGER is superseded like the owner's")
-    void expenseOperation_fromManager_superseded() {
+    @DisplayName("reprise 11/11/2026: a built-in MANAGER no longer holds the expense rights — his older edit is not "
+            + "superseded, the handler runs and refuses it (FORBIDDEN)")
+    void expenseOperation_fromBuiltInManager_reachesTheHandler() {
         authenticate("ROLE_MANAGER");
         entityUpdatedAt(LwwEntity.EXPENSE, T2);
 
-        assertThat(strategy.beforeApply(op("UPDATE_EXPENSE", "expenseId", T1), DEVICE, TENANT).isSuperseded())
-                .isTrue();
+        assertThat(strategy.beforeApply(op("UPDATE_EXPENSE", "expenseId", T1), DEVICE, TENANT))
+                .isEqualTo(PreApplyCheck.NONE);
     }
 
     @Test

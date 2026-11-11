@@ -25,6 +25,13 @@ public record MembershipInvitation(UUID id, UUID tenantId, UUID userId, String r
     /** PENDING → ACCEPTED | DECLINED | CANCELLED; a PENDING row past {@code expiresAt} is expired. */
     public enum Status { PENDING, ACCEPTED, DECLINED, CANCELLED }
 
+    /**
+     * Story 19.6b, reprise 11/11/2026 (user decision) — the waiting period after a refusal applies only from this
+     * many refusals of the same person for the same company: after one refusal the company may invite again (within
+     * the daily cap and the one-message-per-day rule); from the second one it waits. An acceptance resets the count.
+     */
+    public static final int DECLINES_BEFORE_COOLDOWN = 2;
+
     public MembershipInvitation {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(tenantId, "tenantId");

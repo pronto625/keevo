@@ -34,7 +34,7 @@ class PermissionCatalogTest {
     }
 
     @Test
-    @DisplayName("grouped by usable module, labelled, finance reserved to the owner, read flag set")
+    @DisplayName("grouped by usable module, labelled, finance grantable (reprise 11/11/2026), read flag set")
     void grantableOfUsableModules() {
         when(entitlements.enabledModules("kv_test")).thenReturn(Set.of("core", "pos", "catalog", "finance"));
 
@@ -42,8 +42,8 @@ class PermissionCatalogTest {
 
         List<String> codes = groups.stream().flatMap(g -> g.permissions().stream()).map(PermissionCatalog.Entry::code)
                 .toList();
-        assertThat(codes).contains("SALE_CREATE", "STORE_SALES_VIEW", "PURCHASE_PRICE_VIEW", "TEAM_MANAGE")
-                .doesNotContain("FINANCE_VIEW", "EXPENSE_VIEW", "INVOICE_VIEW");
+        assertThat(codes).contains("SALE_CREATE", "STORE_SALES_VIEW", "PURCHASE_PRICE_VIEW", "TEAM_MANAGE",
+                "FINANCE_VIEW").doesNotContain("EXPENSE_VIEW", "INVOICE_VIEW");
         assertThat(groups).allSatisfy(g -> assertThat(g.moduleLabel()).isNotBlank());
         PermissionCatalog.Entry salesView = groups.stream().flatMap(g -> g.permissions().stream())
                 .filter(e -> e.code().equals("STORE_SALES_VIEW")).findFirst().orElseThrow();
@@ -57,7 +57,7 @@ class PermissionCatalogTest {
 
         assertThat(permissionCatalog.isGrantable("kv_test", "SALE_CREATE")).isTrue();
         assertThat(permissionCatalog.isGrantable("kv_test", "EXPENSE_VIEW")).isFalse(); // module not usable
-        assertThat(permissionCatalog.isGrantable("FINANCE_VIEW")).isFalse();              // owner-reserved
+        assertThat(permissionCatalog.isGrantable("FINANCE_VIEW")).isTrue();               // reprise 11/11/2026
         assertThat(permissionCatalog.isGrantable("NOT_A_PERMISSION")).isFalse();
         assertThat(permissionCatalog.isGrantable((String) null)).isFalse();
     }

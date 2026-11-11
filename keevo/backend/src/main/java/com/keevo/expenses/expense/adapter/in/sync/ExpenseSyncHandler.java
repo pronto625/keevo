@@ -58,10 +58,11 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
     static final ZoneId BUSINESS_ZONE = ZoneId.of("Africa/Douala");
 
     /**
-     * French message of an operation refused to the actor's role: expenses are for the OWNER and the MANAGER only
-     * (user decision 2026-11-08) — an EMPLOYEE or a VIEWER holds no {@code EXPENSE_*} permission.
+     * French message of an operation refused to the actor's role: expenses are the OWNER's (user decision 2026-11-11)
+     * unless his owner-defined role (19.14) grants the {@code EXPENSE_*} permission — no built-in member role holds one.
      */
-    static final String ROLE_REFUSED = "Les dépenses sont réservées au propriétaire et au gérant.";
+    static final String ROLE_REFUSED =
+            "Les dépenses sont réservées au propriétaire : demandez-lui le droit de les gérer.";
 
     /** The permission of each operation: the one of its REST endpoint. */
     private static final Map<String, String> PERMISSIONS = Map.of(

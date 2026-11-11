@@ -74,7 +74,7 @@ class CustomRolesFullContextTest extends FullContextIntegrationTest {
     void setUp() {
         schema = tx.execute(st -> tenantFactory.create()).getSchemaName();
         UUID tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
-        for (String module : List.of("expenses", "invoicing", "multi-store")) {
+        for (String module : List.of("expenses", "invoicing", "multi-store", "reporting", "finance")) {
             jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier) VALUES (?, ?, "
                     + "'ACTIVE', 'PREMIUM') ON CONFLICT (tenant_id, module_id) DO UPDATE SET status = 'ACTIVE'",
                     tenantId, module);
@@ -186,6 +186,9 @@ class CustomRolesFullContextTest extends FullContextIntegrationTest {
         Map<String, Object> op = new LinkedHashMap<>();
         op.put("operationId", UUID.randomUUID().toString());
         op.put("operationType", type);
+        if (type.endsWith("_EXPENSE") && payload.get("id") != null) {
+            op.put("entityId", payload.get("id")); // the expense id (expense sync contract)
+        }
         op.put("payload", payload);
         op.put("clientTimestamp", Instant.now().toString());
         return expect(call(m.token(), HttpMethod.POST, "/api/v1/sync/push",
@@ -225,7 +228,7 @@ class CustomRolesFullContextTest extends FullContextIntegrationTest {
     void cashierRole() throws Exception {
         JsonNode catalogue = expect(call(owner, HttpMethod.GET, "/api/v1/roles/permissions", null), 200).path("data");
         assertThat(catalogue.toString()).contains("Créer des ventes").contains("Voir les dépenses")
-                .doesNotContain("FINANCE_VIEW");
+                .contains("Voir la situation financière"); // reprise 11/11/2026: grantable
 
         UUID cashier = createRole("Caissier", "EMPLOYEE", List.of("SALE_CREATE", "EXPENSE_VIEW"), null);
         assign(seller1, cashier);
@@ -298,7 +301,7 @@ class CustomRolesFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("editor: owner only, French validation, unique names, viewer roles read-only, finance reserved, "
+    @DisplayName("editor: owner only, French validation, unique names, viewer roles read-only, finance grantable, "
             + "an assigned role cannot be deleted")
     void editorValidation() throws Exception {
         assertThat(status(managerA.token(), HttpMethod.GET, "/api/v1/roles", null)).isEqualTo(403);
@@ -310,9 +313,8 @@ class CustomRolesFullContextTest extends FullContextIntegrationTest {
         assertThat(viewerWrite.getResponse().getStatus()).isIn(400, 422);
         assertThat(body(viewerWrite)).contains("ne peut recevoir que des droits de consultation");
 
-        MvcResult finance = call(owner, HttpMethod.POST, "/api/v1/roles",
-                Map.of("name", "Comptable", "baseRole", "MANAGER", "permissions", List.of("FINANCE_VIEW")));
-        assertThat(finance.getResponse().getStatus()).isIn(400, 422);
+        // reprise 11/11/2026 — « Voir la situation financière » is the owner's choice (DD4 reversed)
+        createRole("Comptable", "MANAGER", List.of("FINANCE_VIEW"), null);
 
         UUID role = createRole("Vendeur plus", "EMPLOYEE", List.of("SALE_CREATE"), null);
         expect(call(owner, HttpMethod.POST, "/api/v1/roles",
@@ -410,5 +412,95 @@ class CustomRolesFullContextTest extends FullContextIntegrationTest {
         assertThat(noList.getResponse().getStatus()).isIn(400, 422);
         expect(call(owner, HttpMethod.PUT, "/api/v1/roles/" + role, Map.of("name", "Caissier 2",
                 "permissions", List.of("SALE_CREATE", "EXPENSE_VIEW"))), 200);
+    }
+
+    // ── reprise 11/11/2026 (user decisions) ──────────────────────────────────────────────────────────────
+
+    private void expense(UUID store, int amount) throws Exception {
+        expect(call(owner, HttpMethod.POST, "/api/v1/expenses", Map.of("amount", amount, "category", "rent",
+                "storeId", store.toString())), 201);
+    }
+
+    private List<JsonNode> pulledEntities(Member m, String entity) throws Exception {
+        List<JsonNode> rows = new ArrayList<>();
+        String cursor = null;
+        do {
+            var request = MockMvcRequestBuilders.get("/api/v1/sync/pull").header("Authorization", "Bearer " + m.token());
+            if (cursor != null) {
+                request.param("cursor", cursor);
+            }
+            JsonNode data = expect(mockMvc.perform(request).andReturn(), 200).path("data");
+            SecurityContextHolder.clearContext();
+            TenantContext.clear();
+            data.path("entities").path(entity).forEach(rows::add);
+            cursor = data.path("hasMore").asBoolean() ? data.path("nextCursor").asText() : null;
+        } while (cursor != null);
+        return rows;
+    }
+
+    @Test
+    @DisplayName("reprise 11/11/2026 — expenses are the owner's by default: a built-in MANAGER gets a French 403 on "
+            + "REST, a REJECTED push, no expense in his pull; a role ticking « Voir les dépenses » restores them")
+    void expensesOwnerOnlyByDefault() throws Exception {
+        expense(storeA, 4000);
+        assertThat(myPermissions(managerA)).doesNotContain("EXPENSE_VIEW", "EXPENSE_CREATE", "EXPENSE_DELETE");
+        MvcResult refused = call(managerA.token(), HttpMethod.GET, "/api/v1/expenses", null);
+        assertThat(refused.getResponse().getStatus()).isEqualTo(403);
+        assertThat(body(refused)).contains("Vous n'avez pas les droits nécessaires");
+        assertThat(status(managerA.token(), HttpMethod.POST, "/api/v1/expenses",
+                Map.of("amount", 1000, "category", "rent"))).isEqualTo(403);
+        JsonNode pushed = push(managerA, "CREATE_EXPENSE", Map.of("id", UUID.randomUUID().toString(),
+                "amount", 1000, "category", "rent"));
+        assertThat(pushed.path("status").asText()).as(pushed.toString()).isEqualTo("REJECTED");
+        assertThat(pushed.toString()).contains("réservées au propriétaire");
+        assertThat(pulledEntities(managerA, "expenses")).isEmpty();
+
+        UUID storeManager = createRole("Gérant comptable", "MANAGER",
+                List.of("EXPENSE_VIEW", "EXPENSE_CREATE", "STORE_SALES_VIEW"), null);
+        assign(managerA, storeManager);
+        assertThat(status(managerA.token(), HttpMethod.GET, "/api/v1/expenses", null)).isEqualTo(200);
+        assertThat(pulledEntities(managerA, "expenses")).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("reprise 11/11/2026 — « Voir la situation financière » granted to a manager: summary of his store "
+            + "only (totals, no per-store rows, another store's filter ignored); the owner sees every store")
+    void financeForAMember() throws Exception {
+        sale(seller1.user(), storeA);
+        sale(seller2.user(), storeB);
+        sale(seller2.user(), storeB);
+        expense(storeA, 1000);
+        expense(storeB, 3000);
+
+        assertThat(status(managerA.token(), HttpMethod.GET, "/api/v1/finance/summary", null)).isEqualTo(403);
+        UUID accountant = createRole("Gérant comptable", "MANAGER", List.of("FINANCE_VIEW"), null);
+        assign(managerA, accountant);
+        assertThat(myPermissions(managerA)).containsExactly("FINANCE_VIEW");
+
+        JsonNode mine = expect(call(managerA.token(), HttpMethod.GET, "/api/v1/finance/summary", null), 200)
+                .path("data");
+        assertThat(mine.path("revenue").path("ttc").decimalValue()).isEqualByComparingTo("5000");
+        assertThat(mine.path("expenses").path("total").decimalValue()).isEqualByComparingTo("1000");
+        assertThat(mine.path("result").path("net").decimalValue()).isEqualByComparingTo("4000");
+        assertThat(mine.path("byStore").isMissingNode() || mine.path("byStore").isNull()
+                || mine.path("byStore").isEmpty()).as(mine.toString()).isTrue();
+        assertThat(mine.toString()).doesNotContain("Bonapriso").doesNotContain(storeB.toString());
+
+        JsonNode filtered = expect(call(managerA.token(), HttpMethod.GET, "/api/v1/finance/summary?storeId=" + storeB,
+                null), 200).path("data");
+        assertThat(filtered.path("revenue").path("ttc").decimalValue()).isEqualByComparingTo("5000");
+        assertThat(filtered.path("expenses").path("total").decimalValue()).isEqualByComparingTo("1000");
+
+        JsonNode all = expect(call(owner, HttpMethod.GET, "/api/v1/finance/summary", null), 200).path("data");
+        assertThat(all.path("revenue").path("ttc").decimalValue()).isEqualByComparingTo("15000");
+        assertThat(all.path("expenses").path("total").decimalValue()).isEqualByComparingTo("4000");
+        assertThat(all.path("byStore")).hasSize(2);
+
+        // a role limited to store B cannot be given to the manager of A (no « all stores » reach for a member)
+        UUID onlyB = createRole("Comptable Bonapriso", "MANAGER", List.of("FINANCE_VIEW"), List.of(storeB));
+        MvcResult refused = call(owner, HttpMethod.PUT, "/api/v1/employees/" + managerA.employee() + "/custom-role",
+                Map.of("roleId", onlyB.toString()));
+        assertThat(refused.getResponse().getStatus()).isIn(400, 422);
+        assertThat(body(refused)).contains("pas valable dans la boutique");
     }
 }

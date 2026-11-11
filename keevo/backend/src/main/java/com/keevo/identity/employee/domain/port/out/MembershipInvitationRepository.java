@@ -16,7 +16,8 @@ public interface MembershipInvitationRepository {
 
     /**
      * Inserts the invitation, or renews the row of the same (company, person) with what was typed (PENDING again, new
-     * expiry) — unless it was DECLINED at or after {@code declinedBefore} (left untouched). One conditional upsert.
+     * expiry) — unless it was DECLINED at or after {@code declinedBefore} by a person who already refused
+     * {@link MembershipInvitation#DECLINES_BEFORE_COOLDOWN} times (left untouched). One conditional upsert.
      *
      * @param sentBefore an invitation message is due only when none was sent to the pair since this instant
      * @return true when an invitation message is due (row inserted, or renewed with no message since
@@ -48,7 +49,10 @@ public interface MembershipInvitationRepository {
     /** Whether the person joined the company through an invitation (an ACCEPTED row; unique-key lookup). */
     boolean hasAccepted(UUID tenantId, UUID userId);
 
-    /** Sets a PENDING row to {@code status} (ACCEPTED, DECLINED or CANCELLED) answered at {@code now}; false when not PENDING. */
+    /**
+     * Sets a PENDING row to {@code status} (ACCEPTED, DECLINED or CANCELLED) answered at {@code now}; a refusal is
+     * counted, an acceptance resets the count. False when not PENDING.
+     */
     boolean markResponded(UUID id, MembershipInvitation.Status status, Instant now);
 
     /**

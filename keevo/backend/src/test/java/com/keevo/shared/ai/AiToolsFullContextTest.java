@@ -224,7 +224,8 @@ class AiToolsFullContextTest extends FullContextIntegrationTest {
                 .doesNotContain("financial_result", "list_stores", "activity_overview", "list_expenses",
                         "revenue_summary");
         as(schema, managerB);
-        assertThat(allowed()).contains("unpaid_invoices", "list_expenses").doesNotContain("financial_result");
+        // reprise 11/11/2026 — expenses are the owner's by default: a built-in manager no longer gets list_expenses
+        assertThat(allowed()).contains("unpaid_invoices").doesNotContain("financial_result", "list_expenses");
     }
 
     @Test
@@ -561,6 +562,26 @@ class AiToolsFullContextTest extends FullContextIntegrationTest {
                 .containsExactly(Outcome.REFUSED, "FORBIDDEN", "Vous n'avez pas les droits nécessaires");
         assertThatThrownBy(() -> financeBean.financialResult(null, null, null, null))
                 .isInstanceOf(AuthorizationDeniedException.class);
+
+        // reprise 11/11/2026 — a manager whose owner-defined role grants « Voir la situation financière » gets the
+        // tool, for his own store only: no per-store rows, another store's filter ignored
+        var grant = new UsernamePasswordAuthenticationToken(managerB.user(), null,
+                List.of(new SimpleGrantedAuthority("ROLE_MANAGER")));
+        grant.setDetails(new AuthDetails("Paul", storeB, null, new com.keevo.shared.module.CustomRoleGrant(
+                UUID.randomUUID(), "Comptable", java.util.Set.of("FINANCE_VIEW"))));
+        SecurityContextHolder.getContext().setAuthentication(grant);
+        TenantContext.setCurrentTenant(schema);
+        assertThat(allowed()).contains("financial_result");
+        JsonNode mine = ok("financial_result", "{}");
+        assertThat(mine.path("byStore")).isEmpty();
+        JsonNode filtered = ok("financial_result", "{\"storeId\":\"" + storeA + "\"}");
+        assertThat(filtered.path("revenue")).isEqualTo(mine.path("revenue"));
+        assertThat(filtered.path("expenses")).isEqualTo(mine.path("expenses"));
+        java.sql.Timestamp now = java.sql.Timestamp.from(java.time.Instant.now().minusSeconds(60));
+        jdbc.update("INSERT INTO \"" + schema + "\".sales (id, created_at, employee_id, occurred_at, payment_mode, "
+                + "status, store_id, total_amount, discount_amount) VALUES (?, ?, ?, ?, 'CASH', 'COMPLETED', ?, 7000, 0)",
+                UUID.randomUUID(), now, UUID.randomUUID(), now, storeA);
+        assertThat(ok("financial_result", "{}").path("revenue")).isEqualTo(mine.path("revenue")); // store A unseen
     }
 
     @Test

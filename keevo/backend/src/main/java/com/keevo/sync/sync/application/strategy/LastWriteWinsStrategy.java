@@ -92,7 +92,7 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
 
     /**
      * Story 20.10 / 19.14 — operations guarded by a module permission ({@code EXPENSE_CREATE} to update an expense,
-     * {@code EXPENSE_DELETE} to delete one — OWNER and MANAGER by default, a checkbox of an owner-defined role): for an
+     * {@code EXPENSE_DELETE} to delete one — the OWNER by default (2026-11-11), a checkbox of an owner-defined role): for an
      * actor without it the handler must still run and reject them (FORBIDDEN), never answer « superseded ».
      */
     private static final java.util.Map<String, String> PERMISSION_GUARDED = java.util.Map.of(
