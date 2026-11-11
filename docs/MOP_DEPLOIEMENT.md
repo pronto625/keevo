@@ -190,7 +190,7 @@ JWT_SECRET=unused_in_prod_with_rsa_keys
 #   ≤ 72 octets, jamais Admin@1234! ni un placeholder. Entre apostrophes s'il contient un $
 #   (sinon le compose l'interprète). Ne sert qu'à la création du compte.
 # DASHBOARD_ORIGIN est imposé par le compose (https://<ADMIN_DOMAIN>) : ne pas le mettre ici.
-ADMIN_DOMAIN=admin.keevo.ad2s.cm
+ADMIN_DOMAIN=keevo-dash.ad2s.cm
 ADMIN_PHONE=+2376XXXXXXXXX
 ADMIN_PASSWORD='<MDP_ADMIN_FORT>'
 

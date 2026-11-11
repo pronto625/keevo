@@ -45,7 +45,7 @@
 | `POSTGRES_PASSWORD` | `keevo_local_pwd` | ⚠️ **Générer un mdp fort** — un mot de passe faible (vide, défaut connu, placeholder, < 12 caractères) n'est qu'un avertissement au démarrage (`[Security] POSTGRES_PASSWORD ...`), jamais bloquant. Rotation conseillée quand c'est possible : `ALTER USER` d'abord, puis `.env` et `.env.backup` |
 | `JWT_SECRET` | `super_secret_local_jwt_key_that_is_long_enough_for_dev_only_usage` | ⚠️ `openssl rand -base64 64` |
 | `JWT_EXPIRATION_MS` | `15552000000` (180 jours) | `15552000000` |
-| `ADMIN_DOMAIN` | *(non défini)* | **Obligatoire** — domaine du tableau de bord d'administration, sans `https://`, différent de `APP_DOMAIN` (ex: `admin.keevo.ad2s.cm`). Route Traefik ; le compose impose `DASHBOARD_ORIGIN=https://<ADMIN_DOMAIN>` au backend |
+| `ADMIN_DOMAIN` | *(non défini)* | **Obligatoire** — domaine du tableau de bord d'administration, sans `https://`, différent de `APP_DOMAIN` (ex: `keevo-dash.ad2s.cm`). Route Traefik ; le compose impose `DASHBOARD_ORIGIN=https://<ADMIN_DOMAIN>` au backend |
 | `ADMIN_PHONE` | *(défaut: `+237600000000`)* | ⚠️ **Obligatoire** — numéro du super-admin (même numéro que le super-admin déjà en prod) |
 | `ADMIN_PASSWORD` | *(défaut: `Admin@1234!`)* | ⚠️ **Obligatoire** — ≥ 12 caractères, 3 classes sur 4, ≤ 72 octets UTF-8, ni `Admin@1234!` ni placeholder (refusé au démarrage). Mettre la valeur entre apostrophes (`'...'`) si elle contient `$`. Sert uniquement à la création du compte, n'écrase jamais un mot de passe existant |
 | `SPRING_PROFILES_ACTIVE` | `dev` | `prod` |
@@ -90,7 +90,7 @@ JWT_EXPIRATION_MS=15552000000
 # Tableau de bord + super-admin — obligatoires : vérifiés par le workflow avant tout
 # redémarrage (déploiement refusé si absents/invalides). DASHBOARD_ORIGIN est imposé par le
 # compose (https://<ADMIN_DOMAIN>) : inutile de le mettre ici.
-ADMIN_DOMAIN=admin.keevo.ad2s.cm
+ADMIN_DOMAIN=keevo-dash.ad2s.cm
 ADMIN_PHONE=+237XXXXXXXXX
 # Entre apostrophes si le mot de passe contient un $ (sinon le compose l'interprète)
 ADMIN_PASSWORD='<MOT_DE_PASSE_ADMIN_FORT>'

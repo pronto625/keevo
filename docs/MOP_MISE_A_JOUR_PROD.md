@@ -50,7 +50,7 @@ Ce sont les seules écritures sur des données existantes. Elles sont idempotent
 
 ## 1. DNS : domaine du tableau de bord
 
-Domaine proposé : **`admin.keevo.ad2s.cm`**. Il doit être différent de `keevo.ad2s.cm`.
+Domaine en service : **`keevo-dash.ad2s.cm`**. Il doit être différent de `keevo.ad2s.cm`.
 
 Chez le gestionnaire DNS de `ad2s.cm`, ajoutez :
 
@@ -61,7 +61,7 @@ Chez le gestionnaire DNS de `ad2s.cm`, ajoutez :
 Vérifiez la propagation :
 
 ```bash
-dig +short admin.keevo.ad2s.cm     # attendu : 150.136.82.10
+dig +short keevo-dash.ad2s.cm     # attendu : 150.136.82.10
 ```
 
 À faire **avant** le push : le Traefik existant émet le certificat dès que le DNS répond.
@@ -92,7 +92,7 @@ Ajoutez-les à la suite des variables existantes. **Ne modifiez rien d'autre.**
 ```ini
 # ─── Tableau de bord d'administration ─────────────────────────
 # Domaine du tableau de bord (sans https://, différent de keevo.ad2s.cm) — étape 1
-ADMIN_DOMAIN=admin.keevo.ad2s.cm
+ADMIN_DOMAIN=keevo-dash.ad2s.cm
 # Compte super-admin, créé au premier démarrage s'il n'existe pas encore
 ADMIN_PHONE=+2376XXXXXXXX
 ADMIN_PASSWORD='<mot de passe fort>'
@@ -256,11 +256,11 @@ Depuis n'importe où :
 
 ```bash
 curl -s https://keevo.ad2s.cm/actuator/health               # {"status":"UP"}
-curl -sI https://admin.keevo.ad2s.cm/login | head -1        # HTTP/2 200
+curl -sI https://keevo-dash.ad2s.cm/login | head -1        # HTTP/2 200
 ```
 
 Tests fonctionnels :
-1. **Tableau de bord** : ouvrez `https://admin.keevo.ad2s.cm/login` avec `ADMIN_PHONE` et son mot de passe.
+1. **Tableau de bord** : ouvrez `https://keevo-dash.ad2s.cm/login` avec `ADMIN_PHONE` et son mot de passe.
 2. **App** : installez l'APK 1.1.70 depuis *Releases* et connectez-vous avec un compte commerçant
    existant. Faites une vente en ligne, puis une vente hors ligne, puis laissez la synchronisation
    se faire.
