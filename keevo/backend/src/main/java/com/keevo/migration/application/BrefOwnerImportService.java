@@ -170,6 +170,7 @@ public class BrefOwnerImportService implements BrefOwnerImportUseCase {
         }
         cases.addAll(BrefSnapshotValidator.validate(snapshot, identities, this::shopProblem));
         run.identities(identities);
+        steps.forEach(step -> cases.addAll(step.check(run))); // Story 24.5 — the steps' own sections
         return cases;
     }
 

@@ -200,6 +200,46 @@ class JdbcBrefSource implements BrefSourcePort {
         return ds;
     }
 
+    /** Story 24.5 — work on one read-only connection of the source. */
+    interface ReadOnlyWork<T> {
+        T read(Connection c) throws SQLException;
+    }
+
+    /**
+     * Story 24.5 — runs {@code work} in one read-only {@code REPEATABLE READ} transaction of this source's pool, rolled
+     * back afterwards (same handling as {@link #load}): the other sections of the owner (monetisation) are read the
+     * same way, on the same small pool.
+     */
+    <T> T readOnly(ReadOnlyWork<T> work) {
+        if (!available()) {
+            throw new DomainException(ErrorCode.MIGRATION_SOURCE_UNAVAILABLE, "Bref database not configured");
+        }
+        try (Connection c = dataSource().getConnection()) {
+            c.setReadOnly(true);
+            c.setAutoCommit(false);
+            c.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+            try {
+                return work.read(c);
+            } finally {
+                try {
+                    c.rollback();
+                } catch (SQLException ignored) {
+                    // read-only: nothing to undo; never hide the read's own outcome
+                }
+            }
+        } catch (SQLException e) {
+            log.warn("Bref source database unreachable or unreadable (SQLState {})", e.getSQLState());
+            throw new DomainException(ErrorCode.MIGRATION_SOURCE_UNAVAILABLE, "Bref database unreadable");
+        } catch (IllegalArgumentException | IllegalStateException | java.time.DateTimeException e) {
+            throw new DomainException(ErrorCode.MIGRATION_EXPORT_INVALID, "Bref row unreadable");
+        }
+    }
+
+    /** Story 24.5 — a row mapped to JSON (the shared mapping of {@link BrefRows}). */
+    com.fasterxml.jackson.databind.JsonNode jsonRow(String row) {
+        return json(row);
+    }
+
     @PreDestroy
     void close() {
         HikariDataSource ds = dataSource;

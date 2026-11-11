@@ -23,6 +23,14 @@ public interface PlanModuleRowSync {
     SyncResult sync(UUID tenantId, String tenantSchema);
 
     /**
+     * Story 24.5 — {@link #sync} without telling the owner about modules switched off (the Bref import replaces the
+     * registration plan of a company still suspended for migration: nobody is notified during an import).
+     */
+    default SyncResult syncSilently(UUID tenantId, String tenantSchema) {
+        return sync(tenantId, tenantSchema);
+    }
+
+    /**
      * Story 16.8 — {@link #sync} only when the tenant's plan has the given type (read on the same locked plan read);
      * empty, nothing written, otherwise. Used to re-sync the tenants of a plan type whose profile changed.
      *

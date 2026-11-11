@@ -48,7 +48,9 @@ public record BlockedCase(String code, String label, String sourceTable, UUID so
         TENANT_GONE("L'entreprise importée précédemment n'existe plus (retour arrière à terminer)"),
         // Story 24.3
         PRODUCT_INVALID("Produit invalide"),
-        CLIENT_INVALID("Client invalide");
+        CLIENT_INVALID("Client invalide"),
+        // Story 24.5
+        MONETISATION_INVALID("Abonnement ou paiement Bref non repris");
 
         private final String label;
 

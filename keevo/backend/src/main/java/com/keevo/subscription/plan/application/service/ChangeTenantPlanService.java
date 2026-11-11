@@ -83,7 +83,12 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
         recorder.syncPublicPlanType(cmd.tenantId(), plan);
         recorder.recordEvent(cmd.tenantId(), row.plan().planType(), plan, cmd.cause(),
                 cmd.actorId(), cmd.reason());
-        planModuleRows.sync(cmd.tenantId(), cmd.schemaName()); // Story 16.5 — same transaction
+        // Story 16.5 — same transaction; Story 24.5 — a Bref import tells nobody (company suspended for migration)
+        if (cmd.cause() == com.keevo.shared.capability.entitlement.PlanChangeCause.MIGRATION_BREF) {
+            planModuleRows.syncSilently(cmd.tenantId(), cmd.schemaName());
+        } else {
+            planModuleRows.sync(cmd.tenantId(), cmd.schemaName());
+        }
         log.info("Plan changed: tenant={} {} -> {} cause={} actor={}",
                 cmd.tenantId(), row.plan().planType(), plan, cmd.cause(), cmd.actorId());
         return row.plan();

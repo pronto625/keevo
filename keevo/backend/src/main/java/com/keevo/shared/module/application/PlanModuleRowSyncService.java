@@ -81,6 +81,14 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
 
     @Override
     @Transactional
+    public SyncResult syncSilently(UUID tenantId, String tenantSchema) {
+        SyncResult result = run(tenantId, tenantSchema, true, null, false);
+        evictAfterCommit(tenantSchema);
+        return result;
+    }
+
+    @Override
+    @Transactional
     public Optional<SyncResult> syncIfPlanType(UUID tenantId, String tenantSchema, String planType) {
         Objects.requireNonNull(planType, "planType");
         SyncResult result = run(tenantId, tenantSchema, true, planType);
@@ -99,6 +107,11 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
 
     /** @param onlyPlanType when set, nothing is done ({@code null} returned) unless the plan has this type */
     private SyncResult run(UUID tenantId, String tenantSchema, boolean write, String onlyPlanType) {
+        return run(tenantId, tenantSchema, write, onlyPlanType, true);
+    }
+
+    /** @param notify whether modules switched off are told to the owner ({@link ModuleLicencesChangedEvent}) */
+    private SyncResult run(UUID tenantId, String tenantSchema, boolean write, String onlyPlanType, boolean notify) {
         Objects.requireNonNull(tenantId, "tenantId");
         String schema = TenantSchema.validate(tenantSchema);
         Instant now = clock.instant();
@@ -147,7 +160,7 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
                 }
             }
         }
-        if (!disabled.isEmpty()) {
+        if (notify && !disabled.isEmpty()) {
             // Story 16.1: an existing row switched off by a plan write (grace over, downgrade) is told to the owner
             // like the nightly job's transitions — the job will find nothing left to change
             events.publishEvent(new ModuleLicencesChangedEvent(schema, disabled, null, now));

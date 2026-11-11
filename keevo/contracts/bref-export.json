@@ -1,5 +1,5 @@
 {
-  "description": "Story 24.2 / 24.3 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
+  "description": "Story 24.2 / 24.3 / 24.5 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
   "formatVersion": 1,
   "transport": {
     "file": "owner-<owner uuid>.json in the folder keevo.migration.bref.export-dir (Keevo server)",
@@ -67,8 +67,52 @@
     },
     "invoices": "24.4 — array of invoice rows, each with items[] and payments[]",
     "expenses": "24.4 — array of expense rows",
-    "subscriptions": "24.5", "planPaymentRequests": "24.5", "usageCounters": "24.5", "accountCredit": "24.5",
-    "appleTransactions": "24.5", "revenuecatEvents": "24.5",
+    "subscriptions": {
+      "description": "24.5 — EVERY subscription row of the owner (ownerId), any status",
+      "fields": {
+        "id": "uuid", "ownerId": "uuid", "plan": "free | pro | team | business", "status": "active | scheduled | expired | cancelled",
+        "billingCycle": "monthly | quarterly | yearly | null", "startedAt": "instant|null", "endsAt": "instant|null",
+        "amountPaid": "integer (FCFA)", "creditUsed": "integer (FCFA)", "paymentMethod": "string|null (admin_grant, apple, orange_money, momo, card…)",
+        "appleOriginalTransactionId": "string|null", "gracePeriodEndsAt": "instant|null", "createdAt": "instant", "updatedAt": "instant"
+      }
+    },
+    "planPaymentRequests": {
+      "description": "24.5 — EVERY plan_payment_request of the owner (providerMetadata NOT exported)",
+      "fields": {
+        "id": "uuid", "ownerId": "uuid", "targetPlan": "string", "targetBillingCycle": "string|null", "amount": "integer",
+        "creditApplied": "integer", "amountDue": "integer", "currency": "XAF", "status": "pending | confirmed | failed | cancelled | expired",
+        "paymentMethod": "string|null", "startsAt": "instant|null", "endsAt": "instant|null", "createdAt": "instant", "updatedAt": "instant",
+        "paymentProvider": "string|null (mycoolpay)", "providerTransactionRef": "string|null", "providerStatus": "string|null"
+      }
+    },
+    "appleTransactions": {
+      "description": "24.5 — EVERY apple_iap_transaction of the owner (ownerId, any case)",
+      "fields": {
+        "id": "uuid", "ownerId": "string", "originalTransactionId": "string", "transactionId": "string", "productId": "string",
+        "bundleId": "string", "environment": "Production | Sandbox", "status": "string", "purchaseDate": "instant",
+        "expiresDate": "instant|null", "revocationReason": "integer|null", "revocationDate": "instant|null",
+        "subscriptionId": "string|null", "createdAt": "instant", "updatedAt": "instant"
+      }
+    },
+    "revenuecatEvents": {
+      "description": "24.5 — the revenuecat_webhook_event rows (develop) whose subjectKey is the owner id or one of the owner's original transaction ids",
+      "fields": { "id": "string", "type": "string", "subjectKey": "string|null", "eventTimestampMs": "integer", "processedAt": "instant|null", "createdAt": "instant" }
+    },
+    "accountCredit": {
+      "description": "24.5 — the owner's account_credit row, or null",
+      "fields": { "id": "uuid", "ownerId": "uuid", "amount": "integer (FCFA)", "updatedAt": "instant" }
+    },
+    "smsRechargeRequests": {
+      "description": "24.5 — the sms_recharge_request rows of the owner and the members (userId); phone and cardNumber NOT exported",
+      "fields": {
+        "id": "uuid", "userId": "uuid", "smsQuantity": "integer", "amountDue": "integer", "currency": "XAF", "status": "string",
+        "paymentMethod": "string", "completedAt": "instant|null", "createdAt": "instant", "updatedAt": "instant"
+      }
+    },
+    "usageCounters": {
+      "description": "24.5 — EVERY usage_counter row of the owner",
+      "fields": { "id": "uuid", "ownerId": "uuid", "metric": "invoices | sms | email | ai_credits | sms_free | daily_<metric>", "periodMonth": "YYYY-MM | YYYY-MM-DD | all", "used": "integer", "updatedAt": "instant" }
+    },
     "whatsapp": "24.6 — {account, templates[], campaigns[], messages[]}", "aiConversations": "24.6", "notifications": "24.6"
   },
   "keevoMapping24_2": {
@@ -82,6 +126,16 @@
     "products": "ONE untracked Keevo product per productKey across the owner's shops (id, name, creation date of the oldest; price of the latest typed price, else of the latest sale, cents rounded); merged products (mergedIntoId) imported archived and redirected; names made unique with « (2) »…; category « Produits importés »; every Bref product traced",
     "customers": "one Keevo client per customer (same id) in the store of its shop (ADR-08: no merge across stores, sharing off); E.164 phone required (else blocking case CLIENT_INVALID); fields beyond the client limits cut or dropped with a note",
     "blocking": "a product or customer of another shop or duplicated, a price out of range (PRODUCT_INVALID), a customer phone not readable as E.164 (CLIENT_INVALID)"
+  },
+  "keevoMapping24_5": {
+    "plan": "the plan Bref's SUBSCRIPTION_IN_FORCE gives at the cutover instant (Apple grace included), else the due scheduled one, else the free plan (no grace, ADR-07): tenant subscription + plan_type, tenant_plan_events cause MIGRATION_BREF; a future paid period of the same plan extends the expiry, of another plan goes to the credit",
+    "planPaymentRequests": "public.payment_requests (same id, kind PLAN, never in flight: pending → EXPIRED) + public.tenant_payments for a confirmed one (same id; cash in amount_xaf, credit part in credit_xaf; ACCOUNT_CREDIT when 0 cash)",
+    "appleTransactions": "public.external_subscriptions per original transaction (id of the latest transaction; ACTIVE / BILLING_ISSUE / EXPIRED / REVOKED) + public.tenant_payments APP_STORE for production, non-revoked purchases with a declared Apple price",
+    "revenuecatEvents": "public.revenuecat_webhook_event (processed ones only, outcome APPLIED): a replayed event is ignored by Keevo",
+    "accountCredit": "public.tenant_credits + one MIGRATION movement (to the franc)",
+    "smsRechargeRequests": "completed recharges → SMS pack units (usage_credits, source MIGRATION); others not imported",
+    "usageCounters": "public.usage_counters of the current WAT month, today and LIFETIME (sms_free); invoices → DOCUMENTS, sms → SMS, email → EMAILS, ai_credits → AI_CREDITS",
+    "blocking": "an in-force subscription or a confirmed request whose plan or cycle has no Keevo equivalent, a negative credit (MONETISATION_INVALID)"
   },
   "example": {
     "formatVersion": 1,
@@ -135,6 +189,38 @@
         "createdAt": "2026-03-01T10:00:00.000Z", "updatedAt": "2026-03-01T10:00:00.000Z"
       }
     ],
-    "invoices": []
+    "invoices": [],
+    "subscriptions": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000501", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "plan": "pro", "status": "active", "billingCycle": "monthly",
+        "startedAt": "2026-11-01T08:00:00.000Z", "endsAt": "2026-12-01T08:00:00.000Z", "amountPaid": 3000,
+        "creditUsed": 500, "paymentMethod": "orange_money", "appleOriginalTransactionId": null,
+        "gracePeriodEndsAt": null, "createdAt": "2026-11-01T08:00:00.000Z", "updatedAt": "2026-11-01T08:00:00.000Z"
+      }
+    ],
+    "planPaymentRequests": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000601", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "targetPlan": "pro", "targetBillingCycle": "monthly", "amount": 3500, "creditApplied": 500,
+        "amountDue": 3000, "currency": "XAF", "status": "confirmed", "paymentMethod": "orange_money",
+        "startsAt": "2026-11-01T08:00:00.000Z", "endsAt": "2026-12-01T08:00:00.000Z",
+        "createdAt": "2026-11-01T07:58:00.000Z", "updatedAt": "2026-11-01T08:00:00.000Z",
+        "paymentProvider": "mycoolpay", "providerTransactionRef": "MCP-EXEMPLE-1", "providerStatus": "SUCCESS"
+      }
+    ],
+    "appleTransactions": [],
+    "revenuecatEvents": [],
+    "accountCredit": {
+      "id": "6f1d2c3b-0000-4000-8000-000000000701", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+      "amount": 1750, "updatedAt": "2026-11-01T08:00:00.000Z"
+    },
+    "smsRechargeRequests": [],
+    "usageCounters": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000801", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "metric": "invoices", "periodMonth": "2026-11", "used": 12, "updatedAt": "2026-11-09T08:00:00.000Z"
+      }
+    ]
   }
 }

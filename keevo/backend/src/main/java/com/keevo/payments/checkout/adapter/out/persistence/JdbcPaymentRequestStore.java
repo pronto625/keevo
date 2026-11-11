@@ -116,9 +116,13 @@ public class JdbcPaymentRequestStore implements PaymentRequestStore, PaidPlanPer
     static final String LATEST_PAID_PERIOD_SQL = "SELECT plan_code, period_end FROM public.payment_requests "
             + "WHERE tenant_id = ? AND status = 'CONFIRMED' AND kind = 'PLAN' AND period_end IS NOT NULL "
             + "ORDER BY created_at DESC LIMIT 1";
-    static final String LEDGER_SQL = "INSERT INTO public.tenant_payments (id, tenant_id, amount_xaf, method, paid_at, "
-            + "period_start, period_end, note, recorded_by, plan_code, cycle_code, payment_request_id) "
-            + "VALUES (?, ?, ?, 'MOBILE_MONEY', ?, ?, ?, ?, ?, ?, ?, ?)";
+    /**
+     * Story 24.5 (21.3 item) — the cash collected ({@code amount_xaf}, method MOBILE_MONEY) and the part paid with the
+     * account credit ({@code credit_xaf}); a plan paid 100 % with the credit has amount 0 and method ACCOUNT_CREDIT.
+     */
+    static final String LEDGER_SQL = "INSERT INTO public.tenant_payments (id, tenant_id, amount_xaf, credit_xaf, method, "
+            + "paid_at, period_start, period_end, note, recorded_by, plan_code, cycle_code, payment_request_id) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private final JdbcTemplate jdbc;
 
@@ -311,22 +315,26 @@ public class JdbcPaymentRequestStore implements PaymentRequestStore, PaidPlanPer
 
     @Override
     public void insertLedger(UUID tenantPaymentId, PaymentRequest r, PlanPeriod period, Instant paidAt) {
-        String note = "Paiement en ligne" + (r.method() == null ? "" : " — " + r.method().label())
-                + (r.creditAppliedXaf() > 0 ? " (crédit du compte utilisé : "
+        boolean cash = r.amountDueXaf() > 0;
+        String note = (cash ? "Paiement en ligne" + (r.method() == null ? "" : " — " + r.method().label())
+                : "Payé avec le crédit du compte")
+                + (cash && r.creditAppliedXaf() > 0 ? " (crédit du compte utilisé : "
                         + com.keevo.payments.credit.application.service.AccountCreditService.xaf(r.creditAppliedXaf())
                         + ")" : "");
         jdbc.update(LEDGER_SQL, ps -> {
             ps.setObject(1, tenantPaymentId, Types.OTHER);
             ps.setObject(2, r.tenantId(), Types.OTHER);
             ps.setInt(3, Math.toIntExact(r.amountDueXaf()));
-            ps.setTimestamp(4, Timestamp.from(paidAt));
-            ps.setDate(5, Date.valueOf(period.start()));
-            ps.setDate(6, Date.valueOf(period.end()));
-            ps.setString(7, note);
-            ps.setObject(8, r.requestedBy(), Types.OTHER);
-            ps.setString(9, r.planCode());
-            ps.setString(10, r.cycleCode());
-            ps.setObject(11, r.id(), Types.OTHER);
+            ps.setLong(4, r.creditAppliedXaf());
+            ps.setString(5, cash ? "MOBILE_MONEY" : "ACCOUNT_CREDIT");
+            ps.setTimestamp(6, Timestamp.from(paidAt));
+            ps.setDate(7, Date.valueOf(period.start()));
+            ps.setDate(8, Date.valueOf(period.end()));
+            ps.setString(9, note);
+            ps.setObject(10, r.requestedBy(), Types.OTHER);
+            ps.setString(11, r.planCode());
+            ps.setString(12, r.cycleCode());
+            ps.setObject(13, r.id(), Types.OTHER);
         });
     }
 

@@ -17,8 +17,9 @@ import java.util.*;
  * TRIAL » (plan catalogue), so a plan created as data counts like the seeded one of its kind.
  *
  * <ul>
- *   <li>Monthly value of a payment = {@code amount × 30 / days(period_start..period_end inclusive)}, rounded
- *       half-up to the XAF.</li>
+ *   <li>Monthly value of a payment = {@code (amount + credit part) × 30 / days(period_start..period_end inclusive)},
+ *       rounded half-up to the XAF (Story 24.5: a plan paid with the account credit counts in the MRR; the revenue
+ *       collected counts the cash only).</li>
  *   <li>MRR on a day = sum of the monthly values of the payments covering that day, one per tenant (latest
  *       {@code paid_at} among those covering it). A payment stops counting from the WAT date of a later
  *       {@code PREMIUM → FREE} event of its tenant (manual downgrade before the paid period ends), until a
@@ -76,7 +77,7 @@ public final class RevenueMetrics {
     public static long monthlyValue(RevenuePayment p) {
         long days = ChronoUnit.DAYS.between(p.periodStart(), p.periodEnd()) + 1;
         if (days <= 0) return 0;
-        return (p.amountXaf() * 60 + days) / (2 * days);
+        return (p.valueXaf() * 60 + days) / (2 * days);
     }
 
     /** Per tenant, the payment counted on {@code day}: the latest paid among those covering it. */
@@ -129,7 +130,8 @@ public final class RevenueMetrics {
             totals.computeIfAbsent(key(p), k -> new Totals()).addCounted(monthlyValue(p));
         }
         for (RevenuePayment p : payments) {
-            if (inRange(watDate(p.paidAt()), from, to)) {
+            // Story 24.5: a plan paid 100 % with the credit collects nothing (counted in the MRR above only)
+            if (p.amountXaf() > 0 && inRange(watDate(p.paidAt()), from, to)) {
                 totals.computeIfAbsent(key(p), k -> new Totals()).addCollected(p.amountXaf());
             }
         }

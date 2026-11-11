@@ -47,6 +47,7 @@ public final class ImportRun {
     private final Map<MigrationRecord.Key, UUID> records;
     private final Map<String, Integer> counts = new LinkedHashMap<>();
     private final Map<ImportNote.Kind, Integer> notes = new EnumMap<>(ImportNote.Kind.class);
+    private final Map<Class<?>, Object> attachments = new java.util.HashMap<>();
     private UUID tenantId;
     private String tenantSchema;
     /** Story 24.7 — the identity bridge's decision per Bref account (owner and live members), set by the check. */
@@ -143,6 +144,16 @@ public final class ImportRun {
             return null; // invited, not a member until he accepts
         }
         return target(MigrationRecord.BREF_USER, brefUserId, MigrationRecord.LINKED_USERS);
+    }
+
+    /** Story 24.5 — keeps what a step loaded in its {@link ImportStep#check} for its {@link ImportStep#run}. */
+    public <T> void attach(Class<T> type, T value) {
+        attachments.put(type, value);
+    }
+
+    /** Story 24.5 — what a step attached, or {@code null}. */
+    public <T> T attachment(Class<T> type) {
+        return type.cast(attachments.get(type));
     }
 
     public void tenant(UUID id, String schema) {

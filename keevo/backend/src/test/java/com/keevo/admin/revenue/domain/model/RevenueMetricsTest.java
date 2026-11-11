@@ -362,4 +362,20 @@ class RevenueMetricsTest {
         assertThat(RevenueMetrics.monthsBetween(LocalDate.of(2026, 1, 1), LocalDate.of(2026, 9, 12))).isEqualTo(8.3);
         assertThat(RevenueMetrics.monthsBetween(LocalDate.of(2026, 9, 12), LocalDate.of(2026, 9, 12))).isZero();
     }
+
+    @Test
+    @DisplayName("24.5 — a plan paid 100 % with the account credit counts in the MRR, not in the revenue collected")
+    void creditPaidPlan() {
+        var credit = new RevenuePayment(A, 0, Instant.parse("2026-10-01T09:00:00Z"), LocalDate.of(2026, 10, 1),
+                LocalDate.of(2026, 10, 30), "PRO", "MONTHLY", 3_500);
+        var mixed = new RevenuePayment(B, 3_000, Instant.parse("2026-10-02T09:00:00Z"), LocalDate.of(2026, 10, 2),
+                LocalDate.of(2026, 10, 31), "PRO", "MONTHLY", 500);
+        var m = new RevenueMetrics(List.of(credit, mixed), List.of());
+
+        assertThat(m.mrrAt(TODAY)).isEqualTo(3_500 + 3_500);
+        assertThat(m.payingAt(TODAY)).isEqualTo(2);
+        assertThat(m.revenueCollected(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31))).isEqualTo(3_000);
+        assertThat(m.byPlanAndCycle(TODAY, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31)))
+                .hasSize(1);
+    }
 }

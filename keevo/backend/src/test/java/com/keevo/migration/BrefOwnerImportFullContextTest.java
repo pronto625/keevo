@@ -213,7 +213,7 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
         assertThat(tenant.get("suspended_reason")).isEqualTo("Migration Bref en cours — activation en attente");
         assertThat(tenant.get("suspended_at")).isNotNull();
         assertThat(count("SELECT count(*) FROM public.tenant_plan_events WHERE tenant_id = ? AND cause = "
-                + "'MIGRATION_BREF'", tenantId)).isEqualTo(1);
+                + "'MIGRATION_BREF'", tenantId)).isEqualTo(2); // creation (24.2) + plan in force (24.5)
 
         // stores: the Bref ids, no « Ma Boutique », the deleted shop inactive, dates kept, phone E.164
         List<Map<String, Object>> stores = jdbc.queryForList("SELECT id, name, is_active, category, phone, created_at "
@@ -254,8 +254,9 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
                         sleeper + ":" + shopB + ":INACTIVE:true");
         assertThat(count("SELECT count(*) FROM \"" + schema + "\".user_roles WHERE user_id = ?", owner)).isEqualTo(1);
         int records = count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ?", owner);
-        // tenant, owner, owner membership, 2 stores, 3 × (user, membership, employee), « Produits importés » (24.3)
-        assertThat(records).isEqualTo(1 + 1 + 1 + 2 + 3 * 3 + 1);
+        // tenant, owner, owner membership, 2 stores, 3 × (user, membership, employee), « Produits importés » (24.3),
+        // plan in force (24.5)
+        assertThat(records).isEqualTo(1 + 1 + 1 + 2 + 3 * 3 + 1 + 1);
 
         // ── re-run: nothing written
         JsonNode again = data(importOwner(owner, "DATABASE", token));

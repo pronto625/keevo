@@ -39,7 +39,28 @@ public record ImportNote(String code, String label, int count) {
         CLIENT_NAME_MISSING("Client sans nom : son téléphone sert de nom"),
         CLIENT_FIELD_SHORTENED("Information de client trop longue, raccourcie"),
         CLIENT_FIELD_DROPPED("Information de client invalide (e-mail, date de naissance ou type), non reprise"),
-        CLIENT_CONSENT_AUTHOR_UNKNOWN("Accord marketing déclaré par un compte inconnu : auteur non repris");
+        CLIENT_CONSENT_AUTHOR_UNKNOWN("Accord marketing déclaré par un compte inconnu : auteur non repris"),
+        // Story 24.5 — monetisation
+        PLAN_IN_GRACE("Abonnement App Store en période de grâce : plan conservé jusqu'à la fin de la grâce"),
+        PLAN_WITHOUT_END("Abonnement sans date de fin dans Bref : plan payant sans échéance"),
+        PLAN_SCHEDULED_EXTENDED("Période déjà payée et programmée : échéance prolongée"),
+        PLAN_SCHEDULED_STARTED("Période payée programmée sans abonnement en cours : démarrée à la migration"),
+        PLAN_SCHEDULED_TO_CREDIT("Période programmée d'un autre plan : montant versé au crédit du compte"),
+        APPLE_PRODUCT_CHANGE_IGNORED("Changement de produit App Store programmé : repris au prochain renouvellement "
+                + "Apple"),
+        PAYMENT_PENDING_EXPIRED("Paiement en attente lors de la migration : repris expiré, validé si l'opérateur le "
+                + "confirme"),
+        PAYMENT_REQUEST_SKIPPED("Demande de paiement sans montant, incohérente ou d'une autre devise : non reprise"),
+        APPLE_PRODUCT_UNKNOWN("Produit App Store absent du catalogue : abonnement et achats non repris"),
+        APPLE_PRICE_UNKNOWN("Prix App Store non renseigné : achat non inscrit aux encaissements"),
+        APPLE_PURCHASE_NOT_COUNTED("Achat App Store de test ou remboursé : non inscrit aux encaissements"),
+        APPLE_SUBSCRIPTION_HELD("Abonnement App Store déjà rattaché à une autre entreprise : non rattaché"),
+        APPLE_TRANSACTION_UNREADABLE("Achat App Store sans identifiant d'abonnement lisible : non repris"),
+        APPLE_PURCHASE_ALREADY_RECORDED("Achat App Store déjà inscrit aux encaissements de Keevo : non repris"),
+        REVENUECAT_EVENT_UNREADABLE("Événement App Store illisible (type ou identifiant) : non repris"),
+        REVENUECAT_EVENT_UNPROCESSED("Événement App Store non traité par Bref : il sera traité s'il est renvoyé"),
+        SMS_RECHARGE_NOT_PAID("Recharge SMS non payée : non reprise"),
+        COUNTER_PAST_PERIOD("Compteur de consommation d'une période passée : non repris");
 
         private final String label;
 

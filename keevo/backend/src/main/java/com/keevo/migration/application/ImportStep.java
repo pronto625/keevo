@@ -18,4 +18,13 @@ public interface ImportStep {
      * the owner's whole record history in memory).
      */
     java.util.Set<String> targetTables();
+
+    /**
+     * Story 24.5 — the blocking cases of this step, found before any write of the run (after the snapshot validation;
+     * the orchestrator blocks the batch when any step reports one). A step may load the section it needs here and keep
+     * it in the run ({@link ImportRun#attach}). Default: none.
+     */
+    default java.util.List<com.keevo.migration.domain.model.BlockedCase> check(ImportRun run) {
+        return java.util.List.of();
+    }
 }

@@ -214,6 +214,28 @@ class AdminRevenueServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(s.revenueCollected()).isEqualTo(15_000);
     }
 
+    @Test
+    @DisplayName("24.5 — a plan paid 100 % with the account credit counts in the MRR, not in the revenue collected; "
+            + "the credit held by live companies is shown (deleted ones excluded)")
+    void creditPaidPlan_realSql() {
+        UUID g = tenant("Revenus Crédit", "ACTIVE", true);
+        plan(g, "PREMIUM");
+        jdbc.update("INSERT INTO public.tenant_payments (tenant_id, amount_xaf, credit_xaf, method, paid_at, "
+                        + "period_start, period_end, recorded_by) VALUES (?, 0, 30000, 'ACCOUNT_CREDIT', ?, ?, ?, ?)",
+                g, Timestamp.from(Instant.parse("2031-06-10T10:00:00Z")), Date.valueOf(LocalDate.of(2031, 6, 10)),
+                Date.valueOf(LocalDate.of(2031, 7, 9)), UUID.randomUUID());
+        jdbc.update("INSERT INTO public.tenant_credits (tenant_id, balance_xaf) VALUES (?, 1750)", g);
+        UUID deleted = tenantIds.get(2); // C, DELETED
+        jdbc.update("INSERT INTO public.tenant_credits (tenant_id, balance_xaf) VALUES (?, 9999)", deleted);
+
+        RevenueSummary s = service.getSummary(new RevenueRangeQuery(null, null));
+
+        assertThat(s.mrr()).isEqualTo(15_000 + 30_000);
+        assertThat(s.payingTenants()).isEqualTo(2);
+        assertThat(s.revenueCollected()).isEqualTo(15_000);
+        assertThat(s.outstandingCreditXaf() - baseline.outstandingCreditXaf()).isEqualTo(1750);
+    }
+
     private UUID tenant(String name, String status, boolean provision) {
         UUID id = UUID.randomUUID();
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6);

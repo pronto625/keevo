@@ -25,6 +25,7 @@ import java.time.LocalDate;
  * @param revenueCollected   sum of the payments made in the range (XAF)
  * @param packsSold          Story 21.3 — usage packs paid in the range (confirmed pack requests)
  * @param packsCollectedXaf  Story 21.3 — cash collected for those packs (XAF; the account credit used is excluded)
+ * @param outstandingCreditXaf Story 24.5 — the account credit the live companies hold today (XAF)
  */
 public record RevenueSummary(
         LocalDate from,
@@ -47,8 +48,20 @@ public record RevenueSummary(
         double conversionRate,
         long revenueCollected,
         int packsSold,
-        long packsCollectedXaf
+        long packsCollectedXaf,
+        long outstandingCreditXaf
 ) {
+
+    /** Without the outstanding credit (before Story 24.5). */
+    public RevenueSummary(LocalDate from, LocalDate to, long mrr, long arr, long mrrPreviousMonth,
+                          Double mrrTrendPercent, int payingTenants, int freeTenants, int trialTenants,
+                          int premiumTenants, int premiumWithoutPayment, int newPayingTenants, int churnedTenants,
+                          int churnBase, double churnRate, int convertedTenants, int trialsEnded,
+                          double conversionRate, long revenueCollected, int packsSold, long packsCollectedXaf) {
+        this(from, to, mrr, arr, mrrPreviousMonth, mrrTrendPercent, payingTenants, freeTenants, trialTenants,
+                premiumTenants, premiumWithoutPayment, newPayingTenants, churnedTenants, churnBase, churnRate,
+                convertedTenants, trialsEnded, conversionRate, revenueCollected, packsSold, packsCollectedXaf, 0L);
+    }
 
     /** Without pack sales (before Story 21.3). */
     public RevenueSummary(LocalDate from, LocalDate to, long mrr, long arr, long mrrPreviousMonth,

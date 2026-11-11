@@ -147,7 +147,7 @@ class JsonExportBrefSource implements BrefSourcePort {
         }
     }
 
-    private static String expectedChecksum(Path file) {
+    static String expectedChecksum(Path file) {
         Path sidecar = file.resolveSibling(file.getFileName().toString().concat(".sha256"));
         try {
             String content = Files.readString(sidecar, StandardCharsets.US_ASCII).strip();
@@ -163,7 +163,7 @@ class JsonExportBrefSource implements BrefSourcePort {
         }
     }
 
-    private static MessageDigest sha256() {
+    static MessageDigest sha256() {
         try {
             return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {

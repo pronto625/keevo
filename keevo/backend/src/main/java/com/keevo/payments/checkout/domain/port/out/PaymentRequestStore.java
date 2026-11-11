@@ -87,6 +87,9 @@ public interface PaymentRequestStore {
      */
     void confirm(UUID id, UUID tenantPaymentId, PlanPeriod period, Instant at);
 
-    /** The ledger row of a confirmed paid request ({@code tenant_payments}, MOBILE_MONEY, plan and cycle). */
+    /**
+     * The ledger row of a confirmed paid request ({@code tenant_payments}, plan and cycle): cash as MOBILE_MONEY, the
+     * credit part in {@code credit_xaf}, ACCOUNT_CREDIT when the credit paid it all (Story 24.5).
+     */
     void insertLedger(UUID tenantPaymentId, PaymentRequest request, PlanPeriod period, Instant paidAt);
 }

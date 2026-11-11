@@ -67,8 +67,13 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             + "WHERE p.kind = 'USAGE_PACK' AND p.status = 'CONFIRMED' AND p.confirmed_at >= ? AND p.confirmed_at < ? "
             + "AND " + IN_SCOPE;
 
+    /** Story 24.5 (21.3 item) — the account credit the live companies hold (one aggregate on the credit table). */
+    static final String OUTSTANDING_CREDIT_SQL = "SELECT COALESCE(sum(c.balance_xaf), 0) FROM public.tenant_credits c "
+            + "JOIN public.tenants t ON t.id = c.tenant_id WHERE " + IN_SCOPE;
+
     static final String PAYMENTS_SQL =
-            "SELECT p.tenant_id, p.amount_xaf, p.paid_at, p.period_start, p.period_end, p.plan_code, p.cycle_code "
+            "SELECT p.tenant_id, p.amount_xaf, p.paid_at, p.period_start, p.period_end, p.plan_code, p.cycle_code, "
+            + "p.credit_xaf "
             + "FROM public.tenant_payments p JOIN public.tenants t ON t.id = p.tenant_id WHERE " + IN_SCOPE
             + " AND p.voided_at IS NULL"; // a voided payment (9-2 correction) never counts
 
@@ -202,7 +207,13 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
                 metrics.newPayingTenants(from, to).size(),
                 churned, churnBase, RevenueMetrics.rate(churned, churnBase),
                 conversion.converted(), conversion.trialsEnded(), conversion.rate(),
-                metrics.revenueCollected(from, to), Math.toIntExact(packs[0]), packs[1]);
+                metrics.revenueCollected(from, to), Math.toIntExact(packs[0]), packs[1], outstandingCredit());
+    }
+
+    /** Story 24.5 — the account credit held today by the live companies (XAF). */
+    private long outstandingCredit() {
+        Long total = jdbc.queryForObject(OUTSTANDING_CREDIT_SQL, Long.class);
+        return total == null ? 0 : total;
     }
 
     /** Story 21.3 — {count, cash collected} of the usage packs paid between two WAT dates (inclusive). */
@@ -340,7 +351,8 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
                 rs.getDate("period_start").toLocalDate(),
                 rs.getDate("period_end").toLocalDate(),
                 rs.getString("plan_code"),
-                rs.getString("cycle_code")));
+                rs.getString("cycle_code"),
+                rs.getLong("credit_xaf")));
         List<PlanChange> events = jdbc.query(EVENTS_SQL, (rs, i) -> new PlanChange(
                 UUID.fromString(rs.getString("tenant_id")),
                 rs.getString("from_plan"),

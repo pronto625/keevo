@@ -262,8 +262,9 @@ class AccountCreditFullContextTest extends FullContextIntegrationTest {
         assertThat(webhook(callback(providerRef(id), "SUCCESS", 2500))).isEqualTo("200 OK");
         assertThat(status(id)).isEqualTo("CONFIRMED");
         assertThat(planOfTenant()).isEqualTo("PRO");
-        assertThat(jdbc.queryForObject("SELECT amount_xaf FROM public.tenant_payments WHERE tenant_id = ?",
-                Integer.class, tenantId)).isEqualTo(2500);
+        assertThat(jdbc.queryForMap("SELECT amount_xaf, credit_xaf, method FROM public.tenant_payments WHERE "
+                + "tenant_id = ?", tenantId)).containsEntry("amount_xaf", 2500).containsEntry("credit_xaf", 1000L)
+                .containsEntry("method", "MOBILE_MONEY"); // Story 24.5: cash + credit part
 
         JsonNode credit = ok(call(get("/api/v1/payments/credit"), ownerToken, null));
         assertThat(credit.path("balanceXaf").asLong()).isZero();
@@ -279,8 +280,8 @@ class AccountCreditFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("credit 5 000 covers PRO 3 500 → CONFIRMED at once without method/phone, balance 1 500, no ledger "
-            + "row; without useCredit the balance is untouched")
+    @DisplayName("credit 5 000 covers PRO 3 500 → CONFIRMED at once without method/phone, balance 1 500, one ledger "
+            + "row ACCOUNT_CREDIT (cash 0, credit part 3 500 — Story 24.5); without useCredit the balance is untouched")
     void creditCoversAllAndNotChosen() throws Exception {
         grantCredit(5000);
         JsonNode p = ok(planCheckout(true, null, null));
@@ -292,7 +293,15 @@ class AccountCreditFullContextTest extends FullContextIntegrationTest {
                 String.class, p.path("id").asText())).isEqualTo("NONE");
         assertThat(planOfTenant()).isEqualTo("PRO");
         assertThat(balance()).isEqualTo(1500);
-        assertThat(ledgerRows()).isZero();
+        assertThat(ledgerRows()).isEqualTo(1);
+        assertThat(jdbc.queryForMap("SELECT amount_xaf, credit_xaf, method FROM public.tenant_payments WHERE "
+                + "tenant_id = ?", tenantId)).containsEntry("amount_xaf", 0).containsEntry("credit_xaf", 3500L)
+                .containsEntry("method", "ACCOUNT_CREDIT");
+        JsonNode list = ok(call(get("/api/v1/admin/tenants/" + tenantId + "/payments"), adminToken, null));
+        assertThat(list.get(0).path("recordedByLabel").asText()).isEqualTo("Paiement en ligne (crédit du compte)");
+        assertThat(list.get(0).path("method").asText()).isEqualTo("ACCOUNT_CREDIT");
+        assertThat(list.get(0).path("amountXaf").asLong()).isZero();
+        assertThat(list.get(0).path("creditXaf").asLong()).isEqualTo(3500);
 
         JsonNode notChosen = ok(planCheckout(false, "MTN_MOMO", "677000111"));
         assertThat(notChosen.path("creditAppliedXaf").asLong()).isZero();

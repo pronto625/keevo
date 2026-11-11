@@ -7,8 +7,10 @@
 // rollback).
 // Writes go through the owning modules' import ports: identity (accounts, tenant, members, sale flow, sector
 // templates), store (shops, logos), shared.module (activation rules), catalog (categories, products — 24.3), crm
-// (clients — 24.3).
+// (clients — 24.3), payments (checkouts, ledger, App Store, credit — 24.5), subscription (plan change, usage counters —
+// 24.5).
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {"catalog :: api", "crm :: api", "identity :: api", "shared", "store :: api"}
+    allowedDependencies = {"catalog :: api", "crm :: api", "identity :: api", "payments :: api", "shared",
+        "store :: api", "subscription :: api"}
 )
 package com.keevo.migration;

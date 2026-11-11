@@ -78,7 +78,7 @@ final class BrefRows {
     }
 
     /** A decimal from a JSON string ({@code "12500.00"}, the contract) or number; absent → {@code 0}. */
-    private static BigDecimal decimal(JsonNode n, String field) {
+    static BigDecimal decimal(JsonNode n, String field) {
         JsonNode v = n.get(field);
         if (v == null || v.isNull()) {
             return BigDecimal.ZERO;
@@ -92,7 +92,7 @@ final class BrefRows {
         return new BigDecimal(v.asText().strip()); // NumberFormatException is an IllegalArgumentException
     }
 
-    private static int integer(JsonNode n, String field) {
+    static int integer(JsonNode n, String field) {
         JsonNode v = n.get(field);
         if (v == null || v.isNull()) {
             return 0;
@@ -103,12 +103,12 @@ final class BrefRows {
         return v.intValue();
     }
 
-    private static String text(JsonNode n, String field) {
+    static String text(JsonNode n, String field) {
         JsonNode v = n.get(field);
         return v == null || v.isNull() ? null : v.asText();
     }
 
-    private static boolean bool(JsonNode n, String field, boolean fallback) {
+    static boolean bool(JsonNode n, String field, boolean fallback) {
         JsonNode v = n.get(field);
         if (v == null || v.isNull()) {
             return fallback;
@@ -119,7 +119,7 @@ final class BrefRows {
         return v.booleanValue();
     }
 
-    private static UUID uuid(JsonNode n, String field) {
+    static UUID uuid(JsonNode n, String field) {
         String v = text(n, field);
         if (v == null) {
             throw new IllegalArgumentException(field + " missing");
@@ -127,7 +127,7 @@ final class BrefRows {
         return UUID.fromString(v);
     }
 
-    private static Instant instant(JsonNode n, String field) {
+    static Instant instant(JsonNode n, String field) {
         Instant v = instantOrNull(n, field);
         if (v == null) {
             throw new IllegalArgumentException(field + " missing");

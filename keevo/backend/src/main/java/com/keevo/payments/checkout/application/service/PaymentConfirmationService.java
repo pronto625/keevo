@@ -192,7 +192,9 @@ public class PaymentConfirmationService {
         PlanPeriod period = PlanPeriod.of(renewal, current.expiresAt(), now, r.months());
 
         UUID ledgerId = null;
-        if (!r.free()) { // cash collected only (the credit part is in the credit journal)
+        // Story 24.5 (21.3 item): the ledger holds the cash collected and the part paid with the credit (counted in the
+        // MRR, not in the revenue collected); a free offer (100 % discount) has no row
+        if (r.amountDueXaf() + r.creditAppliedXaf() > 0) {
             ledgerId = UUID.randomUUID();
             store.insertLedger(ledgerId, r, period, now);
         }
