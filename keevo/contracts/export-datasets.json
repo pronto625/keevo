@@ -1132,7 +1132,9 @@
       "SUPPLIER_UNARCHIVED" : "Fournisseur désarchivé",
       "SUPPLIER_UPDATED" : "Fournisseur modifié",
       "USER_AUTHENTICATED" : "Connexion",
-      "USER_REGISTERED" : "Inscription"
+      "USER_REGISTERED" : "Inscription",
+      "WHATSAPP_ACCOUNT_CONNECTED" : "WhatsApp Business connecté",
+      "WHATSAPP_ACCOUNT_DISCONNECTED" : "WhatsApp Business déconnecté"
     },
     "audit_log.entityType" : {
       "Category" : "Catégorie",
@@ -1157,7 +1159,8 @@
       "Store" : "Boutique",
       "Supplier" : "Fournisseur",
       "Tenant" : "Compte",
-      "User" : "Compte utilisateur"
+      "User" : "Compte utilisateur",
+      "WhatsAppAccount" : "WhatsApp Business"
     }
   },
   "constants" : {
