@@ -4,8 +4,9 @@ type: 'bugfix'
 created: '2026-11-01'
 status: 'done'
 baseline_revision: 'b3cc5cb377697c66ccd2a027a6c7a47e021aa775'
+reprise_baseline_revision: 'cf9402ba20aa80e6cbf096de59e3d01b2d71810c'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-16-context.md'
 warnings: ['oversized']
@@ -113,6 +114,46 @@ deferred: []
   - `[low]` `[patch]` (blind) WARN noise for storeless employees, dead null checks, fully qualified UUID — log lowered/reworded, checks removed, import.
   - `[low]` `[patch]` (verification-gap) `findAllByTenantId` with the V37 columns never run on PostgreSQL — integration assertion added.
 
+### 2026-11-10 — Review pass (reprise: stock scope, purchase prices, SQL)
+- verdicts: 36 findings — high 0, medium 4, low 27, false 5, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` (design) New `(store_id, product_id)` index does not serve the store-scoped keyset pull of `stockLevels` — V2 now creates `idx_stock_levels_store_sync (store_id, updated_at, CAST(id AS text))` (shape of `idx_invoices_store_sync`), also leading the store-filtered overview.
+  - `[medium]` `[patch]` (design) Gap report computed before the scope check — `InventoryReportController` checks the session's store (`CountingReadScope.requireSessionReadable`, one PK read) before `generateGapReportUseCase`; unit test verifies the use case is never called on a 403.
+  - `[low]` `[reject]` (design) Counting reads check scope in the controller with a second session PK read — one indexed PK read per request; moving the scope into three query records adds surface for no measurable gain.
+  - `[low]` `[patch]` (design) `COUNT(DISTINCT sl.product_id)` useless under `uq_stock_level (product_id, store_id)` — `COUNT(*)`.
+  - `[low]` `[reject]` (design) `ProductMcpTools.quantities` restates the owner / member / storeless rule — catalog may not depend on inventory (`StockReadScopes`); 6 lines, covered by `AiToolsFullContextTest.productSearchStockScope` (owner, two members, storeless member).
+  - `[low]` `[reject]` (design) Two UPDATEs (scope then visibility) at the end of a pull — only when the scope or marker changed (once per device), same row, best effort like the existing write; merging changes a port used by 20.2.
+  - `[low]` `[patch]` (design) Variable-length `IN (?, …)` list in `CatalogStockQuantitiesAdapter` — one `ANY(CAST(? AS uuid[]))` parameter.
+  - `[low]` `[reject]` (intent) V1 tolerance argued, not tested on the V1 client — this repo ships the API only; V1 code read on `release/2.0.x` (Drift `buy_price` NOT NULL → sync sends 0; REST DTO `@Default(0)` → null read as 0).
+  - `[low]` `[reject]` (intent) `products.stockQuantity` still sent to members (REST, sync) — decision DD3: legacy creation-time column never maintained by movements (17-11), not another store's stock; `search_products` no longer reads it.
+  - `[false]` `[reject]` (intent) "One policy" split at sync — one permission and one role mapping; `PullScope.holds` reads the same `ModulePermissions` mapping resolved in `SyncController`, providers read no security context (16-13 rule); documented hook for 19-14.
+  - `[low]` `[reject]` (intent) D3 tested by results, OFFSET kept — the detail must order the whole catalogue (rowless products are « rupture »), so a keyset would need a computed sort key; one statement + top-N sort + index-driven join, total from the window.
+  - `[low]` `[patch]` (intent) Tenant isolation asserted on only some paths — `otherTenantReadsNothing` covers product stock, availability, product, counting counts and session list from another company.
+  - `[false]` `[reject]` (intent) Spec section absent from the diff — excluded from the review diff on purpose; present in the working tree.
+  - `[false]` `[reject]` (blind) Counting write guard lets a storeless member write anywhere — `CurrentActor.assignedStoreId()` throws FORBIDDEN for a store member without a store (CurrentActor.java:157-170).
+  - `[medium]` `[patch]` (blind) Gap report before authorization — same root as the design row.
+  - `[low]` `[patch]` (blind) Sync `UPDATE_PRODUCT` with the masked 0 untested — `syncPushNeverErasesThePrice` (employee push: price applied, buy price and transport cost kept).
+  - `[low]` `[reject]` (blind) Fallback constructors without role mapping hide prices from MANAGER — used only by hand-built unit tests; fail closed (OWNER only); Spring uses the `@Autowired` constructor.
+  - `[low]` `[patch]` (blind) DTO masking opt-in, `ProductThresholdResponseDto.from(p)` defaults to visible — one-arg overload removed (visibility now required); `ProductResponseDto` is only built through `ProductController.respond` / `forReader` (all endpoints covered by `lookupAndWriteResponsesMasked` and `restPurchasePrices`).
+  - `[low]` `[reject]` (blind) Store-scope rule copied in `ProductMcpTools` — same root as the design row.
+  - `[low]` `[patch]` (blind) No end-to-end test for a member without a store — over HTTP a member always has a store (`employees.store_id` NOT NULL, `JwtAuthFilter` reads it from the employee row), so the fail-closed branch is proven by `StockReadScopeTest`, the service tests (no query) and a storeless `search_products` call (stock null).
+  - `[medium]` `[patch]` (blind) Index useless for the scoped sync pull — same root as the design row.
+  - `[low]` `[reject]` (blind) Index migration not CONCURRENT — module migrations run per tenant inside Flyway transactions like every other module index (invoicing V12/V14/V17); `stock_levels` is small per tenant.
+  - `[low]` `[reject]` (blind) V71 committed while V69/V70 are not — V71 is the number reserved for this story by the orchestrator, which cherry-picks the parallel stories in order.
+  - `[low]` `[reject]` (blind) Two UPDATEs and a reseed of every member device after deploy — DD6 (deliberate: flush pulled purchase prices and other stores' levels); V1 devices get the overwrite of prices, purge is RN only (documented).
+  - `[low]` `[reject]` (blind) `stockQuantity` still exposed — same as the intent row (DD3).
+  - `[low]` `[reject]` (blind) An employee's real price edit is dropped silently — rule D2 (only admins write purchase prices); documented in the Mobile section (the app must not send them).
+  - `[low]` `[patch]` (blind) Per-size SQL in `CatalogStockQuantitiesAdapter` — same root as the design row.
+  - `[low]` `[patch]` (verification-gap) Masking on lookup / create / merge / archive responses untested — `lookupAndWriteResponsesMasked` (barcode lookup as EMPLOYEE / VIEWER / MANAGER, archive response).
+  - `[low]` `[patch]` (verification-gap) `search_products` storeless member and untracked product untested — `productSearchStockScope` extended (stock null in both cases).
+  - `[low]` `[reject]` (verification-gap other) `stockQuantity` — same as the intent row (DD3).
+  - `[false]` `[reject]` (verification-gap other) Stripping prices turns a request into tracking-only — a tracking change is OWNER-only (17.12), so the remaining request is exactly what the actor may do.
+  - `[low]` `[reject]` (edge) A device whose pulls keep failing re-seeds forever — same behaviour as the 16-13 scope re-seed (rejected 2026-11-01): a failing provider already blocks the pull.
+  - `[low]` `[patch]` (edge) Owner's `search_products` total counted deactivated stores — join on active stores (same as the overview).
+  - `[low]` `[patch]` (edge) A stripped edit with nothing left still saved and re-synced the product — `isEmptyEdit()` → no save, no event (unit test).
+  - `[false]` `[reject]` (edge) SUPER_ADMIN purchase prices masked — the product endpoints are `@PreAuthorize` OWNER / MANAGER / EMPLOYEE / VIEWER; a super-admin never reaches them.
+  - `[low]` `[patch]` (edge) Fail-open one-arg overloads `GetCurrentStockUseCase.execute(id)` / `ProductThresholdResponseDto.from(p)` — removed.
+
 ## Design Notes
 
 Why server-side re-seed in addition to the `scope` field: the RN client purges on a scope change, but nothing tells any client to fetch the new store's older rows (the cursor is a single client-held `since`). Answering that one pull from EPOCH fixes it for every client, V1 included; merges are idempotent upserts, so re-sending the tenant-wide datasets is safe. The decision must survive paging (stored in the cursor) and must not be committed until the pull's last page succeeds, otherwise an interrupted pull would lose the re-seed.
@@ -126,6 +167,91 @@ Implementation decisions (2026-11-01): `PullScope` lives in `shared.application.
 
 **Manual checks (if no CLI):**
 - Local backend with `--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false`; owner + employee via `/auth/login` + `/auth/select-tenant` (no forged tokens); employee pull before/after reassignment as in the AC; Redmi basic sync as employee (`adb reverse tcp:4500 tcp:4500`, never share sheets / wa.me); stop with `fuser -k 4500/tcp`.
+
+## Reprise 10/11/2026 — store-scoped stock reads and purchase-price visibility
+
+### Intent (reprise)
+
+**Problem:** Items routed to 16-13 by the 21.8 and 21-4-2 reviews: (1) REST multi-store stock reads (`/stock/overview`, `/stock/stores/{id}/products`, `/stock/products/{id}/availability`), the product stock reads (`/products/{id}/stock`, `/stock/history`), the inventory-counting reads and the sync `stockLevels` give a store member (MANAGER, EMPLOYEE, VIEWER) the stock of every store; `search_products` shows a "total stock" that is the frozen legacy `products.stock_quantity`; (2) the purchase price (`buyPrice`, `transportCost`, margins derived from them) reaches every role through `GET /products*`, `/products/{id}/pricing`, the threshold PATCH response and the sync `products` rows; (3) the multi-store overview SQL is O(stores × products) (stores × products cross join before `stock_levels`), the store detail runs the page query plus a second full `COUNT(*)`, and `SUM(quantity * price)` is computed in 32-bit integers.
+
+**User decisions (10/11/2026):** D1 a store member only sees the stock of their own store, everywhere (REST, AI/MCP tools, low stock, sync); the OWNER sees every store. D2 purchase prices are visible only to OWNER and MANAGER (Bref « admin »), hidden from EMPLOYEE and VIEWER in REST, exports, sync and AI tools, additively for V1 2.0.1, behind ONE policy that story 19-14 can replace with a per-role permission. D3 the stock_by_store / low-stock SQL becomes set-based with proper indexes.
+
+**Approach:** D1 — a `StockReadScope` value object (inventory domain) resolved once per request by the inbound adapter (`StockReadScopes.current()` from `CurrentActor`) and carried by the queries to the services/repository; the sync `stockLevels` provider uses the existing `PullScope` store filter. D2 — a module permission `PURCHASE_PRICE_VIEW` declared by the `catalog` manifest (OWNER implicitly, MANAGER via `rolePermissions`), evaluated by one component `PurchasePriceVisibility` (REST, tools, write guard) and by `PullScope.holds(...)` (sync, same `ModulePermissions` mapping); writes from an actor without it never change the stored purchase price. D3 — overview aggregated from `stock_levels` per store then joined to `stores`; detail in one query with `COUNT(*) OVER ()`; new index `stock_levels(store_id, updated_at, id::text)` (serves the store-scoped keyset pull and the store filters).
+
+### Boundaries & Constraints (reprise)
+
+**Always:**
+- Scope rule (D1): OWNER → every store; store member with store S → S only; store member without store → nothing (empty lists, 403 on a store-specific read), never an exception that breaks a sync pull. An explicit other store → 403 `FORBIDDEN` « Vous ne pouvez consulter que le stock de votre boutique. » (same message as the 21.8 tool). Tenant isolation unchanged (schema per tenant): another tenant's store id is unknown → empty / 403.
+- Surfaces under D1: `GET /stock/overview` (own store line only), `GET /stock/stores/{storeId}/products` (403 outside), `GET /stock/products/{id}/availability` (own store entry only), `GET /products/{id}/stock` (own store level only), `GET /products/{id}/stock/history` (forced to own store, 403 for another), counting reads `GET /inventory/sessions` (forced to own store, 403 other), `/inventory/sessions/active?storeId` (403 other), `/inventory/sessions/{id}/products|counts|gap-report|gap-report/text` (403 when the session is in another store), tools `stock_by_store`, `low_stock_products`, `search_products` (stock = own store; owner = sum of every store), sync `stockLevels` (`store_id = :scopeStoreId`).
+- Purchase price rule (D2): hidden = `buyPrice` and `transportCost` set to `null` in REST (`ProductResponseDto` on every products endpoint incl. `POST /products/draft`, `ProductThresholdResponseDto`); `GET /products/{id}/pricing` keeps `productId`/`sellingPrice` and nulls every cost-derived field (`buyPrice`, `transportCostValue`, `totalCost`, `grossMarginXaf`, `marginPercentage`, `isLoss`, `marginThreshold`); `search_products.purchasePrice` null. Sync `products` rows: `buyPrice: 0`, `transportCost: 0` plus additive `purchasePriceHidden: true` (V1 2.0.1 stores pulled products in a NOT NULL column and would fail on null; its REST DTO maps null → 0). Exports, profitability, finance, revenue tools, audit stay OWNER-only (already; MANAGER not widened).
+- Writes (D2): `PATCH /products/{id}` and sync `UPDATE_PRODUCT` / `PROMOTE_PRODUCT` from an actor without `PURCHASE_PRICE_VIEW` ignore `buyPrice`/`transportCost` (stored value kept — a device holding the masked 0 must never erase the real price); creation keeps the typed value.
+- One policy: the permission constant `PurchasePriceVisibility.PERMISSION` = `PURCHASE_PRICE_VIEW`; every check goes through `PurchasePriceVisibility` (REST / tools / write guard) or `PullScope.holds(PurchasePriceVisibility.PERMISSION)` (sync). 19-14 replaces the role → permission mapping, not the call sites.
+- Re-seed (sync): the device memory gains `last_scope_visibility` (V71); a restricted pull whose visibility marker (store-scoped stock + purchase-price visibility) differs from the device's stored one — including unknown (devices from before this change) — is answered from EPOCH with `reseed: true` when the client sent a `since`, so devices drop other stores' levels (RN purge) and overwrite pulled purchase prices. Unrestricted (owner) pulls never re-seed for it.
+- SQL (D3): overview = one statement, `stock_levels` aggregated per store (joined to non-archived tracked products) then LEFT JOINed to active stores; optional bound store filter; `SUM(CAST(quantity AS bigint) * price)`. Detail = one statement with `COUNT(*) OVER ()` (count query only for an empty page past the end). Index `idx_stock_levels_store_sync (store_id, updated_at, CAST(id AS text))` in `db/modules/inventory/V2` (review: same shape as `idx_invoices_store_sync`).
+
+**Never:**
+- No response shape change except additive (`purchasePriceHidden`) and null/0 values; no endpoint removed; V1 2.0.1 employee pulls must keep working.
+- No change to `products.stock_quantity` semantics in REST/sync (legacy display column, documented); no owner-only surface widened to MANAGER.
+- No per-row / per-store query loops; no security-context read inside services, repositories or sync providers.
+
+### I/O & Edge-Case Matrix (reprise)
+
+| Scenario | Input / State | Expected | Error |
+|---|---|---|---|
+| Owner overview | stores A, B | both lines | — |
+| Member of A overview / availability | A, B stocked | only A's line / entry | — |
+| Member of A detail of B | `GET /stock/stores/B/products` | — | 403 FORBIDDEN French message |
+| Member without store | any stock read | empty list / 403 on a store read; sync stockLevels empty | no 500 |
+| Member of A, `/products/{id}/stock/history?storeId=B` | — | — | 403 |
+| Member of A, gap report of a B session | — | — | 403 |
+| EMPLOYEE / VIEWER `GET /products` | product buy 600, transport 50 | `buyPrice: null`, `transportCost: null` | — |
+| MANAGER / OWNER `GET /products` | same | real values | — |
+| EMPLOYEE `PATCH /products/{id}` with `buyPrice: 0` | stored 600 | stored stays 600, response null | — |
+| EMPLOYEE sync pull | products | `buyPrice: 0`, `transportCost: 0`, `purchasePriceHidden: true`; stockLevels of A only | — |
+| Restricted device pulled before this change (`since` sent) | no stored visibility | `reseed: true`, from EPOCH; next pull incremental | — |
+| Other tenant's store id | owner of T2 asks a T1 store | empty overview / empty page | — |
+
+### Code Map (reprise)
+
+- `inventory/stock/domain/model/StockReadScope.java` (new) -- value object; `inventory/stock/adapter/in/StockReadScopes.java` (new) -- resolution from `CurrentActor` (only place).
+- `inventory/stock/domain/port/in/Get{MultiStoreOverview,StoreStockDetail,CrossStoreAvailability}Query.java` -- carry the scope; `application/usecase/Get*Service.java` -- apply it (403 via `DomainException.userFacing(FORBIDDEN, …)`).
+- `inventory/stock/domain/port/out/MultiStoreStockRepository.java` + `adapter/out/persistence/MultiStoreStockRepositoryAdapter.java` -- store-filtered, set-based SQL (D3).
+- `inventory/stock/adapter/in/web/MultiStoreStockController.java`, `adapter/in/mcp/StockMcpTools.java` -- pass the scope.
+- `inventory/stock/adapter/in/web/StockController.java:84-97,165-174,210-229` -- product stock reads scoped; threshold response masked.
+- `inventory/counting/adapter/in/rest/Inventory{Session,Count,Report}Controller.java` -- session read guard (one PK read).
+- `catalog/api/ProductStockQuantities.java` (new, required port like `ProductStockPresence`) implemented in inventory (one grouped query) -- real stock for `search_products`.
+- `catalog/product/adapter/in/mcp/ProductMcpTools.java` -- policy + real stock.
+- `shared/infrastructure/security/PurchasePriceVisibility.java` (new) -- the single policy; `resources/keevo/modules/catalog/module.json` -- permission + MANAGER mapping.
+- `catalog/product/adapter/in/web/ProductController.java`, `ProductImportController.java:163`, `dto/ProductResponseDto.java`, `application/usecase/GetProductPricingUseCase.java` -- masking; `application/usecase/UpdateProductUseCase.java:178-179` + `sync/sync/application/handler/ProductSyncHandler.java:98-99,157-158` -- write guard.
+- `sync/sync/application/provider/{StockLevel,Product}DeltaProvider.java` -- store filter, masking; `sync/sync/application/service/SyncPushService.java` (`ScopeKey`, `PullCursor`, `scopeChanged`, `rememberScope`), `UserSyncState`, `UserSyncStateRepository(+Adapter)`, `db/migration/V71__sync_scope_visibility.sql` -- re-seed on visibility change.
+- `db/modules/inventory/V2__stock_levels_store_index.sql` -- index.
+
+### Tasks & Acceptance (reprise)
+
+**Execution:**
+- Scope plumbing, SQL, services, controllers and tools for D1 (files above) -- confidentiality.
+- Policy, manifest, masking, write guard for D2 -- confidentiality and data safety.
+- Sync: `stockLevels` store filter, product masking, visibility marker + V71 + re-seed -- devices.
+- Tests: unit (scope, services, SQL shape, policy, masking, write guard, sync providers, pull re-seed), Postgres (store filter, bigint value, window total), full-context `StoreMemberStockAndPurchasePriceFullContextTest` proving tenant + store isolation for every read path (REST, tools, sync) and the role matrix for purchase prices.
+- Docs: `docs/entitlements/endpoints.md`, `docs/ai/tools.md` regenerated; epics 16.13 routed items ticked; 19.14 brief gets the hook; Mobile section updated; sprint-status.
+
+**Acceptance Criteria:**
+- Given owner, manager, employee and viewer of tenant T1 (stores A, B) and a tenant T2, when each calls every D1 surface, then a member only ever gets A's stock (or 403 for B), the owner gets A and B, and nothing of T2 appears in T1 nor the reverse.
+- Given a product with buy 600 / transport 50, when EMPLOYEE and VIEWER read it through REST, pricing, threshold PATCH, `search_products` and sync, then no real purchase price appears; MANAGER and OWNER see it; an EMPLOYEE update sending `buyPrice: 0` leaves 600 stored.
+- Given a restricted device that pulled before this change, when it pulls with its `since`, then the pull is a re-seed and the following one is incremental.
+
+### Design Notes (reprise)
+
+- **Patterns.** Value Object + Query Object for the stock scope (resolved at the edge, pure below — same shape as `PullScope`); Policy (one component) behind a module permission for the purchase price. **19-14 hook:** when owner-defined roles land, the role → permission mapping (`ModulePermissions.permissionsOf`, or its per-tenant replacement) returns the role's chosen permissions and `PURCHASE_PRICE_VIEW` becomes a checkbox « Voir les prix d'achat »; `PurchasePriceVisibility` and `PullScope.holds` call sites do not change. Required port (Dependency Inversion) `ProductStockQuantities` so catalog keeps no dependency on inventory.
+- **Complexity.** Overview: one statement, O(L) over `stock_levels` + hash join products, O(S) stores; with a store filter the new `(store_id, updated_at, id)` index limits it to that store's rows. Detail: one statement, O(P) scan of the catalogue joined by index to the store's levels, top-N sort O(P log k), total from the window (no second scan). Availability: O(S). `search_products` stock: one grouped query, one array parameter, over the ≤ 51 returned ids (index `(product_id, store_id)`), active stores only. Counting guard: one PK read. Sync: stockLevels walks `(store_id, updated_at, id)` — only the member's store rows. Re-seed: once per restricted device.
+- **Why 0 + flag in sync and null in REST:** V1 2.0.1 inserts pulled products into `buy_price INTEGER NOT NULL` (Drift `withDefault(0)` does not apply to an explicit NULL) → a null would fail the employee's pull; its REST DTO maps null to 0 (`@Default(0)`). The RN app reads `purchasePriceHidden`.
+- **Decisions taken by default:** DD1 MANAGER (« admin ») holds the permission; profitability, exports, finance, revenue tools and audit stay OWNER-only (not widened). DD2 creation by a member keeps the typed purchase price; updates and promotions ignore it. DD3 `products.stock_quantity` (legacy column, never maintained by movements) unchanged in REST/sync; `search_products` uses real `stock_levels`. DD4 counting and movement-history reads count as stock under D1. DD5 the inter-store availability that 16-13 (2026-11-01) kept for employees is now limited to their store (D1 overrides it). DD6 re-seed once per restricted device to flush stored purchase prices and other stores' levels.
+
+### Verification (reprise)
+
+**Commands:** `scratchpad/wt-pkgs.sh <backend> t1613 <pkg>` for `catalog`, `inventory`, `sync`, `shared`, `architecture` (one package at a time; `EndpointEntitlementCoverageTest` / `AiToolCoverageTest` regenerated with `-Dkeevo.entitlements.regenerate=true` / `-Dkeevo.aitools.regenerate=true`) -- expected: green.
+
+**Manual checks:** local backend on port 4513 with its own database `keevo_dev_t1613` (WhatsApp noop, FCM off): owner, manager, employee of store A; `GET /stock/overview`, `/stock/stores/{B}/products` (403), `/products/{id}` and `/pricing` (masked for the employee), `PATCH /products/{id}` by the employee with `buyPrice: 0` (stored price kept), sync pull (`stockLevels` of A only, `purchasePriceHidden`), then a second pull with `since` (re-seed once, then incremental).
 
 ## Mobile (React Native — dépôt AI/bref)
 
@@ -184,6 +310,40 @@ curl -s "$BASE/api/v1/sync/pull?since=$SINCE" -H "Authorization: Bearer $AT_EMPL
 6. **Employé sans boutique** — Then aucune donnée propre à une boutique sur l'appareil, pas d'erreur de synchro.
 7. **Réaffectation pendant un pull paginé** — Given plus de 1 000 lignes et l'employé réaffecté entre deux pages, When l'app demande la page suivante avec `nextCursor`, Then la réponse a `reseed: true` et la nouvelle `scope` ; l'app purge et continue jusqu'à `hasMore: false` sans garder de ligne de l'ancienne boutique.
 
+### Reprise 10/11/2026 — stock de sa boutique seulement, prix d'achat réservés au propriétaire et au gérant
+
+**Statut** : API livrée (commit `3c5059bc`) — mobile à faire. **Clé de suivi mobile** : `m16-13-scope-employe-donnees-synchro` (même clé, complétée).
+
+#### Ce qui est fait côté API
+
+- **Stock** (décision utilisateur D1) : un membre de boutique (gérant `MANAGER`, employé `EMPLOYEE`, lecteur `VIEWER`) ne voit plus que le stock de **sa** boutique, partout ; le propriétaire voit toutes les boutiques.
+  - Synchro : `stockLevels` ne contient plus que les niveaux de sa boutique (fin de la « disponibilité inter-boutiques » gardée le 01/11).
+  - REST : `GET /api/v1/stock/overview` → une seule ligne (sa boutique) ; `GET /api/v1/stock/products/{productId}/availability` → une seule entrée ; `GET /api/v1/products/{productId}/stock` → le niveau de sa boutique ; `GET /api/v1/stock/stores/{storeId}/products`, `GET /api/v1/products/{productId}/stock/history?storeId=`, `GET /api/v1/inventory/sessions?storeId=`, `/inventory/sessions/active?storeId=` et `/inventory/sessions/{id}/products|counts|gap-report|gap-report/text` d'une autre boutique → **403** `FORBIDDEN`, message « Vous ne pouvez consulter que le stock de votre boutique. » (sans `storeId`, l'historique et la liste des sessions prennent sa boutique).
+  - Membre sans boutique : listes vides, 403 sur une boutique, synchro sans niveaux de stock (jamais d'erreur de synchro).
+- **Prix d'achat** (D2) : `buyPrice` et `transportCost` (et tout coût / marge qui en dérive) ne sont visibles que pour le **propriétaire** et le **gérant**.
+  - REST pour un employé ou un lecteur : `buyPrice: null`, `transportCost: null` sur tous les produits (`GET /api/v1/products`, `/products/{id}`, `/products/lookup`, création, modification, fusion, archivage, `POST /products/draft`, `PATCH /products/{id}/threshold`) ; `GET /products/{id}/pricing` garde `productId` et `sellingPrice`, tout le reste à `null`.
+  - Synchro (`products`) pour un employé ou un lecteur : `buyPrice: 0`, `transportCost: 0` et le nouveau champ `purchasePriceHidden: true` (`false` pour le propriétaire et le gérant). Le 0 n'est **pas** un prix : il n'existe que parce que l'app V1 2.0.1 range ces champs dans une colonne non nulle.
+  - Écriture : une modification (`PATCH /products/{id}`, `UPDATE_PRODUCT`, `PROMOTE_PRODUCT`) envoyée par un employé ou un lecteur ne change **jamais** le prix d'achat ni les frais de transport enregistrés (les autres champs s'appliquent) ; une création garde le prix saisi.
+- **Re-téléchargement unique** : la première synchro d'un appareil de membre (avec `since`) après cette version, ou après un changement de droit sur les prix d'achat, revient avec `reseed: true` (pull depuis le début) ; la suivante est incrémentale.
+
+#### À implémenter côté mobile
+
+1. Sur `reseed: true` (déjà géré par la purge 16-13) : purger aussi les `stock_levels` des autres boutiques, puis appliquer les pages.
+2. Produits : si `purchasePriceHidden` est `true`, ne **jamais** afficher ni utiliser `buyPrice` / `transportCost` (pas de « 0 FCFA », pas de marge, pas de rentabilité calculée localement) ; masquer les champs « Prix d'achat » / « Frais de transport » des fiches et des exports locaux. Si l'utilisateur modifie un produit, ne pas envoyer `buyPrice` / `transportCost` (le serveur les ignore de toute façon).
+3. Écrans de stock d'un membre : uniquement sa boutique (plus de disponibilité dans les autres boutiques) ; sur un 403 avec le message ci-dessus, afficher ce message tel quel.
+4. Aucun libellé technique à l'écran (`purchasePriceHidden`, `reseed`).
+
+#### Critères d'acceptation mobile
+
+1. Given un employé de A, When il synchronise, Then l'appareil ne contient que les niveaux de stock de A et aucun prix d'achat ; les fiches produits n'affichent ni prix d'achat ni marge.
+2. Given un gérant de A, When il ouvre une fiche produit, Then le prix d'achat réel s'affiche ; le stock reste celui de A.
+3. Given un employé qui modifie le prix de vente d'un produit hors ligne, When l'opération est poussée, Then le prix de vente change et le prix d'achat enregistré par le propriétaire reste intact.
+
+```bash
+curl -s "$BASE/api/v1/sync/pull" -H "Authorization: Bearer $AT_EMPLOYE" -H "X-Device-Id: poste-1" | jq '.data.entities.products[0] | {buyPrice, purchasePriceHidden}'
+curl -s "$BASE/api/v1/stock/stores/$STORE_B/products" -H "Authorization: Bearer $AT_EMPLOYE_A" | jq '.message'   # 403
+```
+
 ## Auto Run Result
 
 Status: done
@@ -201,4 +361,20 @@ Status: done
 **Residual risks:** V1 2.0.1 devices cannot purge rows already pulled (documented); store filters are residual on cursor-leading keyset indexes (fine at current volumes); test tenant `KV-1D0VLM` left in keevo_dev.
 
 ### Deferred items routed 2026-11-10
-- [ ] [Deferred-from: 21.8 review, 2026-11-10] Portée boutique des lectures de stock multi-boutiques [keevo/backend/src/main/java/com/keevo/inventory/stock/adapter/in/web/MultiStoreStockController.java:55,67] — `GET /api/v1/stock/overview` et `GET /api/v1/stock/stores/{storeId}/products` n'appliquent aucune portée : un EMPLOYEE / MANAGER / VIEWER lit le stock de n'importe quelle boutique (l'outil IA de 21.8 est, lui, limité à la boutique du membre). Trancher : besoin métier (disponibilité inter-boutiques) ou écart à la règle 16-13 ; dans le second cas, même limitation qu'en 21.8 (404/403 français hors de sa boutique). Réglé par un test full-context employé boutique A → boutique B.
+- [x] [Deferred-from: 21.8 review, 2026-11-10] Portée boutique des lectures de stock multi-boutiques [keevo/backend/src/main/java/com/keevo/inventory/stock/adapter/in/web/MultiStoreStockController.java:55,67] — `GET /api/v1/stock/overview` et `GET /api/v1/stock/stores/{storeId}/products` n'appliquent aucune portée : un EMPLOYEE / MANAGER / VIEWER lit le stock de n'importe quelle boutique (l'outil IA de 21.8 est, lui, limité à la boutique du membre). Trancher : besoin métier (disponibilité inter-boutiques) ou écart à la règle 16-13 ; dans le second cas, même limitation qu'en 21.8 (404/403 français hors de sa boutique). Réglé par un test full-context employé boutique A → boutique B. — **réglé par la reprise du 10/11/2026** (décision D1 : écart à la règle, plus de disponibilité inter-boutiques pour un membre ; 403 « Vous ne pouvez consulter que le stock de votre boutique. » ; `StoreMemberStockAndPurchasePriceFullContextTest`).
+
+### Reprise 10/11/2026 — Auto Run Result
+
+Status: done
+
+**Summary:** D1 — `StockReadScope` (value object, inventory domain) resolved once per request by `StockReadScopes.current()` and carried by the multi-store queries to the services and the SQL: a store member (MANAGER, EMPLOYEE, VIEWER) only reads its store (overview, store detail → 403 French message, availability, product stock and history, inventory-counting reads, `stock_by_store` / `low_stock_products`, sync `stockLevels`), the owner every store; `search_products` reads the real `stock_levels` (port `ProductStockQuantities`, one grouped query). D2 — permission `PURCHASE_PRICE_VIEW` (catalog manifest, OWNER + MANAGER) behind `PurchasePriceVisibility` (REST, AI tool, write guard) and `PullScope.holds` (sync): `buyPrice` / `transportCost` null in REST (products, lookup, draft, threshold), pricing costs and margins null, sync `0` + `purchasePriceHidden: true`; updates from EMPLOYEE / VIEWER never change them. Devices re-seed once when the visibility marker changes (V71 `last_scope_visibility`). D3 — overview aggregated from `stock_levels` per store (64-bit value), detail in one statement (`COUNT(*) OVER ()`), index `stock_levels(store_id, updated_at, id::text)` (inventory V2).
+
+**Files:** `inventory/stock/domain/model/StockReadScope`, `inventory/stock/adapter/in/StockReadScopes`, the three multi-store queries / services / port / adapter, `MultiStoreStockController`, `StockMcpTools`, `StockController`, `GetCurrentStockUseCase`, `ProductThresholdResponseDto`, counting controllers + `CountingReadScope`, `catalog/api/ProductStockQuantities` + `CatalogStockQuantitiesAdapter`, `ProductMcpTools`, `shared/infrastructure/security/PurchasePriceVisibility`, `catalog/module.json`, `ProductController`, `ProductImportController`, `ProductResponseDto`, `GetProductPricingUseCase`, `UpdateProductUseCase`, `StockLevelDeltaProvider`, `ProductDeltaProvider`, `SyncPushService` (visibility marker), `UserSyncState` + repository, `V71__sync_scope_visibility.sql`, `db/modules/inventory/V2__stock_levels_store_index.sql`; tests (new `StoreMemberStockAndPurchasePriceFullContextTest`, `StockReadScopeTest`, `PurchasePriceVisibilityTest`; extended service, adapter, Postgres, controller, provider, pull, AI tools tests); `docs/entitlements/endpoints.md`, `docs/ai/tools.md`.
+
+**Review:** 5 layers, 36 findings — patched: medium 4 (2 roots: store-scoped sync index, gap report computed before the scope check), low 14 (sync push / lookup / storeless / other-tenant tests, `COUNT(*)`, array parameter, active stores only in the AI stock total, empty edit no-op, fail-open overloads removed); 0 deferred; rejected with reasons in the triage log (legacy `stockQuantity` DD3, V71 number reserved, non-concurrent module index, reseed spike DD6, owner-only surfaces not widened).
+
+**Follow-up review recommended: false** — the two medium roots are an index shape and a check moved before the computation, both covered by tests (keyset shape test, report test asserting the use case is never called).
+
+**Verification:** chunked Maven runs, one package at a time: catalog 373, inventory 441, sync 691, architecture 146, shared 1358 — 0 failure; `docs/ai/tools.md` regenerated (`endpoints.md` unchanged). Live (port 4513, DB `keevo_dev_t1613`, WhatsApp noop, FCM off, real register / employee creation / login / select-tenant): owner overview A + B, employee A only; employee detail of B → 403 « Vous ne pouvez consulter que le stock de votre boutique. »; availability A only; `buyPrice` null for the employee, 600 for manager and owner; pricing costs null; employee `PATCH buyPrice 0` → stored 600 kept, price 1100 applied; employee pull: `stockLevels` A only, `buyPrice 0`, `purchasePriceHidden true`; manager pull: real price, A only; owner pull A + B; a device with an unknown marker pulling with `since` → `reseed: true`, next pull incremental.
+
+**Residual risks:** V1 2.0.1 devices keep other stores' stock levels already pulled (no purge; prices are overwritten by the re-seed); one re-seed per member device after deploy; inventory module index built non-concurrently at boot (small table per tenant).

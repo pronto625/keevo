@@ -244,6 +244,8 @@ Scope (2026-11-08 user request): a per-tenant role editor — the owner creates 
 
 - [ ] [Decided 2026-11-08] Expenses today: owner + manager only (fix 20-10) — becomes a configurable permission
 - [ ] [Decided 2026-11-08] Documents today: employee = own documents, manager/viewer = their store, owner = all (20-14) — becomes a configurable scope (own / store / all)
+- [ ] [Decided 2026-11-10, 16-13 reprise] Purchase prices today: OWNER + MANAGER only — module permission `PURCHASE_PRICE_VIEW` (catalog manifest), evaluated only by `PurchasePriceVisibility` (REST, AI tools, write guard) and `PullScope.holds` (sync); becomes the checkbox « Voir les prix d'achat » of a role: replace the role → permission mapping, no call site changes. A change of a device's visibility re-seeds its next pull (`last_scope_visibility`, `SyncPushService.ScopeKey.visibilityMarker`)
+- [ ] [Decided 2026-11-10, 16-13 reprise] Stock reads today: a store member sees its own store only (`StockReadScope`, resolved in `StockReadScopes.current()`), the owner every store — becomes the role's store restriction
 
 Interim AC: Given an owner who creates the role « Caissier » with « Créer des ventes » and « Voir les dépenses », When an employee with that role signs in, Then they can sell and read expenses and nothing else, on REST and sync alike.
 
