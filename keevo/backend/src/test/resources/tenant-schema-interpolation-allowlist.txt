@@ -22,3 +22,8 @@ com/keevo/admin/analytics/application/service/AdminAnalyticsService.java :: sync
 com/keevo/admin/catalog/application/service/AdminCatalogService.java :: + (categories ? " LEFT JOIN " + validSchema(tenant) + ".categories c ON c.id = p.category_id"   # validSchema() returns TenantSchema.validate(...)
 com/keevo/admin/catalog/application/service/AdminCatalogService.java :: + " AS this_week FROM " + validSchema(tenant) + ".products";   # validSchema() returns TenantSchema.validate(...)
 com/keevo/admin/catalog/application/service/AdminCatalogService.java :: return validSchema(tenant) + ".products p";   # validSchema() returns TenantSchema.validate(...)
+
+# Story 20.2 reprise — `alias` is a SQL table alias (callers pass the literal "r"), never a tenant schema.
+com/keevo/crm/contact/adapter/out/persistence/ClientPurchaseAggregate.java :: return "COALESCE(SUM(" + alias + ".doc_count), 0) AS " + COUNT   # table alias
+com/keevo/crm/contact/adapter/out/persistence/ClientPurchaseAggregate.java :: + ", COALESCE(SUM(" + alias + ".total_amount), 0) AS " + TOTAL   # table alias
+com/keevo/crm/contact/adapter/out/persistence/ClientPurchaseAggregate.java :: + ", MAX(COALESCE(" + alias + ".recorded_at, " + alias + ".created_at)) FILTER (WHERE " + alias   # table alias
