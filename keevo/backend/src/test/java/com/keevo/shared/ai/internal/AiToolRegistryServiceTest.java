@@ -138,8 +138,9 @@ class AiToolRegistryServiceTest {
         registry.register(new FixtureMcpTools(), FixtureMcpTools.class, table);
         registry.replaceTools(table);
         when(entitlements.enabledModules(TENANT)).thenReturn(Set.of("crm", "reporting", "finance"));
-        when(permissions.permissionsOf(anyCollection())).thenAnswer(inv ->
-                inv.<java.util.Collection<String>>getArgument(0).contains("OWNER") ? Set.of("FINANCE_VIEW") : Set.of());
+        when(permissions.permissionsOf(org.mockito.ArgumentMatchers.<org.springframework.security.core.Authentication>any())).thenAnswer(inv -> // 19.14: per authentication
+                com.keevo.shared.module.application.ModulePermissions.rolesOf(inv.getArgument(0)).contains("OWNER")
+                        ? Set.of("FINANCE_VIEW") : Set.of());
     }
 
     @AfterEach

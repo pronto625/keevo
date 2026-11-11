@@ -62,7 +62,8 @@ class ValidateSaleSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new ValidateSaleSyncHandler(
-                CommerceSaleApiTestSupport.saleCommandPort(null, validateSaleUseCase, null));
+                CommerceSaleApiTestSupport.saleCommandPort(null, validateSaleUseCase, null),
+                com.keevo.shared.infrastructure.security.ShippedActorPermissions.get()); // 19.14
     }
 
     @AfterEach
@@ -103,6 +104,17 @@ class ValidateSaleSyncHandlerTest {
         ArgumentCaptor<ValidateSaleCommand> captor = ArgumentCaptor.forClass(ValidateSaleCommand.class);
         verify(validateSaleUseCase).validateSale(captor.capture());
         assertThat(captor.getValue().assignedStoreId()).isEqualTo(STORE_ID);
+    }
+
+    @Test
+    void story1914_roleWithoutSaleCreate_rejectedBeforeValidation() {
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(
+                UUID.randomUUID(), "EMPLOYEE", UUID.randomUUID(), java.util.Set.of("PURCHASE_PRICE_VIEW"));
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        org.mockito.Mockito.verifyNoInteractions(validateSaleUseCase);
     }
 
     @Test

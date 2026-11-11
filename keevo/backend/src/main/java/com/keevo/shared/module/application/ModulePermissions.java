@@ -1,6 +1,7 @@
 package com.keevo.shared.module.application;
 
 import com.keevo.identity.api.Role;
+import com.keevo.shared.module.CustomRoleGrant;
 import com.keevo.shared.module.KeevoModule;
 import com.keevo.shared.module.ModuleManifest;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -57,7 +58,7 @@ public class ModulePermissions implements SmartInitializingSingleton {
         this.modules = modules;
     }
 
-    private record Mapping(Set<String> declared, Map<Role, Set<String>> byRole) {
+    private record Mapping(Set<String> declared, Map<Role, Set<String>> byRole, Map<String, String> moduleOf) {
     }
 
     @Override
@@ -68,6 +69,11 @@ public class ModulePermissions implements SmartInitializingSingleton {
     /** Every permission declared by an installed manifest. */
     public Set<String> declared() {
         return mapping().declared();
+    }
+
+    /** Story 19.14 — the id of the module whose manifest declares {@code permission}, or {@code null}. */
+    public String moduleOf(String permission) {
+        return permission == null ? null : mapping().moduleOf().get(permission);
     }
 
     /** Whether {@code permission} is declared by an installed manifest. */
@@ -103,6 +109,47 @@ public class ModulePermissions implements SmartInitializingSingleton {
             return m.declared();
         }
         return m.byRole().getOrDefault(role, Set.of());
+    }
+
+    /**
+     * Story 19.14 — THE permissions an authenticated actor holds; every permission check of the backend
+     * ({@code @RequiresPermission}, {@code ActorPermissions}, {@code PurchasePriceVisibility}, the sync pull scope, the
+     * AI tool filter, extension slots) goes through this method:
+     * <ul>
+     *   <li>{@code OWNER}: every declared permission;</li>
+     *   <li>a store member holding a custom role ({@link CustomRoleGrant} on the authentication details): the role's
+     *       permissions that are still declared by an installed manifest, and only the read ones ({@value #READ_SUFFIX})
+     *       for a {@code VIEWER} membership — a viewer never writes;</li>
+     *   <li>anyone else: the built-in role mapping ({@link #permissionsOf(Collection)}).</li>
+     * </ul>
+     * Empty for {@code null}. Cost O(k) over the role's permissions (k ≤ declared), no query.
+     */
+    public Set<String> permissionsOf(Authentication authentication) {
+        if (authentication == null) {
+            return Set.of();
+        }
+        Set<String> roles = rolesOf(authentication);
+        if (roles.contains(ROLE_OWNER)) {
+            return mapping().declared();
+        }
+        CustomRoleGrant grant = authentication.getDetails() instanceof CustomRoleGrant.Carrier carrier
+                ? carrier.customRole() : null;
+        if (grant == null) {
+            return permissionsOf(roles);
+        }
+        if (roles.isEmpty() || !roles.stream().allMatch(r -> Role.isStoreMember(r))) {
+            return Set.of(); // a custom role belongs to a store member only (fail closed for anything else)
+        }
+        boolean viewer = roles.contains(Role.VIEWER.name());
+        Set<String> declared = mapping().declared();
+        Set<String> held = new TreeSet<>();
+        for (String permission : grant.permissions()) {
+            if (declared.contains(permission) && !PermissionCatalog.isOwnerReserved(permission)
+                    && (!viewer || permission.endsWith(READ_SUFFIX))) {
+                held.add(permission);
+            }
+        }
+        return Collections.unmodifiableSet(held);
     }
 
     /** The permissions held by a user with these roles (role names without the {@code ROLE_} prefix). */
@@ -200,6 +247,6 @@ public class ModulePermissions implements SmartInitializingSingleton {
         Map<Role, Set<String>> frozen = new EnumMap<>(Role.class);
         byRole.forEach((role, set) -> frozen.put(role, Collections.unmodifiableSet(set)));
         return new Mapping(Collections.unmodifiableSet(new TreeSet<>(owner.keySet())),
-                Collections.unmodifiableMap(frozen));
+                Collections.unmodifiableMap(frozen), Collections.unmodifiableMap(new TreeMap<>(owner)));
     }
 }

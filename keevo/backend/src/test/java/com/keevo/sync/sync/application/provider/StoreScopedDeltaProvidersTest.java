@@ -43,7 +43,8 @@ class StoreScopedDeltaProvidersTest {
     static Stream<Case> storeScoped() {
         return Stream.of(
                 new Case("stockMovements", StockMovementDeltaProvider::new, "store_id = :scopeStoreId"),
-                new Case("sales", SaleDeltaProvider::new, "store_id = :scopeStoreId"),
+                new Case("sales", SaleDeltaProvider::new, // 19.14: without STORE_SALES_VIEW, his own sales
+                        "store_id = :scopeStoreId AND employee_id = :scopeActorId"),
                 new Case("dayClosures", DayClosureDeltaProvider::new, "store_id = :scopeStoreId"),
                 new Case("inventorySessions", InventorySessionDeltaProvider::new, "store_id = :scopeStoreId"),
                 new Case("inventoryCounts", InventoryCountDeltaProvider::new,

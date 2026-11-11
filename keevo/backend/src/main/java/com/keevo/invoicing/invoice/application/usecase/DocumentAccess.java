@@ -4,6 +4,7 @@ import com.keevo.invoicing.invoice.domain.model.DocumentScope;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.ActorPermissions;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import org.springframework.stereotype.Service;
 
@@ -15,8 +16,9 @@ import java.util.UUID;
  * REST, sync and the sync pull (same pattern as {@code ClientVisibility} / {@code ExpenseStoreScope}):
  * <ul>
  *   <li>OWNER (and system work without an authenticated actor: POS bridge, jobs) → every document;</li>
- *   <li>MANAGER or VIEWER → the documents of their assigned store (a VIEWER cannot write: its permissions);</li>
- *   <li>EMPLOYEE → the documents they created (invoices, quotes, credit notes through their invoice);</li>
+ *   <li>a store member holding {@value #STORE_PERMISSION} (MANAGER or VIEWER by default, Story 19.14) → the documents
+ *       of their assigned store (a VIEWER cannot write: its permissions);</li>
+ *   <li>any other store member (EMPLOYEE by default) → the documents they created (invoices, quotes, credit notes through their invoice);</li>
  *   <li>a store member without store → 403 « Votre compte n'est rattaché à aucune boutique… » (Bref
  *       {@code noShopAssigned}); the sync pull reads nothing instead of failing.</li>
  * </ul>
@@ -31,10 +33,19 @@ public class DocumentAccess {
             "Votre compte n'est rattaché à aucune boutique : demandez au propriétaire de vous en attribuer une.";
     static final String ONLY_OWNER_STORE_FILTER = "Seul le propriétaire peut filtrer les documents par boutique.";
 
-    private final InvoiceRepository invoices;
+    /**
+     * Story 19.14 — the permission « Voir les documents de toute la boutique » (declared by the {@code invoicing}
+     * manifest; MANAGER and VIEWER by default, a checkbox of an owner-defined role).
+     */
+    public static final String STORE_PERMISSION = "DOCUMENT_STORE_VIEW";
 
-    public DocumentAccess(InvoiceRepository invoices) {
+    private final InvoiceRepository invoices;
+    private final ActorPermissions permissions;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DocumentAccess(InvoiceRepository invoices, ActorPermissions permissions) {
         this.invoices = invoices;
+        this.permissions = permissions;
     }
 
     /** The scope of the current actor; a store member without store → 403. */
@@ -106,7 +117,7 @@ public class DocumentAccess {
         }
     }
 
-    private static DocumentScope resolve() {
+    private DocumentScope resolve() {
         if (CurrentActor.authentication() == null || CurrentActor.isOwner() || CurrentActor.isSuperAdmin()
                 || !CurrentActor.isStoreMember()) {
             return DocumentScope.ALL;
@@ -115,7 +126,7 @@ public class DocumentAccess {
         if (store == null) {
             return DocumentScope.NONE;
         }
-        if (CurrentActor.isManager() || CurrentActor.isViewer()) {
+        if (permissions != null && permissions.currentActorHolds(STORE_PERMISSION)) { // 19.14 — was MANAGER or VIEWER
             return DocumentScope.store(store);
         }
         return DocumentScope.creator(CurrentActor.actorId());

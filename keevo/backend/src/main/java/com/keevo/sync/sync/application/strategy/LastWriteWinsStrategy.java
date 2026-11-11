@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.strategy;
 import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.shared.application.port.sync.SyncOperationResult;
 import com.keevo.shared.application.port.sync.SyncOperationStatus;
+import com.keevo.shared.infrastructure.security.ActorPermissions;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.sync.sync.domain.model.*;
 import com.keevo.sync.sync.domain.port.in.ConflictResolutionStrategy;
@@ -90,25 +91,40 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
             java.util.Set.of("UPDATE_STORE", "DEACTIVATE_STORE", "TOGGLE_CATEGORY");
 
     /**
-     * Story 20.10 — operations reserved to the OWNER and the MANAGER (the roles holding {@code EXPENSE_*}, user
-     * decision 2026-11-08): for an EMPLOYEE or a VIEWER the handler must still run and reject them (FORBIDDEN), never
-     * answer « superseded ».
+     * Story 20.10 / 19.14 — operations guarded by a module permission ({@code EXPENSE_CREATE} to update an expense,
+     * {@code EXPENSE_DELETE} to delete one — OWNER and MANAGER by default, a checkbox of an owner-defined role): for an
+     * actor without it the handler must still run and reject them (FORBIDDEN), never answer « superseded ».
      */
-    private static final java.util.Set<String> OWNER_OR_MANAGER = java.util.Set.of("UPDATE_EXPENSE", "DELETE_EXPENSE");
+    private static final java.util.Map<String, String> PERMISSION_GUARDED = java.util.Map.of(
+            "UPDATE_EXPENSE", "EXPENSE_CREATE",
+            "DELETE_EXPENSE", "EXPENSE_DELETE");
 
     private final SyncOperationsLogRepository logRepository;
     private final EntityLastModifiedRepository entityLastModified;
     private final UserSyncStateRepository userSyncStateRepository;
     private final ApplicationEventPublisher eventPublisher;
+    /** Story 19.14 — the single permission evaluator; {@code null} = only the OWNER is pre-checked (fail closed). */
+    private final ActorPermissions permissions;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public LastWriteWinsStrategy(SyncOperationsLogRepository logRepository,
                                  EntityLastModifiedRepository entityLastModified,
                                  UserSyncStateRepository userSyncStateRepository,
-                                 ApplicationEventPublisher eventPublisher) {
+                                 ApplicationEventPublisher eventPublisher,
+                                 ActorPermissions permissions) {
         this.logRepository = logRepository;
         this.entityLastModified = entityLastModified;
         this.userSyncStateRepository = userSyncStateRepository;
         this.eventPublisher = eventPublisher;
+        this.permissions = permissions;
+    }
+
+    /** Without the permission evaluator (tests): permission-guarded operations are pre-checked for the OWNER only. */
+    public LastWriteWinsStrategy(SyncOperationsLogRepository logRepository,
+                                 EntityLastModifiedRepository entityLastModified,
+                                 UserSyncStateRepository userSyncStateRepository,
+                                 ApplicationEventPublisher eventPublisher) {
+        this(logRepository, entityLastModified, userSyncStateRepository, eventPublisher, null);
     }
 
     /** Who wrote the entity's current state, and when (by the writer's clock). */
@@ -123,8 +139,9 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
             return PreApplyCheck.NONE; // a withdrawal is never superseded
         }
         if (OWNER_ONLY.contains(operation.operationType()) && !CurrentActor.isOwner()) return PreApplyCheck.NONE;
-        if (OWNER_OR_MANAGER.contains(operation.operationType())
-                && !CurrentActor.isOwner() && !CurrentActor.isManager()) return PreApplyCheck.NONE;
+        String guard = PERMISSION_GUARDED.get(operation.operationType());
+        if (guard != null && !CurrentActor.isOwner()
+                && (permissions == null || !permissions.currentActorHolds(guard))) return PreApplyCheck.NONE;
         UUID id = entityId(operation, target);
         if (id == null) return PreApplyCheck.NONE;
         Optional<Instant> updatedAt = entityLastModified.findUpdatedAt(target.entity(), id);

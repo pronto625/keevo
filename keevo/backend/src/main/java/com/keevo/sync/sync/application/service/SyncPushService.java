@@ -771,7 +771,13 @@ public class SyncPushService implements SyncUseCase {
          * drops other stores' levels (RN purge) and overwrites the purchase prices it pulled before.
          */
         static String visibilityMarker(PullScope scope) {
-            return VISIBILITY_RULES + ";pp=" + (scope.holds(PurchasePriceVisibility.PERMISSION) ? '1' : '0');
+            // Story 19.14 — a member without « Voir les ventes de toute la boutique » pulls his own sales only, without
+            // « Voir les documents de toute la boutique » his own documents: the suffixes are added only when the
+            // permission is missing, so a holder (MANAGER / VIEWER by default) keeps the 16-13 marker (no re-seed) and
+            // a device whose rights narrow or widen is re-seeded once.
+            return VISIBILITY_RULES + ";pp=" + (scope.holds(PurchasePriceVisibility.PERMISSION) ? '1' : '0')
+                    + (scope.holds(STORE_SALES_PERMISSION) ? "" : ";ss=0")
+                    + (scope.holds(DOCUMENT_STORE_PERMISSION) ? "" : ";ds=0");
         }
 
         /** Same restricted + store, and same fingerprint / visibility when both are known. */
@@ -905,6 +911,12 @@ public class SyncPushService implements SyncUseCase {
      */
     /** Story 16.13 (reprise) — version of the restricted pull's visibility rules (bump to re-seed every member). */
     static final String VISIBILITY_RULES = "v1613r";
+
+    /** Story 19.14 — « Voir les ventes de toute la boutique » ({@code pos} manifest). */
+    public static final String STORE_SALES_PERMISSION = "STORE_SALES_VIEW";
+
+    /** Story 19.14 — « Voir les documents de toute la boutique » ({@code invoicing} manifest). */
+    public static final String DOCUMENT_STORE_PERMISSION = "DOCUMENT_STORE_VIEW";
 
     record PullCursor(Instant startedAt, boolean failed, boolean reseed, boolean remember, ScopeKey scope,
                       Map<String, DeltaEntityProvider.Position> positions) {

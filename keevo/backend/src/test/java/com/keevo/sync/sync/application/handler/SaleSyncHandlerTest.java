@@ -53,7 +53,8 @@ class SaleSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new SaleSyncHandler(
-                CommerceSaleApiTestSupport.saleCommandPort(recordSaleUseCase, null, null), eventPublisher, StoreApiTestSupport.queryPort(storeRepository));
+                CommerceSaleApiTestSupport.saleCommandPort(recordSaleUseCase, null, null), eventPublisher, StoreApiTestSupport.queryPort(storeRepository),
+                com.keevo.shared.infrastructure.security.ShippedActorPermissions.get());
         lenient().when(storeRepository.findById(any())).thenReturn(Optional.of(mock(Store.class)));
         SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
@@ -79,6 +80,20 @@ class SaleSyncHandlerTest {
         SyncTestAuth.employee(UUID.randomUUID());
 
         var result = handler.handle(saleIn(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    // Story 19.14 — an owner-defined role without « Créer des ventes » never sells over sync either.
+    @Test
+    void story1914_roleWithoutSaleCreate_isForbidden() {
+        UUID store = UUID.randomUUID();
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(
+                UUID.randomUUID(), "EMPLOYEE", store, java.util.Set.of("PURCHASE_PRICE_VIEW"));
+
+        var result = handler.handle(saleIn(store), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");

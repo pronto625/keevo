@@ -8,6 +8,8 @@ import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.MembershipInvitation.IdentifierKind;
 import com.keevo.identity.employee.domain.port.out.MembershipInvitationRepository;
+import com.keevo.identity.role.domain.model.CustomRole;
+import com.keevo.identity.role.domain.port.out.CustomRoleStore;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -38,15 +40,28 @@ public class EmployeeRoleResolver {
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
     private final MembershipInvitationRepository invitationRepository;
+    /** Story 19.14 — the members' owner-defined roles; {@code null} in unit tests (none shown). */
+    private final CustomRoleStore customRoles;
 
+    /** Without custom roles (unit tests). */
     public EmployeeRoleResolver(UserMembershipRepository membershipRepository,
                                  TenantRepository tenantRepository,
                                  UserRepository userRepository,
                                  MembershipInvitationRepository invitationRepository) {
+        this(membershipRepository, tenantRepository, userRepository, invitationRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public EmployeeRoleResolver(UserMembershipRepository membershipRepository,
+                                 TenantRepository tenantRepository,
+                                 UserRepository userRepository,
+                                 MembershipInvitationRepository invitationRepository,
+                                 CustomRoleStore customRoles) {
         this.membershipRepository = membershipRepository;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.invitationRepository = invitationRepository;
+        this.customRoles = customRoles;
     }
 
     /**
@@ -60,11 +75,17 @@ public class EmployeeRoleResolver {
      * @param member      Story 19.5 — whether a membership row exists in the current tenant ({@code role} is then
      *                    the real one, not the {@code "EMPLOYEE"} default); team scoping refuses non-members
      */
-    public record Enrichment(String role, String phoneNumber, String username, boolean member) {
+    public record Enrichment(String role, String phoneNumber, String username, boolean member,
+                             CustomRole.Assigned customRole) {
+
+        /** Without custom role (Story 19.5 shape). */
+        public Enrichment(String role, String phoneNumber, String username, boolean member) {
+            this(role, phoneNumber, username, member, null);
+        }
 
         /** A member's enrichment (tests, callers that do not scope). */
         public Enrichment(String role, String phoneNumber, String username) {
-            this(role, phoneNumber, username, true);
+            this(role, phoneNumber, username, true, null);
         }
     }
 
@@ -89,6 +110,9 @@ public class EmployeeRoleResolver {
                 .collect(Collectors.toMap(UserTenantMembership::getUserId, UserTenantMembership::getRole,
                         (a, b) -> a));
         Map<UUID, IdentifierKind> invitedBy = invitationRepository.acceptedIdentifierKinds(tenant.getId(), userIds);
+        // Story 19.14 — one set query for the owner-defined roles of the page's members
+        Map<UUID, CustomRole.Assigned> custom = customRoles == null ? Map.of()
+                : customRoles.findAssigned(tenant.getId(), userIds);
         Map<UUID, Enrichment> result = new HashMap<>();
         for (UUID userId : userIds) {
             User user = users.get(userId);
@@ -101,7 +125,8 @@ public class EmployeeRoleResolver {
                             : (phoneVisible && user.getPhoneNumber() != null ? user.getPhoneNumber() : ""),
                     user == null || !usernameVisible || Usernames.isTechnical(user.getUsername())
                             ? null : user.getUsername(),
-                    roles.containsKey(userId)));
+                    roles.containsKey(userId),
+                    custom.get(userId)));
         }
         return result;
     }

@@ -269,6 +269,10 @@ public enum ErrorCode {
     // ── Client portal (Story 21.7) ───────────────────────────────────
     PORTAL_SESSION_INVALID,           // HTTP 401 — portal session token missing, unknown or expired (or a merchant JWT)
     PORTAL_TOO_MANY_REQUESTS,         // HTTP 429 — too many portal requests for the session, or failed ones for the IP
+    // ── Owner-defined roles (Story 19.14) ─────────────────────────────────
+    ROLE_NOT_FOUND,             // HTTP 404 — custom role id unknown in the company
+    ROLE_NAME_TAKEN,            // HTTP 409 — another role of the company has this name (case-insensitive)
+    ROLE_IN_USE,                // HTTP 409 — the role is still assigned to members: it cannot be deleted
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

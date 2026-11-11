@@ -173,7 +173,7 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
     /** Same rule as {@code @RequiresPermission} on the matching endpoint (roles of the authenticated actor). */
     private void requirePermission(String type) {
         String required = PERMISSIONS.get(type);
-        Set<String> held = permissions.permissionsOf(ModulePermissions.rolesOf(CurrentActor.authentication()));
+        Set<String> held = permissions.permissionsOf(CurrentActor.authentication());
         if (required == null || !held.contains(required)) {
             throw DomainException.userFacing(ErrorCode.FORBIDDEN, ROLE_REFUSED);
         }

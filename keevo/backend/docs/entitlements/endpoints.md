@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 397 — gated: 171, exempt: 226.
+Handlers: 404 — gated: 171, exempt: 233.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -216,6 +216,7 @@ Handlers: 397 — gated: 171, exempt: 226.
 | DELETE | `/api/v1/employees/invitations/{invitationId}` | — | — | — | core: employés (plafond du plan) | EmployeeController#cancelInvitation |
 | PATCH | `/api/v1/employees/{employeeId}` | — | — | — | core: employés (plafond du plan) | EmployeeController#updateEmployee |
 | GET | `/api/v1/employees/{employeeId}/activity` | — | — | — | core: employés (plafond du plan) | EmployeeController#getActivity |
+| PUT | `/api/v1/employees/{employeeId}/custom-role` | — | — | — | core: rôles de l'équipe | EmployeeCustomRoleController#assign |
 | PATCH | `/api/v1/employees/{employeeId}/deactivate` | — | — | — | core: employés (plafond du plan) | EmployeeController#deactivateEmployee |
 | POST | `/api/v1/employees/{employeeId}/password` | — | — | — | core: employés (plafond du plan) | EmployeeController#setPassword |
 | PATCH | `/api/v1/employees/{employeeId}/reactivate` | — | — | — | core: employés (plafond du plan) | EmployeeController#reactivateEmployee |
@@ -337,12 +338,18 @@ Handlers: 397 — gated: 171, exempt: 226.
 | POST | `/api/v1/reports/trigger-weekly` | `advanced-reports` | WRITE | — |  | ReportController#triggerWeekly |
 | GET | `/api/v1/reports/{reportId}` | `reporting` | READ | — |  | ReportController#getById |
 | POST | `/api/v1/reports/{reportId}/resend` | `reporting` | WRITE | — |  | ReportController#resend |
-| POST | `/api/v1/sales` | `pos` | WRITE | — |  | SaleController#recordSale |
+| GET | `/api/v1/roles` | — | — | — | core: rôles de l'équipe | RoleController#list |
+| POST | `/api/v1/roles` | — | — | — | core: rôles de l'équipe | RoleController#create |
+| GET | `/api/v1/roles/me` | — | — | — | core: rôles de l'équipe | RoleController#me |
+| GET | `/api/v1/roles/permissions` | — | — | — | core: rôles de l'équipe | RoleController#catalogue |
+| DELETE | `/api/v1/roles/{roleId}` | — | — | — | core: rôles de l'équipe | RoleController#delete |
+| PUT | `/api/v1/roles/{roleId}` | — | — | — | core: rôles de l'équipe | RoleController#update |
+| POST | `/api/v1/sales` | `pos` | WRITE | `SALE_CREATE` |  | SaleController#recordSale |
 | GET | `/api/v1/sales/history` | `pos` | READ | — |  | SaleHistoryController#getSalesHistory |
 | GET | `/api/v1/sales/pending` | `pos` | READ | — |  | PendingSaleController#getPendingSales |
 | POST | `/api/v1/sales/{id}/cancel` | `pos` | WRITE | — |  | PendingSaleController#cancelSale |
 | POST | `/api/v1/sales/{id}/correct` | `pos` | WRITE | — |  | PendingSaleController#correctSale |
-| POST | `/api/v1/sales/{id}/validate` | `pos` | WRITE | — |  | PendingSaleController#validateSale |
+| POST | `/api/v1/sales/{id}/validate` | `pos` | WRITE | `SALE_CREATE` |  | PendingSaleController#validateSale |
 | GET | `/api/v1/stock/overview` | `multi-store` | READ | — |  | MultiStoreStockController#getOverview |
 | GET | `/api/v1/stock/products/{productId}/availability` | `multi-store` | READ | — |  | MultiStoreStockController#getProductAvailability |
 | GET | `/api/v1/stock/stores/{storeId}/products` | `multi-store` | READ | — |  | MultiStoreStockController#getStoreDetail |

@@ -139,7 +139,11 @@ public final class AuditLabels {
             entry("INVOICE_PAYMENT_RECEIVED", "Paiement reçu"),
             entry("INVOICE_INSTALMENT_SCHEDULED", "Échéance programmée"),
             entry("INVOICE_INSTALMENT_SETTLED", "Échéance réglée"),
-            entry("COMPANY_PROFILE_UPDATED", "Identité de l'entreprise modifiée"));
+            entry("COMPANY_PROFILE_UPDATED", "Identité de l'entreprise modifiée"),
+            entry("ROLE_CREATED", "Rôle créé"),
+            entry("ROLE_UPDATED", "Rôle modifié"),
+            entry("ROLE_DELETED", "Rôle supprimé"),
+            entry("ROLE_ASSIGNED", "Rôle attribué"));
 
     /** Singular French noun of each audited object type ({@code entityType}). */
     public static final Map<String, String> ENTITY_TYPES = Map.ofEntries(
@@ -167,7 +171,8 @@ public final class AuditLabels {
             entry("Invoice", "Facture"),
             entry("InvoicingSettings", "Paramètres de facturation"),
             entry("CreditNote", "Avoir"),
-            entry("Quote", "Devis"));
+            entry("Quote", "Devis"),
+            entry("Role", "Rôle"));
 
     /** French label of each before/after field key. */
     public static final Map<String, String> FIELDS = Map.ofEntries(
@@ -216,6 +221,10 @@ public final class AuditLabels {
             entry("ecart", "Écart"),
             entry("adjustmentCount", "Ajustements"),
             entry("role", "Rôle"),
+            entry("baseRole", "Type de base"),
+            entry("permissions", "Droits"),
+            entry("stores", "Boutiques"),
+            entry("member", "Membre"),
             entry("fieldsChanged", "Champs modifiés"),
             entry("forcedReset", "Changement de mot de passe imposé"),
             entry("sessions", "Sessions fermées"),

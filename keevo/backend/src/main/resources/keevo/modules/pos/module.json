@@ -29,12 +29,13 @@
     "fills": []
   },
   "permissions": [
-    "STORE_SALES_VIEW"
+    "STORE_SALES_VIEW",
+    "SALE_CREATE"
   ],
   "routes": [],
   "rolePermissions": {
-    "MANAGER": ["STORE_SALES_VIEW"],
-    "EMPLOYEE": [],
+    "MANAGER": ["STORE_SALES_VIEW", "SALE_CREATE"],
+    "EMPLOYEE": ["SALE_CREATE"],
     "VIEWER": ["STORE_SALES_VIEW"]
   },
   "entitlement": "module.pos",

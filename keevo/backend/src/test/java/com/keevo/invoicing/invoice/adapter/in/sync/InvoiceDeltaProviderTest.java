@@ -53,7 +53,8 @@ class InvoiceDeltaProviderTest {
         provider = new InvoiceDeltaProvider(invoices, queries, settings, objectMapper, provisioner,
                 new com.keevo.invoicing.invoice.application.usecase.DocumentStoreResolver(
                         org.mockito.Mockito.mock(com.keevo.store.api.StoreQueryPort.class)),
-                new com.keevo.invoicing.invoice.application.usecase.DocumentAccess(invoices)); // no actor: all
+                new com.keevo.invoicing.invoice.application.usecase.DocumentAccess(invoices,
+                        com.keevo.shared.infrastructure.security.ShippedActorPermissions.get())); // no actor: all
         when(invoices.tablesExist()).thenReturn(true);
         when(settings.current()).thenReturn(InvoicingSettings.defaults());
         when(queries.credits(any())).thenReturn(Map.of());

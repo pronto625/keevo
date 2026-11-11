@@ -24,7 +24,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -145,7 +144,7 @@ public class UpdateProductUseCase {
         // Story 16.13 (reprise, D2): an actor who may not see purchase prices never changes them — its device holds the
         // masked value (sync 0, REST null) and would otherwise erase the real price; every other field still applies.
         final UpdateProductDto dto = (request.buyPrice() != null || request.transportCost() != null)
-                && !purchasePrices.canView(request.actorRole() == null ? List.of() : List.of(request.actorRole()))
+                && !purchasePrices.canViewAs(request.actorRole())
                 ? request.withoutPurchasePrices() : request;
         if (dto != request && dto.isEmptyEdit()) {
             // only the (ignored) purchase price was sent: nothing to write

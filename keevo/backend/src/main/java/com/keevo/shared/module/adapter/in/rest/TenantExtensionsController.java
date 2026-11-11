@@ -67,7 +67,7 @@ public class TenantExtensionsController {
                     "Point d'extension inconnu", HttpStatus.NOT_FOUND.name(), ErrorCode.NOT_FOUND.name(), null));
         }
         String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
-        Set<String> held = permissions.permissionsOf(ModulePermissions.rolesOf(CurrentActor.authentication()));
+        Set<String> held = permissions.permissionsOf(CurrentActor.authentication());
         return ResponseEntity.ok(ApiResponseWrapper.ok(extensions.contributions(pointId, schema).stream()
                 .filter(e -> e.permission() == null || held.contains(e.permission()))
                 .map(e -> new ExtensionDto(e.id(), e.label(), e.order(), e.action()))

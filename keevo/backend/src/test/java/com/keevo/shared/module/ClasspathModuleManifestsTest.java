@@ -77,7 +77,7 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("invoicing").needs()).containsExactly("ClientLookupPort?", "ProductLookupPort?");
         assertThat(byId.get("catalog").provides()).containsExactly("ProductLookupPort");
         assertThat(byId.get("invoicing").permissions()).containsExactly("INVOICE_CREATE", "INVOICE_VIEW",
-                "INVOICE_SEND", "INVOICE_MANAGE");
+                "INVOICE_SEND", "INVOICE_MANAGE", "DOCUMENT_STORE_VIEW"); // 19.14
         assertThat(byId.get("invoicing").publishes()).containsExactly("invoice.created", "invoice.issued",
                 "invoice.paid", "invoice.cancelled", "invoice.sent", "credit-note.issued");
         assertThat(byId.get("invoicing").displayName()).isEqualTo("Facturation");
@@ -131,10 +131,11 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("catalog").rolePermissions().get("EMPLOYEE")).isEmpty();
         assertThat(byId.get("catalog").rolePermissions().get("VIEWER")).isEmpty();
         // 19.5b — fine rights of the store manager (and the viewer's store sales)
-        assertThat(byId.get("pos").permissions()).containsExactly("STORE_SALES_VIEW");
-        assertThat(byId.get("pos").rolePermissions().get("MANAGER")).containsExactly("STORE_SALES_VIEW");
+        // 19.14 — « Créer des ventes » becomes a permission (same holders as today: MANAGER, EMPLOYEE)
+        assertThat(byId.get("pos").permissions()).containsExactly("STORE_SALES_VIEW", "SALE_CREATE");
+        assertThat(byId.get("pos").rolePermissions().get("MANAGER")).containsExactly("STORE_SALES_VIEW", "SALE_CREATE");
         assertThat(byId.get("pos").rolePermissions().get("VIEWER")).containsExactly("STORE_SALES_VIEW");
-        assertThat(byId.get("pos").rolePermissions().get("EMPLOYEE")).isEmpty();
+        assertThat(byId.get("pos").rolePermissions().get("EMPLOYEE")).containsExactly("SALE_CREATE");
         assertThat(byId.get("counting").permissions()).containsExactly("INVENTORY_SESSION_MANAGE");
         assertThat(byId.get("counting").rolePermissions().get("MANAGER")).containsExactly("INVENTORY_SESSION_MANAGE");
         assertThat(byId.get("core").permissions()).containsExactly("TEAM_MANAGE");

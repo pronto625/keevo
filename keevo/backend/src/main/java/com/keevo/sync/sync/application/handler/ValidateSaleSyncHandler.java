@@ -17,9 +17,19 @@ import java.util.stream.Collectors;
 public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
 
     private final SaleCommandPort saleCommandPort;
+    /** Story 19.14 — the single permission evaluator; {@code null} (unit tests) = only the OWNER validates. */
+    private final com.keevo.shared.infrastructure.security.ActorPermissions permissions;
 
+    /** Without the permission evaluator (unit tests): only the OWNER validates. */
     public ValidateSaleSyncHandler(SaleCommandPort saleCommandPort) {
+        this(saleCommandPort, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ValidateSaleSyncHandler(SaleCommandPort saleCommandPort,
+                                   com.keevo.shared.infrastructure.security.ActorPermissions permissions) {
         this.saleCommandPort = saleCommandPort;
+        this.permissions = permissions;
     }
 
     @Override
@@ -44,6 +54,12 @@ public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
     @Override
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
         Map<String, Object> p = operation.payload();
+        // Story 19.14 — validating a pending sale is selling: « Créer des ventes », as POST /sales/{id}/validate
+        if (!isOwnerRole() && (permissions == null
+                || !permissions.currentActorHolds(SaleSyncHandler.CREATE_PERMISSION))) {
+            throw new com.keevo.shared.domain.exception.DomainException(
+                    com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN, "Selling is not allowed for this role");
+        }
 
         UUID saleId = UUID.fromString((String) p.get("saleId"));
         String justification = (String) p.get("justification");

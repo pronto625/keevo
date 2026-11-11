@@ -357,7 +357,9 @@ public class EmployeeController {
                                              Map<UUID, EmployeeRoleResolver.Enrichment> enrichment) {
         return employees.stream().map(e -> {
             EmployeeRoleResolver.Enrichment x = enrichment.get(e.getUserId());
-            return EmployeeResponseDto.fromDomain(e, x.role(), x.phoneNumber(), x.username());
+            return EmployeeResponseDto.fromDomain(e, x.role(), x.phoneNumber(), x.username(),
+                    x.customRole() == null ? null : x.customRole().roleId(),
+                    x.customRole() == null ? null : x.customRole().name());
         }).toList();
     }
 }

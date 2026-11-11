@@ -268,6 +268,7 @@ public class GlobalExceptionHandler {
                  "PLAN_PROFILE_NOT_FOUND",
                  "INVOICE_NOT_FOUND",
                  "CREDIT_NOTE_NOT_FOUND",
+                 "ROLE_NOT_FOUND",             // 19.14
                  "INVOICE_LINK_INVALID",
                  "COMPANY_LOGO_NOT_FOUND",
                  "STORE_LOGO_NOT_FOUND",
@@ -299,6 +300,7 @@ public class GlobalExceptionHandler {
                  "COMPANY_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS",
                  "MEMBERSHIP_ALREADY_EXISTS",
+                 "ROLE_NAME_TAKEN", "ROLE_IN_USE", // 19.14
                  "MEMBER_ALREADY_IN_COMPANY",
                  "MEMBER_INACTIVE_IN_COMPANY",
                  "MEMBER_ACCOUNT_SHARED",

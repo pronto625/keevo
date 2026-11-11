@@ -166,15 +166,17 @@ class ModulePermissionsTest {
         // 20.10 (user decision 2026-11-08): expenses for the OWNER and the MANAGER only — no EXPENSE_* for an
         // EMPLOYEE or a VIEWER
         assertThat(permissions.permissionsFor(Role.EMPLOYEE))
-                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND");
+                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "SALE_CREATE");
         assertThat(permissions.permissionsFor(Role.MANAGER))
                 .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "EXPENSE_VIEW",
                         "EXPENSE_CREATE", "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW",
                         // 19.5b — fine rights of the store manager
-                        "STORE_SALES_VIEW", "INVENTORY_SESSION_MANAGE", "PRODUCT_MERGE", "TEAM_MANAGE");
+                        "STORE_SALES_VIEW", "INVENTORY_SESSION_MANAGE", "PRODUCT_MERGE", "TEAM_MANAGE",
+                        // 19.14 — selling and the store's documents, as permissions (same holders as before)
+                        "SALE_CREATE", "DOCUMENT_STORE_VIEW");
         // 19.5b — a VIEWER reads his store's sales
         assertThat(permissions.permissionsFor(Role.VIEWER)).containsExactlyInAnyOrder("INVOICE_VIEW",
-                "STORE_SALES_VIEW");
+                "STORE_SALES_VIEW", "DOCUMENT_STORE_VIEW");
         assertThat(permissions.permissionsFor(Role.OWNER)).contains("EXPENSE_VIEW", "EXPENSE_CREATE",
                 "EXPENSE_DELETE", "PURCHASE_PRICE_VIEW");
         // 16.13 reprise (user decision 2026-11-10): purchase prices for the OWNER and the MANAGER only

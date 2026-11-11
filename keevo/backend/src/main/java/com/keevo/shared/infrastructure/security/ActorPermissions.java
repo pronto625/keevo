@@ -14,8 +14,8 @@ import org.springframework.stereotype.Component;
  * ({@code module.json} {@code permissions} + {@code rolePermissions}) and mapped to roles by {@link ModulePermissions};
  * the {@code OWNER} holds every declared permission.
  *
- * <p><b>Hook for story 19-14</b> (owner-defined roles): only the role → permission mapping changes; the call sites
- * keep asking this component with the same permission names. Fails closed: no authentication, or no mapping bean,
+ * <p>Story 19.14 — a member holding an owner-defined role gets that role's permissions
+ * ({@link ModulePermissions#permissionsOf(Authentication)}); the call sites did not change. Fails closed: no authentication, or no mapping bean,
  * means no permission (the OWNER still holds all).
  */
 @Component
@@ -46,7 +46,7 @@ public class ActorPermissions {
             return true; // no role set built: the OWNER holds every declared permission
         }
         ModulePermissions mapping = mapping();
-        return mapping != null && mapping.permissionsOf(ModulePermissions.rolesOf(authentication)).contains(permission);
+        return mapping != null && mapping.permissionsOf(authentication).contains(permission); // 19.14: custom roles too
     }
 
     /** Whether {@code permission} is declared by an installed manifest (pins the call sites' constants). */

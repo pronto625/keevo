@@ -96,7 +96,7 @@ class InvoiceSyncHandlerTest {
     private void as(String role, Set<String> held) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(ACTOR, null,
                 List.of(new SimpleGrantedAuthority("ROLE_" + role))));
-        when(permissions.permissionsOf(anyCollection())).thenReturn(held);
+        when(permissions.permissionsOf(org.mockito.ArgumentMatchers.<org.springframework.security.core.Authentication>any())).thenReturn(held);
     }
 
     private static SyncOperation op(String type, Map<String, Object> payload) {
@@ -300,7 +300,7 @@ class InvoiceSyncHandlerTest {
     @DisplayName("no authenticated role: FORBIDDEN")
     void noRole() {
         SecurityContextHolder.clearContext();
-        when(permissions.permissionsOf(anyCollection())).thenReturn(Set.of());
+        when(permissions.permissionsOf(org.mockito.ArgumentMatchers.<org.springframework.security.core.Authentication>any())).thenReturn(Set.of());
         assertThat(handler.handle(op("ISSUE_INVOICE", Map.of("invoiceId", invoiceId.toString())), ACTOR, TENANT)
                 .reason()).isEqualTo("FORBIDDEN");
         verifyNoInteractions(provisioner);

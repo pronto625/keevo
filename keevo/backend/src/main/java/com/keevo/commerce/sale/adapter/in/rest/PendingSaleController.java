@@ -16,6 +16,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
+import com.keevo.shared.module.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -63,6 +64,7 @@ public class PendingSaleController {
     @RequiresEntitlement("pos")
     @PostMapping("/{id}/validate")
     @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
+    @RequiresPermission(SaleController.CREATE_PERMISSION) // Story 19.14 — validating a pending sale is selling
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> validateSale(
             @PathVariable UUID id,
             @Valid @RequestBody ValidateSaleRequestDto request) {

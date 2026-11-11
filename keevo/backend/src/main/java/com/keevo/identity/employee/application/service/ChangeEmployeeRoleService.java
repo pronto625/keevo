@@ -13,6 +13,7 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.in.ChangeEmployeeRoleCommand;
 import com.keevo.identity.employee.domain.port.in.ChangeEmployeeRoleUseCase;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.identity.role.domain.port.out.CustomRoleStore;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -51,7 +52,10 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort transactionLock;
     private final SharedAccountGuard sharedAccountGuard;
+    /** Story 19.14 — choosing a built-in role drops the member's owner-defined role; {@code null} in unit tests. */
+    private final CustomRoleStore customRoles;
 
+    /** Without the custom roles store (unit tests): the custom role of the member is left as is. */
     public ChangeEmployeeRoleService(EmployeeRepository employeeRepository,
                                       UserRepository userRepository,
                                       UserMembershipRepository membershipRepository,
@@ -61,6 +65,22 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
                                       ApplicationEventPublisher eventPublisher,
                                       TransactionLockPort transactionLock,
                                       SharedAccountGuard sharedAccountGuard) {
+        this(employeeRepository, userRepository, membershipRepository, tenantRepository, refreshTokenRepository,
+                tokenRevocationPort, eventPublisher, transactionLock, sharedAccountGuard, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ChangeEmployeeRoleService(EmployeeRepository employeeRepository,
+                                      UserRepository userRepository,
+                                      UserMembershipRepository membershipRepository,
+                                      TenantRepository tenantRepository,
+                                      RefreshTokenRepository refreshTokenRepository,
+                                      TokenRevocationPort tokenRevocationPort,
+                                      ApplicationEventPublisher eventPublisher,
+                                      TransactionLockPort transactionLock,
+                                      SharedAccountGuard sharedAccountGuard,
+                                      CustomRoleStore customRoles) {
+        this.customRoles = customRoles;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
@@ -106,6 +126,12 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
                 .findByUserIdAndTenantId(employee.getUserId(), tenant.getId())
                 .orElseThrow(() -> new DomainException(ErrorCode.MEMBERSHIP_NOT_FOUND));
         String previousRole = membership.getRole();
+
+        // Story 19.14 — a built-in role chosen here replaces the member's owner-defined role (if any), even when the
+        // built-in role is the same (« Employé » instead of « Caissier »). No row is written when he holds none.
+        if (customRoles != null) {
+            customRoles.assign(tenant.getId(), employee.getUserId(), null);
+        }
 
         // No-op if same role
         if (previousRole.equals(command.newRole())) {

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 import java.sql.Array;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -14,7 +15,7 @@ import java.util.UUID;
 /**
  * Story 16.11 — reads the {@link AccessState} of (user, account) from the database: membership role
  * and status, account status, revocation cutoff and open device sessions in one statement on the
- * public tables, plus the employee row (store, status, password flag, first name) when there is
+ * public tables (Story 19.14: with the membership's custom role, joined by primary key), plus the employee row (store, status, password flag, first name) when there is
  * one: the EMPLOYEE guards, and the actor's first name (an owner has a name only through an
  * employee row — {@code public.users} stores none).
  *
@@ -29,9 +30,13 @@ public class AccessStateLoader {
             "SELECT m.role, m.is_active, m.tokens_valid_after, t.status, "
             + "ARRAY(SELECT DISTINCT r.session_id FROM public.refresh_tokens r "
             + "      WHERE r.user_id = m.user_id AND r.tenant_id = t.schema_name "
-            + "        AND r.revoked = false AND r.expires_at > now() AND r.session_id IS NOT NULL) AS sessions "
+            + "        AND r.revoked = false AND r.expires_at > now() AND r.session_id IS NOT NULL) AS sessions, "
+            // Story 19.14 — the owner-defined role of the membership (primary-key join, same statement)
+            + "cr.id AS cr_id, cr.name AS cr_name, cr.base_role AS cr_base, cr.permissions AS cr_permissions, "
+            + "cr.store_ids AS cr_stores "
             + "FROM public.user_tenant_memberships m "
             + "JOIN public.tenants t ON t.id = m.tenant_id "
+            + "LEFT JOIN public.tenant_roles cr ON cr.id = m.custom_role_id "
             + "WHERE m.user_id = ? AND t.schema_name = ? "
             + "ORDER BY m.is_active DESC LIMIT 1";
 
@@ -51,7 +56,8 @@ public class AccessStateLoader {
                     rs.getString("status"),
                     tva != null ? tva.toInstant() : null,
                     null,
-                    uuids(rs.getArray("sessions")));
+                    uuids(rs.getArray("sessions")),
+                    customRole(rs));
         }, userId, schema);
         if (rows.isEmpty()) {
             return null;
@@ -72,7 +78,26 @@ public class AccessStateLoader {
                 userId);
         return new AccessState(state.role(), state.membershipActive(), state.tenantStatus(),
                 state.tokensValidAfter(), employees.isEmpty() ? null : employees.get(0),
-                state.openSessionIds());
+                state.openSessionIds(), state.customRole());
+    }
+
+    /** Story 19.14 — the custom role columns of the row, {@code null} when the membership holds none. */
+    private static AccessState.CustomRoleState customRole(java.sql.ResultSet rs) throws java.sql.SQLException {
+        UUID id = rs.getObject("cr_id", UUID.class);
+        if (id == null) {
+            return null;
+        }
+        Set<String> permissions = new HashSet<>();
+        Array granted = rs.getArray("cr_permissions");
+        if (granted != null) {
+            for (Object value : (Object[]) granted.getArray()) {
+                if (value != null) permissions.add(value.toString());
+            }
+        }
+        Array stores = rs.getArray("cr_stores");
+        List<UUID> storeIds = stores == null ? null : new ArrayList<>(uuids(stores));
+        return new AccessState.CustomRoleState(id, rs.getString("cr_name"), rs.getString("cr_base"), permissions,
+                storeIds);
     }
 
     private static Set<UUID> uuids(Array array) throws java.sql.SQLException {

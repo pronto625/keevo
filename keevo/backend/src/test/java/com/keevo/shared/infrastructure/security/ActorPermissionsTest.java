@@ -60,10 +60,58 @@ class ActorPermissionsTest {
                 com.keevo.inventory.counting.adapter.in.rest.InventorySessionController.MANAGE_PERMISSION,
                 com.keevo.catalog.product.adapter.in.web.ProductController.MERGE_PERMISSION,
                 com.keevo.invoicing.invoice.application.usecase.DocumentCancelPermission.QUOTE_PERMISSION,
-                PurchasePriceVisibility.PERMISSION)) {
+                PurchasePriceVisibility.PERMISSION,
+                // Story 19.14
+                com.keevo.commerce.sale.adapter.in.rest.SaleController.CREATE_PERMISSION,
+                com.keevo.sync.sync.application.handler.SaleSyncHandler.CREATE_PERMISSION,
+                com.keevo.sync.sync.application.provider.SaleDeltaProvider.STORE_SALES_PERMISSION,
+                com.keevo.sync.sync.application.service.SyncPushService.STORE_SALES_PERMISSION,
+                com.keevo.sync.sync.application.service.SyncPushService.DOCUMENT_STORE_PERMISSION,
+                com.keevo.invoicing.invoice.application.usecase.DocumentAccess.STORE_PERMISSION)) {
             assertThat(permissions.isDeclared(permission)).as(permission).isTrue();
         }
         assertThat(permissions.isDeclared("TEAM_MANAG")).isFalse();
+    }
+
+    @Test
+    @DisplayName("19.14 — a custom role replaces the built-in mapping: its declared permissions only")
+    void customRoleReplacesTheBuiltInMapping() {
+        ActorPermissions permissions = ShippedActorPermissions.get();
+        ShippedActorPermissions.authenticateWithCustomRole(UUID.randomUUID(), "EMPLOYEE", UUID.randomUUID(),
+                java.util.Set.of("EXPENSE_VIEW", "SALE_CREATE", "UNKNOWN_PERMISSION", "FINANCE_VIEW"));
+
+        assertThat(permissions.currentActorHolds("EXPENSE_VIEW")).isTrue();
+        assertThat(permissions.currentActorHolds("SALE_CREATE")).isTrue();
+        assertThat(permissions.currentActorHolds("INVOICE_VIEW")).isFalse(); // built-in EMPLOYEE default not added
+        assertThat(permissions.currentActorHolds("UNKNOWN_PERMISSION")).isFalse(); // not declared
+        assertThat(permissions.currentActorHolds("FINANCE_VIEW")).isFalse(); // owner-reserved, never granted
+    }
+
+    @Test
+    @DisplayName("19.14 — a VIEWER's custom role keeps only read permissions; an empty grant holds nothing")
+    void viewerCustomRoleIsReadOnly() {
+        ActorPermissions permissions = ShippedActorPermissions.get();
+        ShippedActorPermissions.authenticateWithCustomRole(UUID.randomUUID(), "VIEWER", UUID.randomUUID(),
+                java.util.Set.of("EXPENSE_VIEW", "EXPENSE_CREATE"));
+        assertThat(permissions.currentActorHolds("EXPENSE_VIEW")).isTrue();
+        assertThat(permissions.currentActorHolds("EXPENSE_CREATE")).isFalse();
+
+        ShippedActorPermissions.authenticateWithCustomRole(UUID.randomUUID(), "MANAGER", UUID.randomUUID(),
+                java.util.Set.of());
+        assertThat(permissions.currentActorHolds("TEAM_MANAGE")).isFalse(); // fail closed, not the MANAGER default
+    }
+
+    @Test
+    @DisplayName("19.14 — the purchase-price policy follows the custom role")
+    void purchasePriceFollowsTheCustomRole() {
+        ShippedActorPermissions.authenticateWithCustomRole(UUID.randomUUID(), "EMPLOYEE", UUID.randomUUID(),
+                java.util.Set.of("PURCHASE_PRICE_VIEW"));
+        PurchasePriceVisibility policy = new PurchasePriceVisibility(
+                new org.springframework.beans.factory.support.StaticListableBeanFactory(java.util.Map.of("m",
+                        ShippedActorPermissions.modulePermissions())).getBeanProvider(
+                        com.keevo.shared.module.application.ModulePermissions.class));
+        assertThat(policy.currentActorCanView()).isTrue();
+        assertThat(policy.canViewAs("EMPLOYEE")).isTrue(); // the authenticated actor wins over the role name
     }
 
     @Test

@@ -20,6 +20,15 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
     /** Story 16.13 — bound-parameter filter applied to a restricted (EMPLOYEE) pull. */
     static final String STORE_SCOPE = "store_id = :scopeStoreId";
 
+    /**
+     * Story 19.14 (routed from 19.5b) — a member without {@value #STORE_SALES_PERMISSION} pulls his own sales of his
+     * store only, as REST and the AI tool show them (keyset served by {@code idx_sales_store_employee_sync}, pos V3).
+     */
+    static final String OWN_SALES_SCOPE = "store_id = :scopeStoreId AND employee_id = :scopeActorId";
+
+    /** « Voir les ventes de toute la boutique » (declared by the {@code pos} manifest; same as {@code SalesReadScope}). */
+    public static final String STORE_SALES_PERMISSION = "STORE_SALES_VIEW";
+
     private final EntityManager em;
 
     public SaleDeltaProvider(EntityManager em) {
@@ -41,16 +50,27 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
         return queryDeltaPage(since, after, limit, PullScope.NONE); // fail closed: the pull always passes its scope
     }
 
-    /** Story 16.13 — an EMPLOYEE only pulls the sales of its assigned store (every seller of it); the items follow their sales. */
+    /**
+     * Story 16.13 — a store member only pulls the sales of its assigned store; Story 19.14 — every seller of it only
+     * with {@value #STORE_SALES_PERMISSION}, else his own sales. The items follow their sales.
+     */
     @Override
     @SuppressWarnings("unchecked")
     public Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
         // updated_at, not created_at: a validation/cancellation must reach the other devices.
-        var page = DeltaPageQuery.fetchForStore(em,
-                "id, store_id, employee_id, client_id, total_amount, " +
+        String columns = "id, store_id, employee_id, client_id, total_amount, " +
                 "COALESCE(discount_amount, 0) AS discount_amount, payment_mode, " +
-                "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at, mobile_money_ref",
-                "sales", CURSOR, since, after, limit, scope, STORE_SCOPE);
+                "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at, mobile_money_ref";
+        DeltaPageQuery.Rows page;
+        if (scope != null && scope.restricted() && !scope.excludesEveryStore()
+                && !scope.holds(STORE_SALES_PERMISSION)) {
+            if (scope.actorId() == null) return new Page(List.of(), null); // fail closed: unknown actor
+            page = DeltaPageQuery.fetch(em, columns, "sales", CURSOR, since, after, limit, OWN_SALES_SCOPE,
+                    Map.of(DeltaPageQuery.SCOPE_STORE_PARAM, scope.storeId(),
+                            DeltaPageQuery.SCOPE_ACTOR_PARAM, scope.actorId()));
+        } else {
+            page = DeltaPageQuery.fetchForStore(em, columns, "sales", CURSOR, since, after, limit, scope, STORE_SCOPE);
+        }
         List<Object[]> saleRows = page.rows();
 
         if (saleRows.isEmpty()) return new Page(List.of(), page.next());

@@ -146,6 +146,10 @@ public final class ErrorMessages {
             Map.entry("INVOICE_SIGNATURE_TOO_LARGE", "La signature est trop lourde : choisissez une image plus légère"),
             Map.entry("INVOICE_SIGNATURE_NOT_FOUND", "Ce document n'a pas cette signature"),
             Map.entry("CREDIT_NOTE_NOT_FOUND",       "Avoir introuvable"),
+            Map.entry("ROLE_NOT_FOUND",              "Rôle introuvable"),
+            Map.entry("ROLE_NAME_TAKEN",             "Un autre rôle porte déjà ce nom"),
+            Map.entry("ROLE_IN_USE",
+                    "Ce rôle est attribué à des membres : attribuez-leur un autre rôle avant de le supprimer"),
             Map.entry("CREDIT_NOTE_INVALID",         "L'avoir n'est pas valide : {reason}"),
             Map.entry("WHATSAPP_UNAVAILABLE",        "L'envoi WhatsApp n'est pas disponible pour le moment"),
             // Story 20.8 — sending a document by SMS / email

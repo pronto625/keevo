@@ -10,6 +10,7 @@ import com.keevo.commerce.api.SalePaymentMode;
 import com.keevo.commerce.api.SaleState;
 import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
 import com.keevo.store.api.StoreQueryPort;
+import com.keevo.shared.infrastructure.security.ActorPermissions;
 import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.shared.application.port.sync.SyncOperationResult;
 import com.keevo.shared.application.port.sync.SyncOperationStatus;
@@ -22,16 +23,24 @@ import java.util.*;
 @Component
 public class SaleSyncHandler extends AbstractSyncOperationHandler {
 
+    /** Story 19.14 — « Créer des ventes », the same permission as {@code POST /api/v1/sales}. */
+    public static final String CREATE_PERMISSION = "SALE_CREATE";
+
     private final SaleCommandPort saleCommandPort;
     private final ApplicationEventPublisher eventPublisher;
     private final StoreQueryPort storeQuery;
+    /** Story 19.14 — the single permission evaluator; {@code null} = only the OWNER may sell (fail closed). */
+    private final ActorPermissions permissions;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public SaleSyncHandler(SaleCommandPort saleCommandPort,
                            ApplicationEventPublisher eventPublisher,
-                           StoreQueryPort storeQuery) {
+                           StoreQueryPort storeQuery,
+                           ActorPermissions permissions) {
         this.saleCommandPort = saleCommandPort;
         this.eventPublisher = eventPublisher;
         this.storeQuery = storeQuery;
+        this.permissions = permissions;
     }
 
     @Override
@@ -57,6 +66,11 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
         Map<String, Object> p = operation.payload();
 
+        // Story 19.14 — same rule as the REST endpoint: an actor without « Créer des ventes » is refused (REJECTED
+        // FORBIDDEN), never applied.
+        if (!isOwnerRole() && (permissions == null || !permissions.currentActorHolds(CREATE_PERMISSION))) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Selling is not allowed for this role");
+        }
         UUID saleId = UUID.fromString((String) p.get("saleId"));
         UUID storeId = UUID.fromString((String) p.get("storeId"));
         // SaleController only lets an employee sell in the store of their token.

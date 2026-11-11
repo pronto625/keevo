@@ -59,7 +59,7 @@ class LastWriteWinsStrategyTest {
     @BeforeEach
     void setUp() {
         strategy = new LastWriteWinsStrategy(logRepository, entityLastModified, userSyncStateRepository,
-                eventPublisher);
+                eventPublisher, com.keevo.shared.infrastructure.security.ShippedActorPermissions.get()); // 19.14
         when(logRepository.findPreviousAppliedByEntityId(anyString(), anyString())).thenReturn(Optional.empty());
         when(userSyncStateRepository.findByDeviceId(anyString())).thenReturn(Optional.empty());
         authenticate("ROLE_OWNER");
@@ -244,6 +244,20 @@ class LastWriteWinsStrategyTest {
 
         assertThat(strategy.beforeApply(op("UPDATE_EXPENSE", "expenseId", T1), DEVICE, TENANT).isSuperseded())
                 .isTrue();
+    }
+
+    @Test
+    void story1914_expenseOperation_followsTheCustomRolePermission() {
+        entityUpdatedAt(LwwEntity.EXPENSE, T2);
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(
+                UUID.randomUUID(), "EMPLOYEE", UUID.randomUUID(), java.util.Set.of("EXPENSE_CREATE"));
+        assertThat(strategy.beforeApply(op("UPDATE_EXPENSE", "expenseId", T1), DEVICE, TENANT).isSuperseded())
+                .isTrue();
+
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(
+                UUID.randomUUID(), "MANAGER", UUID.randomUUID(), java.util.Set.of("EXPENSE_VIEW"));
+        assertThat(strategy.beforeApply(op("UPDATE_EXPENSE", "expenseId", T1), DEVICE, TENANT))
+                .isEqualTo(PreApplyCheck.NONE); // the handler runs and refuses it
     }
 
     @Test

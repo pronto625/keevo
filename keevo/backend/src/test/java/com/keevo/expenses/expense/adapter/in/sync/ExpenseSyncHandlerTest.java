@@ -80,7 +80,7 @@ class ExpenseSyncHandlerTest {
     private void as(String role, Set<String> held) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(ACTOR, null,
                 List.of(new SimpleGrantedAuthority("ROLE_" + role))));
-        when(permissions.permissionsOf(anyCollection())).thenReturn(held);
+        when(permissions.permissionsOf(org.mockito.ArgumentMatchers.<org.springframework.security.core.Authentication>any())).thenReturn(held);
     }
 
     private static SyncOperation op(String type, String entityId, Map<String, Object> payload, Instant at) {

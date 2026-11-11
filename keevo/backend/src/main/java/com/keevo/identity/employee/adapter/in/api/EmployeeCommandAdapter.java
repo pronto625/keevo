@@ -117,6 +117,12 @@ class EmployeeCommandAdapter implements EmployeeCommandPort {
     }
 
     @Override
+    public void deactivate(String tenantSchema, UUID actorId, UUID employeeId, boolean byManager) {
+        TenantContext.requireCurrent(tenantSchema);
+        deactivateEmployee.execute(new DeactivateEmployeeCommand(actorId, employeeId, byManager)); // 19.14
+    }
+
+    @Override
     public void reactivate(String tenantSchema, UUID actorId, UUID employeeId) {
         TenantContext.requireCurrent(tenantSchema);
         reactivateEmployee.execute(new ReactivateEmployeeCommand(actorId, employeeId));

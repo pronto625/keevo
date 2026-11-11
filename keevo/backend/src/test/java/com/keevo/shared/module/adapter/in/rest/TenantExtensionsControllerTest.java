@@ -59,10 +59,10 @@ class TenantExtensionsControllerTest {
                         "invoicing.cancel", "INVOICE_MANAGE"),
                 new ExtensionView("invoicing", "invoicing.invoice-sale", "Facturer", 100,
                         "invoicing.open-sale-invoice", "INVOICE_VIEW")));
-        when(permissions.permissionsOf(Set.of("OWNER")))
-                .thenReturn(Set.of("INVOICE_CREATE", "INVOICE_VIEW", "INVOICE_SEND", "INVOICE_MANAGE"));
-        when(permissions.permissionsOf(Set.of("EMPLOYEE")))
-                .thenReturn(Set.of("INVOICE_CREATE", "INVOICE_VIEW", "INVOICE_SEND"));
+        when(permissions.permissionsOf(org.mockito.ArgumentMatchers.<org.springframework.security.core.Authentication>any())).thenAnswer(inv -> // 19.14: per authentication
+                com.keevo.shared.module.application.ModulePermissions.rolesOf(inv.getArgument(0)).contains("OWNER")
+                        ? Set.of("INVOICE_CREATE", "INVOICE_VIEW", "INVOICE_SEND", "INVOICE_MANAGE")
+                        : Set.of("INVOICE_CREATE", "INVOICE_VIEW", "INVOICE_SEND"));
     }
 
     @AfterEach

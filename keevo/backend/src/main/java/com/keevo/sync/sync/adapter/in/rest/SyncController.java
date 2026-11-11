@@ -257,7 +257,7 @@ public class SyncController {
             return scope;
         }
         return scope.withPermissions(modulePermissions == null ? java.util.Set.of()
-                : modulePermissions.permissionsOf(ModulePermissions.rolesOf(CurrentActor.authentication())));
+                : modulePermissions.permissionsOf(CurrentActor.authentication()));
     }
 
     @RequiresEntitlement(value = "sync", access = RequiresEntitlement.Access.READ)

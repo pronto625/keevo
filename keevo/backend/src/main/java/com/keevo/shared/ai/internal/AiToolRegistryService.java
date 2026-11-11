@@ -206,7 +206,7 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
         if (!hasSession(auth, tenant)) {
             return List.of();
         }
-        Set<String> held = permissions.getObject().permissionsOf(ModulePermissions.rolesOf(auth));
+        Set<String> held = permissions.getObject().permissionsOf(auth);
         // one read of the module states for every tool (also off the request thread: MCP transport, async client)
         Set<String> enabled = entitlements.getObject().enabledModules(tenant);
         List<AiToolDescriptor> allowed = new ArrayList<>();
@@ -320,7 +320,7 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
             return AiToolResult.failure(Outcome.REFUSED, "FORBIDDEN", FORBIDDEN_MESSAGE);
         }
         if (!d.permissions().isEmpty() && !permissions.getObject()
-                .permissionsOf(ModulePermissions.rolesOf(auth)).containsAll(d.permissions())) {
+                .permissionsOf(auth).containsAll(d.permissions())) {
             return AiToolResult.failure(Outcome.REFUSED, "FORBIDDEN", FORBIDDEN_MESSAGE);
         }
         if (d.module() != null) {

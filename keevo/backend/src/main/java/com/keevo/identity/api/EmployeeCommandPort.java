@@ -17,6 +17,14 @@ public interface EmployeeCommandPort {
 
     void deactivate(String tenantSchema, UUID actorId, UUID employeeId);
 
+    /**
+     * Story 19.14 — as {@link #deactivate(String, UUID, UUID)}, recording whether a delegated team manager made it (he
+     * may then reactivate the member; one the owner deactivated stays the owner's).
+     */
+    default void deactivate(String tenantSchema, UUID actorId, UUID employeeId, boolean byManager) {
+        deactivate(tenantSchema, actorId, employeeId);
+    }
+
     void reactivate(String tenantSchema, UUID actorId, UUID employeeId);
 
     /** Story 20.13 — adds a member (owner creation rules) with an optional role. */

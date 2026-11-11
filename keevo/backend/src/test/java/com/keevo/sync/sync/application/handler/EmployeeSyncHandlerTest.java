@@ -72,6 +72,65 @@ class EmployeeSyncHandlerTest {
     }
 
     @Test
+    void story1914_delegate_deactivatesThroughTheTeamRule_recordedAsDelegate() {
+        var team = org.mockito.Mockito.mock(com.keevo.identity.api.TeamManagementPolicy.class);
+        when(team.actsAsDelegate()).thenReturn(true);
+        var delegated = new EmployeeSyncHandler(IdentityEmployeeApiTestSupport.commandPort(
+                createEmployee, reassignStore, deactivateEmployee, reactivateEmployee), team);
+        SyncTestAuth.employee(UUID.randomUUID());
+        UUID target = UUID.randomUUID();
+
+        var result = delegated.handle(new SyncOperation("op-d", "DEACTIVATE_EMPLOYEE", target.toString(),
+                Map.of("employeeId", target.toString()), Instant.now()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(team).requireManageable(target);
+        verify(deactivateEmployee).execute(
+                new com.keevo.identity.employee.domain.port.in.DeactivateEmployeeCommand(ACTOR_ID, target, true));
+    }
+
+    @Test
+    void story1914_delegate_refusedByTheTeamRule_orOnReassign() {
+        var team = org.mockito.Mockito.mock(com.keevo.identity.api.TeamManagementPolicy.class);
+        UUID target = UUID.randomUUID();
+        org.mockito.Mockito.doThrow(new com.keevo.shared.domain.exception.DomainException(
+                com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN, "out of team"))
+                .when(team).requireReactivatable(target);
+        var delegated = new EmployeeSyncHandler(IdentityEmployeeApiTestSupport.commandPort(
+                createEmployee, reassignStore, deactivateEmployee, reactivateEmployee), team);
+        SyncTestAuth.employee(UUID.randomUUID());
+
+        var reactivate = delegated.handle(new SyncOperation("op-r", "REACTIVATE_EMPLOYEE", target.toString(),
+                Map.of("employeeId", target.toString()), Instant.now()), ACTOR_ID, TENANT_ID);
+        var reassign = delegated.handle(new SyncOperation("op-m", "REASSIGN_EMPLOYEE", target.toString(),
+                Map.of("employeeId", target.toString(), "newStoreId", UUID.randomUUID().toString()), Instant.now()),
+                ACTOR_ID, TENANT_ID);
+
+        assertThat(reactivate.reason()).isEqualTo("FORBIDDEN");
+        assertThat(reassign.reason()).isEqualTo("FORBIDDEN");
+        org.mockito.Mockito.verifyNoInteractions(reactivateEmployee, reassignStore);
+    }
+
+    @Test
+    void story1914_delegate_createInAnotherStore_refusedBeforeAnyWrite() {
+        var team = org.mockito.Mockito.mock(com.keevo.identity.api.TeamManagementPolicy.class);
+        UUID foreign = UUID.randomUUID();
+        org.mockito.Mockito.doThrow(new com.keevo.shared.domain.exception.DomainException(
+                com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN, "out of team"))
+                .when(team).requireCreatable(foreign, null);
+        var delegated = new EmployeeSyncHandler(IdentityEmployeeApiTestSupport.commandPort(
+                createEmployee, reassignStore, deactivateEmployee, reactivateEmployee), team);
+        SyncTestAuth.employee(UUID.randomUUID());
+
+        var result = delegated.handle(new SyncOperation("op-c", "CREATE_EMPLOYEE", UUID.randomUUID().toString(),
+                Map.of("phoneNumber", "+237690000001", "firstName", "Awa", "lastName", "K",
+                        "storeId", foreign.toString()), Instant.now()), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        org.mockito.Mockito.verifyNoInteractions(createEmployee);
+    }
+
+    @Test
     void handle_createEmployee_delegatesToCreateEmployeeUseCase() {
         var employee = new Employee(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 "John", "Doe", EmployeeStatus.ACTIVE, true, Instant.now());

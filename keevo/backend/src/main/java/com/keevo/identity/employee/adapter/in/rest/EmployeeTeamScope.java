@@ -4,6 +4,7 @@ import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.identity.role.domain.port.out.CustomRoleStore;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.ActorPermissions;
@@ -26,6 +27,8 @@ import java.util.UUID;
  *       deactivated);</li>
  *   <li>anyone else: 403 {@code FORBIDDEN}.</li>
  * </ul>
+ * Story 19.14 — the same rule serves the sync push ({@code TeamManagementPolicy}); a delegate never manages a member
+ * whose owner-defined role grants {@value #PERMISSION} (another delegate).
  * Cost: O(1) for the owner; one employee row and one membership row by key for a MANAGER's per-member checks; lists
  * are one store-filtered query, filtered in memory with the bulk enrichment already loaded for the response.
  */
@@ -47,12 +50,22 @@ public class EmployeeTeamScope {
     private final EmployeeRepository employeeRepository;
     private final EmployeeRoleResolver roleResolver;
     private final ActorPermissions permissions;
+    /** Story 19.14 — the targets' owner-defined roles; {@code null} in unit tests (no custom role anywhere). */
+    private final CustomRoleStore customRoles;
 
+    /** Without custom roles (unit tests). */
     public EmployeeTeamScope(EmployeeRepository employeeRepository, EmployeeRoleResolver roleResolver,
                              ActorPermissions permissions) {
+        this(employeeRepository, roleResolver, permissions, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public EmployeeTeamScope(EmployeeRepository employeeRepository, EmployeeRoleResolver roleResolver,
+                             ActorPermissions permissions, CustomRoleStore customRoles) {
         this.employeeRepository = employeeRepository;
         this.roleResolver = roleResolver;
         this.permissions = permissions;
+        this.customRoles = customRoles;
     }
 
     /**
@@ -83,7 +96,8 @@ public class EmployeeTeamScope {
         if (userId != null && userId.equals(CurrentActor.actorId())) {
             return true;
         }
-        return enrichment != null && enrichment.member() && MANAGEABLE_BY_MANAGER.contains(enrichment.role());
+        return enrichment != null && enrichment.member() && MANAGEABLE_BY_MANAGER.contains(enrichment.role())
+                && (enrichment.customRole() == null || !enrichment.customRole().permissions().contains(PERMISSION));
     }
 
     /**
@@ -133,6 +147,12 @@ public class EmployeeTeamScope {
         }
         UserTenantMembership membership = roleResolver.membership(target.getUserId()).orElse(null);
         if (membership == null || !MANAGEABLE_BY_MANAGER.contains(membership.getRole())) {
+            throw new DomainException(ErrorCode.FORBIDDEN, OUT_OF_TEAM);
+        }
+        // Story 19.14 — a delegate never manages another delegate: a member whose owner-defined role grants the
+        // team permission is the owner's to manage (one keyed read, only for a delegate's per-member check).
+        if (customRoles != null && customRoles.findAssigned(membership.getTenantId(), target.getUserId())
+                .map(role -> role.permissions().contains(PERMISSION)).orElse(false)) {
             throw new DomainException(ErrorCode.FORBIDDEN, OUT_OF_TEAM);
         }
         return membership;

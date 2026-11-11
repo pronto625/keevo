@@ -39,7 +39,7 @@ public class PermissionAuthorizationManager implements AuthorizationManager<Meth
         if (auth == null || !auth.isAuthenticated()) {
             return new AuthorizationDecision(false);
         }
-        Set<String> held = permissions.getObject().permissionsOf(ModulePermissions.rolesOf(auth));
+        Set<String> held = permissions.getObject().permissionsOf(auth);
         return new AuthorizationDecision(held.containsAll(Arrays.asList(required.value())));
     }
 

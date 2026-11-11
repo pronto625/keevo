@@ -602,6 +602,22 @@ class SyncPullServiceTest {
     }
 
     @Test
+    void story1914_visibilityMarker_sameForHolders_narrowedForOthers() {
+        var viewer = com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID)
+                .withPermissions(java.util.Set.of("STORE_SALES_VIEW", "DOCUMENT_STORE_VIEW"));
+        var employee = com.keevo.shared.application.port.sync.PullScope.employee(STORE_A, ACTOR_ID)
+                .withPermissions(java.util.Set.of("SALE_CREATE"));
+
+        // a holder keeps the 16-13 marker: devices of MANAGER / VIEWER are not re-seeded by 19.14
+        assertThat(SyncPushService.ScopeKey.visibilityMarker(viewer)).isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=0");
+        assertThat(SyncPushService.ScopeKey.visibilityMarker(employee))
+                .isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=0;ss=0;ds=0");
+        assertThat(SyncPushService.ScopeKey.visibilityMarker(
+                com.keevo.shared.application.port.sync.PullScope.unrestricted(ACTOR_ID)))
+                .isEqualTo(SyncPushService.VISIBILITY_RULES + ";pp=1");
+    }
+
+    @Test
     void story1613r_sameRules_incremental_nothingWritten() {
         var since = Instant.parse("2026-03-20T10:00:00Z");
         when(userSyncStateRepository.findByDeviceId(DEVICE))

@@ -10,6 +10,7 @@ import com.keevo.shared.infrastructure.security.access.AccessStateService;
 import com.keevo.shared.infrastructure.web.ErrorMessages;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.module.FoundationUnavailableException;
+import com.keevo.shared.module.CustomRoleGrant;
 import com.keevo.shared.module.ModuleProvisioner;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -313,7 +314,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     userId, null,
                     List.of(new SimpleGrantedAuthority("ROLE_" + role)));
             if (Role.isStoreMember(role)) {
-                auth.setDetails(new AuthDetails(employee.firstName(), employee.storeId(), sessionId));
+                auth.setDetails(new AuthDetails(employee.firstName(), employee.storeId(), sessionId,
+                        customRoleGrant(state, role, employee.storeId())));
             } else {
                 // Owner: first name of its employee row when it has one (promoted employee).
                 auth.setDetails(new AuthDetails(employee != null ? employee.firstName() : null, null, sessionId));
@@ -336,6 +338,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             MDC.remove(MDC_TENANT_ID);
             MDC.remove(MDC_USER_ID);
         }
+    }
+
+    /**
+     * Story 19.14 — the owner-defined role of a store member as carried by the authentication: its permissions for this
+     * member ({@link AccessState.CustomRoleState#permissionsFor} — none when the role's base differs from the
+     * membership role or the member's store is outside the role's stores), or {@code null} without custom role.
+     */
+    static CustomRoleGrant customRoleGrant(AccessState state, String role, UUID storeId) {
+        AccessState.CustomRoleState custom = state.customRole();
+        if (custom == null) {
+            return null;
+        }
+        return new CustomRoleGrant(custom.id(), custom.name(), custom.permissionsFor(role, storeId));
     }
 
     private void recordActivity(UUID userId, String tenantSchema, String role) {

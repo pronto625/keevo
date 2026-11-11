@@ -13,6 +13,7 @@ import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
+import com.keevo.shared.module.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,12 +28,19 @@ import java.util.UUID;
 @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class SaleController {
 
+    /**
+     * Story 19.14 — « Créer des ventes » (declared by the {@code pos} manifest; OWNER, MANAGER and EMPLOYEE by default,
+     * a checkbox of an owner-defined role). A VIEWER never holds it.
+     */
+    public static final String CREATE_PERMISSION = "SALE_CREATE";
+
     private final RecordSaleUseCase recordSaleUseCase;
 
     public SaleController(RecordSaleUseCase recordSaleUseCase) {
         this.recordSaleUseCase = recordSaleUseCase;
     }
 
+    @RequiresPermission(CREATE_PERMISSION)
     @RequiresEntitlement("pos")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<RecordSaleResponseDto>> recordSale(

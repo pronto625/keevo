@@ -86,6 +86,46 @@ class SaleDeltaProviderTest {
         assertThat(result.get(0)).containsEntry("mobileMoneyRef", "MP2603.1234");
     }
 
+    @Test
+    void story1914_memberWithoutStoreSalesView_pullsHisOwnSales() {
+        when(em.createNativeQuery(contains("FROM sales"))).thenReturn(query);
+        when(query.getResultList()).thenReturn(Collections.emptyList());
+        UUID store = UUID.randomUUID();
+        UUID actor = UUID.randomUUID();
+
+        provider.queryDeltaPage(Instant.EPOCH, null, DeltaEntityProvider.PAGE_SIZE,
+                PullScope.employee(store, actor).withPermissions(java.util.Set.of("SALE_CREATE")));
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(em).createNativeQuery(sql.capture());
+        assertThat(sql.getValue()).contains("store_id = :scopeStoreId AND employee_id = :scopeActorId");
+        verify(query).setParameter("scopeStoreId", store);
+        verify(query).setParameter("scopeActorId", actor);
+    }
+
+    @Test
+    void story1914_holderOfStoreSalesView_pullsTheWholeStore() {
+        when(em.createNativeQuery(contains("FROM sales"))).thenReturn(query);
+        when(query.getResultList()).thenReturn(Collections.emptyList());
+        UUID store = UUID.randomUUID();
+
+        provider.queryDeltaPage(Instant.EPOCH, null, DeltaEntityProvider.PAGE_SIZE,
+                PullScope.employee(store, UUID.randomUUID()).withPermissions(java.util.Set.of("STORE_SALES_VIEW")));
+
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(em).createNativeQuery(sql.capture());
+        assertThat(sql.getValue()).contains("store_id = :scopeStoreId").doesNotContain("employee_id = :scopeActorId");
+    }
+
+    @Test
+    void story1914_unknownActorWithoutStoreSalesView_pullsNothing() {
+        var page = provider.queryDeltaPage(Instant.EPOCH, null, DeltaEntityProvider.PAGE_SIZE,
+                PullScope.employee(UUID.randomUUID(), null));
+
+        assertThat(page.rows()).isEmpty();
+        verifyNoInteractions(em);
+    }
+
     // A sale validated or cancelled after creation keeps its created_at: filtering on it
     // would never send the new status to the other devices.
     @Test

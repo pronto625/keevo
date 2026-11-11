@@ -422,8 +422,30 @@ class UpdateProductUseCaseTest {
             var unknownRole = useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null,
                     null, null, 1, 1, null, UUID.randomUUID(), null));
             assertEquals(2800, unknownRole.getBuyPriceValue()); // fail closed (stored = existing mock row)
+
+            // Story 19.14 — the authenticated actor decides: a MANAGER-based custom role without « Voir les prix
+            // d'achat » never writes them, even though its role name would
+            var mapped = new UpdateProductUseCase(productRepository, eventPublisher, objectMapper, productCountPort,
+                    tenantPlanQuery, planLimit, transactionLock, stockTracking,
+                    new com.keevo.shared.infrastructure.security.PurchasePriceVisibility(
+                            new org.springframework.beans.factory.support.StaticListableBeanFactory(java.util.Map.of(
+                                    "m", com.keevo.shared.infrastructure.security.ShippedActorPermissions
+                                            .modulePermissions())).getBeanProvider(
+                                    com.keevo.shared.module.application.ModulePermissions.class)));
+            com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(
+                    UUID.randomUUID(), "EMPLOYEE", UUID.randomUUID(), java.util.Set.of("PURCHASE_PRICE_VIEW"));
+            var customEmployee = mapped.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null,
+                    null, null, 2900, 120, null, UUID.randomUUID(), "EMPLOYEE"));
+            assertEquals(2900, customEmployee.getBuyPriceValue()); // the ticked checkbox lets him write it
+
+            com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(
+                    UUID.randomUUID(), "MANAGER", UUID.randomUUID(), java.util.Set.of("SALE_CREATE"));
+            var customManager = mapped.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null,
+                    null, null, 1, 1, null, UUID.randomUUID(), "MANAGER"));
+            assertEquals(2800, customManager.getBuyPriceValue());
         } finally {
             TenantContext.clear();
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
     }
 

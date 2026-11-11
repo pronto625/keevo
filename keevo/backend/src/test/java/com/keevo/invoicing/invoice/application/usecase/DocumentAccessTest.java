@@ -35,7 +35,8 @@ class DocumentAccessTest {
     private static final UUID OTHER = UUID.randomUUID();
 
     private final InvoiceRepository invoices = mock(InvoiceRepository.class);
-    private final DocumentAccess access = new DocumentAccess(invoices);
+    private final DocumentAccess access = new DocumentAccess(invoices,
+            com.keevo.shared.infrastructure.security.ShippedActorPermissions.get());
 
     @AfterEach
     void clear() {
@@ -65,6 +66,17 @@ class DocumentAccessTest {
         actor(ME, "VIEWER", A);
         assertThat(access.current()).isEqualTo(DocumentScope.store(A));
         actor(ME, "EMPLOYEE", A);
+        assertThat(access.current()).isEqualTo(DocumentScope.creator(ME));
+    }
+
+    @Test
+    @DisplayName("19.14 — custom roles: « Voir les documents de toute la boutique » decides store vs own documents")
+    void customRoleScopes() {
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(ME, "EMPLOYEE", A,
+                java.util.Set.of("INVOICE_VIEW", "DOCUMENT_STORE_VIEW"));
+        assertThat(access.current()).isEqualTo(DocumentScope.store(A));
+        com.keevo.shared.infrastructure.security.ShippedActorPermissions.authenticateWithCustomRole(ME, "MANAGER", A,
+                java.util.Set.of("INVOICE_VIEW"));
         assertThat(access.current()).isEqualTo(DocumentScope.creator(ME));
     }
 

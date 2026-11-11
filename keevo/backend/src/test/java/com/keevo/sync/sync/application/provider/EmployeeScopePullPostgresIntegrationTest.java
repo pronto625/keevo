@@ -154,12 +154,21 @@ class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {
         jdbc.execute("DROP SCHEMA IF EXISTS \"" + SCHEMA + "\" CASCADE");
     }
 
+    /**
+     * A store member holding « Voir les ventes de toute la boutique » (Story 19.14): the store scope of every dataset,
+     * sales of every seller included. Without it a member pulls his own sales only ({@code SaleDeltaProviderTest},
+     * {@code CustomRolesFullContextTest}).
+     */
+    private PullScope storeWide(UUID store) {
+        return PullScope.employee(store, employeeUser).withPermissions(Set.of("STORE_SALES_VIEW"));
+    }
+
     // ── Scope ─────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("employee of A: only A's store data (stock levels included) and its own reports; stores, catalogue for all")
     void employeeReceivesOnlyItsStore() {
-        Pulled pulled = pullAll(PullScope.employee(storeA, employeeUser), false, null, null);
+        Pulled pulled = pullAll(storeWide(storeA), false, null, null);
 
         for (String key : List.of("stockMovements", "sales", "dayClosures", "inventorySessions", "inventoryCounts",
                 "employees")) {
@@ -172,7 +181,7 @@ class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {
                 .containsOnly(storeA.toString());
         assertThat(pulled.ids("products")).contains(product.toString());
         assertThat(pulled.pages()).as("movements of A need two pages").isEqualTo(2);
-        assertThat(pulled.last().scope()).isEqualTo(PullScope.employee(storeA, employeeUser));
+        assertThat(pulled.last().scope()).isEqualTo(storeWide(storeA));
         assertThat(pulled.last().reseed()).isFalse();
         // sale items follow their (in-scope) sales
         assertThat(pulled.rows("sales")).allSatisfy(s -> assertThat((List<?>) s.get("items")).hasSize(1));
@@ -215,17 +224,17 @@ class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {
     @DisplayName("first pull of a device is not a change; reassignment A → B re-seeds from the beginning, then incremental")
     void reassignmentReseeds() {
         registerDevice();
-        Pulled first = pullAll(PullScope.employee(storeA, employeeUser), false, null, device);
+        Pulled first = pullAll(storeWide(storeA), false, null, device);
         assertThat(first.last().reseed()).isFalse();
         assertThat(userSyncStates.findByDeviceId(device).orElseThrow().lastScopeStoreId()).isEqualTo(storeA);
         assertThat(userSyncStates.findByDeviceId(device).orElseThrow().lastScopeRestricted()).isTrue();
 
         Instant since = first.last().serverTimestamp(); // after every seeded row: an incremental pull is empty
-        Pulled same = pullAll(PullScope.employee(storeA, employeeUser), false, since, device);
+        Pulled same = pullAll(storeWide(storeA), false, since, device);
         assertThat(same.last().reseed()).isFalse();
         assertThat(same.ids("sales")).isEmpty();
 
-        Pulled reseeded = pullAll(PullScope.employee(storeB, employeeUser), false, since, device);
+        Pulled reseeded = pullAll(storeWide(storeB), false, since, device);
         assertThat(reseeded.pages()).isEqualTo(2);
         assertThat(reseeded.all()).allSatisfy(p -> assertThat(p.reseed()).isTrue());
         assertThat(reseeded.last().scope().storeId()).isEqualTo(storeB);
@@ -245,7 +254,7 @@ class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {
                     assertThat(s.lastScopeStoreId()).isEqualTo(storeB);
                 });
 
-        Pulled next = pullAll(PullScope.employee(storeB, employeeUser), false, reseeded.last().serverTimestamp(), device);
+        Pulled next = pullAll(storeWide(storeB), false, reseeded.last().serverTimestamp(), device);
         assertThat(next.last().reseed()).isFalse();
         assertThat(next.ids("sales")).isEmpty();
     }
@@ -254,15 +263,15 @@ class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {
     @DisplayName("an interrupted re-seed (first page only) keeps the old scope: the next pull re-seeds again")
     void interruptedReseedKeepsTheOldScope() {
         registerDevice();
-        pullAll(PullScope.employee(storeA, employeeUser), false, null, device);
+        pullAll(storeWide(storeA), false, null, device);
         Instant since = Instant.now();
 
-        SyncPullResult firstPage = pullPage(PullScope.employee(storeB, employeeUser), false, since, null, device);
+        SyncPullResult firstPage = pullPage(storeWide(storeB), false, since, null, device);
         assertThat(firstPage.reseed()).isTrue();
         assertThat(firstPage.hasMore()).isTrue();
         assertThat(userSyncStates.findByDeviceId(device).orElseThrow().lastScopeStoreId()).isEqualTo(storeA);
 
-        Pulled again = pullAll(PullScope.employee(storeB, employeeUser), false, since, device);
+        Pulled again = pullAll(storeWide(storeB), false, since, device);
         assertThat(again.last().reseed()).isTrue();
         assertThat(userSyncStates.findByDeviceId(device).orElseThrow().lastScopeStoreId()).isEqualTo(storeB);
     }

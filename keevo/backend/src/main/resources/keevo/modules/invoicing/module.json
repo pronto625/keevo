@@ -39,7 +39,8 @@
     "INVOICE_CREATE",
     "INVOICE_VIEW",
     "INVOICE_SEND",
-    "INVOICE_MANAGE"
+    "INVOICE_MANAGE",
+    "DOCUMENT_STORE_VIEW"
   ],
   "routes": [
     "/invoicing",
@@ -49,9 +50,9 @@
     "/invoicing/:id/edit"
   ],
   "rolePermissions": {
-    "MANAGER": ["INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND"],
+    "MANAGER": ["INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "DOCUMENT_STORE_VIEW"],
     "EMPLOYEE": ["INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND"],
-    "VIEWER": ["INVOICE_VIEW"]
+    "VIEWER": ["INVOICE_VIEW", "DOCUMENT_STORE_VIEW"]
   },
   "entitlement": "module.invoicing",
   "free": false

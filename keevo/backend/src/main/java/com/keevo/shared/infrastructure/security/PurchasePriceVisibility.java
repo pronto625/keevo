@@ -19,9 +19,9 @@ import java.util.Collection;
  * {@code PullScope.holds(PurchasePriceVisibility.PERMISSION)}, resolved by the pull endpoint from the same
  * {@link ModulePermissions} mapping.
  *
- * <p><b>Hook for story 19-14</b> (owner-defined roles with chosen permissions): only the role → permission mapping
- * changes (per-tenant roles instead of the manifest's {@code rolePermissions}); {@value #PERMISSION} becomes a
- * permission the owner ticks (« Voir les prix d'achat ») and no call site of this class changes.
+ * <p>Story 19.14 — {@value #PERMISSION} is the checkbox « Voir les prix d'achat » of an owner-defined role: an
+ * authenticated actor is evaluated by {@link ModulePermissions#permissionsOf(Authentication)} (custom role included);
+ * no call site of this class changed.
  */
 @Component
 public class PurchasePriceVisibility {
@@ -50,7 +50,28 @@ public class PurchasePriceVisibility {
 
     /** Whether this authentication may see purchase prices; {@code false} for {@code null} (fail closed). */
     public boolean canView(Authentication authentication) {
-        return authentication != null && canView(ModulePermissions.rolesOf(authentication));
+        if (authentication == null) {
+            return false;
+        }
+        Collection<String> roles = ModulePermissions.rolesOf(authentication);
+        if (roles.contains(Role.OWNER.name())) {
+            return true;
+        }
+        ModulePermissions mapping = permissions == null ? null : permissions.getIfAvailable();
+        return mapping != null && mapping.permissionsOf(authentication).contains(PERMISSION); // 19.14: custom roles
+    }
+
+    /**
+     * Story 19.14 — for a use case that receives the actor's role: the authenticated actor's permissions when there is
+     * one (they include an owner-defined role), else the built-in mapping of {@code actorRole} (work without an
+     * authenticated actor).
+     */
+    public boolean canViewAs(String actorRole) {
+        Authentication authentication = CurrentActor.authentication();
+        if (authentication != null) {
+            return canView(authentication);
+        }
+        return canView(actorRole == null ? java.util.List.of() : java.util.List.of(actorRole));
     }
 
     /**
