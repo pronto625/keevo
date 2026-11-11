@@ -44,7 +44,7 @@ class ModuleRegistryPostgresIntegrationTest {
     private static final String TENANT = "kv_reg001";
     private static final UUID TENANT_ID = UUID.randomUUID();
     private static final String DELETED_TENANT = "kv_reg002";
-    private static final String[] SHIPPED = {"admin", "advanced-reports", "ai-assistant", "alerts", "catalog", "core", "counting",
+    private static final String[] SHIPPED = {"admin", "advanced-reports", "ai-assistant", "alerts", "catalog", "client-portal", "core", "counting",
             "crm", "expenses", "exports", "finance", "inventory", "invoicing", "mcp-access", "messaging", "multi-store", "pos",
             "profitability", "report-config", "reporting", "store", "sync", "whatsapp-cloud"};
     /** Story 13.10a — the paid feature modules of plan §6.1. */

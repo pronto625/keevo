@@ -27,7 +27,10 @@ class ModuleOrderTest {
     @Test
     @DisplayName("foundation order of the shipped manifests is pinned; paid and platform modules come after")
     void pinnedOrder() {
-        List<String> order = ids(ModuleOrder.order(CATALOG.manifests()));
+        // 21.7: client-portal is free but owns no tenant table (its data is public): it ranks among the foundation
+        // modules and creates nothing, so the pinned order is that of the modules with tables
+        List<String> order = ids(ModuleOrder.order(CATALOG.manifests())).stream()
+                .filter(id -> !id.equals("client-portal")).toList();
 
         assertThat(order.subList(0, 9)).containsExactly("core", "reporting", "catalog", "crm", "messaging", "store",
                 "sync", "inventory", "pos");

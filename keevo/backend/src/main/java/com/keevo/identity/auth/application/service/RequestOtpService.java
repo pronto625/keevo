@@ -2,6 +2,7 @@ package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.OtpChannel;
 import com.keevo.identity.auth.domain.model.OtpIdentifier;
+import com.keevo.identity.auth.domain.model.OtpPurpose;
 import com.keevo.identity.auth.domain.port.in.RequestOtpCommand;
 import com.keevo.identity.auth.domain.port.in.RequestOtpUseCase;
 import com.keevo.identity.auth.domain.port.out.OtpChallengeRepository;
@@ -87,32 +88,43 @@ public class RequestOtpService implements RequestOtpUseCase {
     @Override
     public int request(RequestOtpCommand command) {
         OtpIdentifier identifier = OtpIdentifier.parse(command.identifier(), settings.allowedPhonePrefixes());
-        Set<OtpChannel> channels = identifier.channelsFor(command.channel());
+        return issue(identifier, identifier.channelsFor(command.channel()), OtpPurpose.SIGN_IN, command.clientIp(),
+                command.language());
+    }
 
+    /**
+     * Story 21.7 — the code issue shared by every purpose (Template Method core): the challenge is stored under
+     * {@link OtpPurpose#challengeKey} (a code of one purpose never verifies under another, each purpose has its own
+     * daily failure cap), while the request limits count the identifier itself (one SMS budget per phone, whatever
+     * the purpose).
+     *
+     * @return validity of the code in seconds
+     */
+    public int issue(OtpIdentifier identifier, Set<OtpChannel> channels, OtpPurpose purpose, String clientIp,
+                     String language) {
         // Store-review account: no limit, nothing stored, nothing sent (its fixed code is checked at verify).
         if (settings.isReviewIdentifier(identifier)) {
             log.warn("OTP request for the store-review account ({})", identifier.masked());
             return EXPIRES_IN_SECONDS;
         }
 
-        rateLimiter.acquire(identifier.value(), command.clientIp());
+        rateLimiter.acquire(identifier.value(), clientIp);
+        String key = purpose.challengeKey(identifier);
         String code = generateCode();
         String codeHash = passwordEncoder.encode(code);
 
         transactionTemplate.executeWithoutResult(status -> {
             Instant now = clock.instant();
-            int failures = challengeRepository.sumFailuresSince(identifier.value(),
-                    now.minus(OtpSettings.DAILY_WINDOW));
+            int failures = challengeRepository.sumFailuresSince(key, now.minus(OtpSettings.DAILY_WINDOW));
             if (failures >= OtpSettings.DAILY_MAX_FAILURES) {
                 log.warn("OTP blocked for {}: {} failed codes in 24 h", identifier.masked(), failures);
                 throw new DomainException(ErrorCode.OTP_TOO_MANY_REQUESTS);
             }
-            challengeRepository.invalidateActive(identifier.value(), now);
-            challengeRepository.insert(UUID.randomUUID(), identifier.value(), codeHash,
-                    now.plus(OtpSettings.CODE_TTL), now);
+            challengeRepository.invalidateActive(key, now);
+            challengeRepository.insert(UUID.randomUUID(), key, codeHash, now.plus(OtpSettings.CODE_TTL), now);
         });
 
-        send(identifier, channels, code, OtpMessages.resolve(command.language()));
+        send(identifier, channels, code, OtpMessages.resolve(language));
         return EXPIRES_IN_SECONDS;
     }
 

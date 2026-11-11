@@ -84,6 +84,7 @@ class SchedulerLockCoverageTest {
                     Duration.ofDays(1)), // 19.8
             Map.entry(com.keevo.shared.ai.internal.AiToolCallPurgeJob.class, Duration.ofDays(1)), // 21.8
             Map.entry(com.keevo.mcp.token.application.service.McpTokenPurgeJob.class, Duration.ofDays(1)), // 21.9
+            Map.entry(com.keevo.clientportal.auth.application.PortalSessionPurgeJob.class, Duration.ofDays(1)), // 21.7
             Map.entry(com.keevo.messaging.notification.application.service.NotificationRetentionJob.class,
                     Duration.ofDays(1)), // 19.11
             Map.entry(com.keevo.invoicing.invoice.adapter.in.scheduling.InvoiceOverdueJob.class,

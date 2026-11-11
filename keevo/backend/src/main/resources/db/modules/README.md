@@ -7,7 +7,8 @@ Each module owns the tables it creates in a tenant schema (`kv_xxxxxx`). Its ver
 ## Foundation modules (Story 16.12)
 
 `core, store, catalog, inventory, crm, pos, sync, reporting, messaging` (the free, non-platform modules) are the
-**single author of every tenant table**. Their scripts:
+**single author of every tenant table**. (`client-portal`, Story 21.7, is free too but owns no tenant table: its data is
+public, so it has no folder here.) Their scripts:
 
 - are executed **twice** on every new tenant: inside the registration transaction by `TenantSchemaProvisioner`
   (Flyway cannot see the uncommitted schema), then by Flyway after commit, which records the history;
@@ -49,7 +50,7 @@ super-admin). A module the owner must never disable declares `"ownerToggleable":
 is orthogonal to the entitlement.
 
 Shipped so far (each pinned in `ModuleIdsAtGoLivePinTest`, which fails when a new module ships without its line): `expenses`
-(V56), `finance` (V58), `ai-assistant` (V65), `mcp-access` (V66), `whatsapp-cloud` (V68).
+(V56), `finance` (V58), `ai-assistant` (V65), `mcp-access` (V66), `whatsapp-cloud` (V68), `client-portal` (V70).
 
 ## Paid modules with tables (lazy provisioning)
 

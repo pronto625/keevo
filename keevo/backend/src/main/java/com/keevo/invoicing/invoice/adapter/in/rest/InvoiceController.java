@@ -40,6 +40,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
+import com.keevo.shared.infrastructure.web.PublicBaseUrl;
 import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.shared.module.RequiresPermission;
 import jakarta.validation.Valid;

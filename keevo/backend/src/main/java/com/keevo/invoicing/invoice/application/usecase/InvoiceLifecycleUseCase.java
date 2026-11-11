@@ -13,6 +13,7 @@ import com.keevo.shared.event.catalog.invoicing.QuoteCancelledEvent;
 import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.capability.entitlement.UsageMetric;
 import com.keevo.shared.capability.entitlement.UsageQuotaPort;
+import com.keevo.shared.capability.portal.InvoicePhoneIndex;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,9 @@ import java.util.UUID;
  *
  * <p>Story 20.6 — a counted issue (user issue, sync issue, quote conversion) first derives the invoice's CRM client
  * and catalogue products ({@link DocumentDerivationService}); the POS bridge never does.
+ *
+ * <p>Story 21.7 — every issue (all paths above) indexes the client's phone for the client portal
+ * ({@link InvoicePhoneIndex}), in the same transaction.
  */
 @Service
 public class InvoiceLifecycleUseCase {
@@ -52,11 +56,14 @@ public class InvoiceLifecycleUseCase {
     private final UsageQuotaPort quotas;
     private final InvoicePaymentUseCase payments;
     private final DocumentDerivationService derivation;
+    private final InvoicePhoneIndex phoneIndex;
 
     public InvoiceLifecycleUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                    ApplicationEventPublisher events, CompanyIdentity companyIdentity, Clock clock,
                                    CreditNoteRepository creditNotes, UsageQuotaPort quotas,
-                                   InvoicePaymentUseCase payments, DocumentDerivationService derivation) {
+                                   InvoicePaymentUseCase payments, DocumentDerivationService derivation,
+                                   InvoicePhoneIndex phoneIndex) {
+        this.phoneIndex = phoneIndex;
         this.payments = payments;
         this.derivation = derivation;
         this.creditNotes = creditNotes;
@@ -114,6 +121,8 @@ public class InvoiceLifecycleUseCase {
                 number(today.getYear(), invoices.nextNumber(today.getYear())), today, seller, now))
                 .withSellerIdentity(nameFromDisplay, hasLogo);
         invoices.issue(issued);
+        // Story 21.7 — the client portal finds the invoice by its client's phone: indexed in this transaction
+        phoneIndex.index(tenantId, issued.id(), issued.client().phone(), now);
         events.publishEvent(new InvoiceIssuedEvent(issued.id(), issued.number(), issued.client().name(),
                 issued.totals().totalTtc(), actorId, tenantId, now));
         return issued;

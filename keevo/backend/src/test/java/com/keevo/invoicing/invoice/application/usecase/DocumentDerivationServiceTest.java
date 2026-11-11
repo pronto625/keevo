@@ -169,7 +169,8 @@ class DocumentDerivationServiceTest {
         InvoiceLifecycleUseCase lifecycle = new InvoiceLifecycleUseCase(repo, settings,
                 mock(ApplicationEventPublisher.class), company, Clock.fixed(NOW, ZoneOffset.UTC),
                 mock(com.keevo.invoicing.invoice.domain.port.out.CreditNoteRepository.class),
-                mock(UsageQuotaPort.class), mock(InvoicePaymentUseCase.class), derivation);
+                mock(UsageQuotaPort.class), mock(InvoicePaymentUseCase.class), derivation,
+                mock(com.keevo.shared.capability.portal.InvoicePhoneIndex.class));
         when(settings.find()).thenReturn(Optional.of(SELLER));
         when(repo.nextNumber(2026)).thenReturn(1L);
         Invoice bridged = draft(null, null);

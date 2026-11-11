@@ -3,6 +3,7 @@ package com.keevo.identity.auth.application.service;
 import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.OtpChallenge;
 import com.keevo.identity.auth.domain.model.OtpIdentifier;
+import com.keevo.identity.auth.domain.model.OtpPurpose;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
@@ -75,21 +76,34 @@ public class VerifyOtpService implements VerifyOtpUseCase {
         // Per-IP limit first, for every identifier including the review account (fixed code, no failure count).
         rateLimiter.acquireVerify(command.clientIp());
         OtpIdentifier identifier = OtpIdentifier.parse(command.identifier(), settings.allowedPhonePrefixes());
-        String code = command.code() == null ? "" : command.code().strip();
         Instant now = clock.instant();
+        check(identifier, command.code(), OtpPurpose.SIGN_IN, now);
+        return openSession(identifier, now);
+    }
 
+    /**
+     * Story 21.7 — the code check shared by every purpose (Template Method core), in the caller's transaction (which
+     * must not roll back on {@link DomainException}, so a wrong code's attempt is kept): store-review shortcut → daily
+     * failure cap of the purpose → latest live challenge of the purpose locked → code compared → challenge consumed.
+     * The caller applies the per-IP limit first.
+     *
+     * @throws DomainException {@code OTP_INVALID} (no live code of this purpose, or wrong code),
+     *                         {@code OTP_TOO_MANY_ATTEMPTS} (5th wrong code), {@code OTP_TOO_MANY_REQUESTS} (daily cap)
+     */
+    public void check(OtpIdentifier identifier, String rawCode, OtpPurpose purpose, Instant now) {
+        String code = rawCode == null ? "" : rawCode.strip();
         if (settings.isReviewLogin(identifier, code)) {
-            log.warn("Sign-in of the store-review account ({})", identifier.masked());
-            return openSession(identifier, now);
+            log.warn("Code of the store-review account accepted ({}, {})", identifier.masked(), purpose);
+            return;
         }
-
-        int failures = challengeRepository.sumFailuresSince(identifier.value(), now.minus(OtpSettings.DAILY_WINDOW));
+        String key = purpose.challengeKey(identifier);
+        int failures = challengeRepository.sumFailuresSince(key, now.minus(OtpSettings.DAILY_WINDOW));
         if (failures >= OtpSettings.DAILY_MAX_FAILURES) {
             log.warn("OTP blocked for {}: {} failed codes in 24 h", identifier.masked(), failures);
             throw new DomainException(ErrorCode.OTP_TOO_MANY_REQUESTS);
         }
 
-        OtpChallenge challenge = challengeRepository.lockLatestActive(identifier.value(), now)
+        OtpChallenge challenge = challengeRepository.lockLatestActive(key, now)
                 .orElseThrow(() -> new DomainException(ErrorCode.OTP_INVALID));
 
         if (!CODE.matcher(code).matches() || !passwordEncoder.matches(code, challenge.codeHash())) {
@@ -101,7 +115,6 @@ public class VerifyOtpService implements VerifyOtpUseCase {
         }
 
         challengeRepository.consume(challenge.id(), now);
-        return openSession(identifier, now);
     }
 
     private LoginSessionResult openSession(OtpIdentifier identifier, Instant now) {

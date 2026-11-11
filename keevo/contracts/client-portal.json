@@ -1,0 +1,72 @@
+{
+  "description": "Story 21.7 — « Portail client » (module client-portal, free): an end client of the merchants (never a Keevo user) signs in with a code sent to his phone and lists the invoices every merchant issued to that phone. Public paths (no merchant JWT): the portal has its own session token 'kvc_…' (30 days), sent as 'Authorization: Bearer kvc_…' on GET /api/v1/portal/invoices only. A merchant JWT is refused there (401 PORTAL_SESSION_INVALID) and the portal token is refused everywhere else. The merchant's switch is the module client-portal in « Mes modules » (PUT /api/v1/tenants/me/modules/client-portal/activation): off = its invoices disappear from the portal at the next request; companies that existed before the portal start with it off, new companies with it on. Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. No identifier is ever returned: show the fields as they are. Change this file only with both sides.",
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/api/v1/portal/auth/otp/request",
+      "auth": "none",
+      "request": { "phone": "+237677000111 or 677000111 (9-digit Cameroonian number: +237 added)" },
+      "headers": { "Accept-Language": "optional, fr (default) or en — language of the SMS" },
+      "response": { "data": { "expiresIn": 300 } },
+      "errors": [
+        { "status": 422, "domainCode": "PHONE_COUNTRY_NOT_SUPPORTED", "reaction": "show the message, keep the form" },
+        { "status": 422, "domainCode": "VALIDATION_FAILED", "reaction": "not a phone (an email is refused): « Saisissez un numéro de téléphone »" },
+        { "status": 422, "domainCode": "VALIDATION_ERROR", "reaction": "phone missing or too long: show the message" },
+        { "status": 429, "domainCode": "OTP_TOO_MANY_REQUESTS", "reaction": "show the message, disable « Renvoyer le code » for a few minutes" }
+      ],
+      "notes": "Same answer whether the phone has invoices or not. The code goes by SMS (and WhatsApp when configured), 6 digits, valid 5 minutes. Limits shared with the merchant sign-in codes of the same phone: 3 per 10 minutes, 5 per hour, 10 per hour per network address."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/portal/auth/otp/verify",
+      "auth": "none",
+      "request": { "phone": "same value as the request", "code": "123456" },
+      "response": { "data": { "accessToken": "kvc_ + 43 characters", "expiresAt": "ISO-8601 (30 days)" } },
+      "errors": [
+        { "status": 401, "domainCode": "OTP_INVALID", "reaction": "« Code incorrect ou expiré » — let the client retype or ask a new code" },
+        { "status": 429, "domainCode": "OTP_TOO_MANY_ATTEMPTS", "reaction": "the code is dead: ask a new one" },
+        { "status": 429, "domainCode": "OTP_TOO_MANY_REQUESTS", "reaction": "show the message, retry later" },
+        { "status": 422, "domainCode": "PHONE_COUNTRY_NOT_SUPPORTED", "reaction": "show the message, back to the phone screen" },
+        { "status": 422, "domainCode": "VALIDATION_FAILED", "reaction": "not a phone: back to the phone screen" },
+        { "status": 422, "domainCode": "VALIDATION_ERROR", "reaction": "phone or code missing: show the message" },
+        { "status": 500, "domainCode": "INTERNAL_ERROR", "reaction": "rare: the code may already be used — offer « Recevoir un nouveau code »" }
+      ],
+      "notes": "Store accessToken in the secure store (never in plain storage, never logged). A merchant sign-in code is refused here and a portal code is refused on /api/v1/auth/otp/verify."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/portal/invoices?limit=20&cursor=<nextCursor>",
+      "auth": "Bearer kvc_… (portal session)",
+      "response": {
+        "data": {
+          "items": [
+            {
+              "merchantName": "Quincaillerie Ndolo",
+              "reference": "FAC-2026-000042",
+              "issueDate": "2026-11-10",
+              "dueDate": "2026-11-30 or null",
+              "totalTtc": 23850,
+              "paymentState": "UNPAID | PARTIAL | PAID | OVERDUE | CANCELLED (colour only, never shown)",
+              "paymentStateLabel": "Non payée | Partiellement payée | Payée | En retard | Annulée",
+              "link": { "url": "https://keevo.ad2s.cm/api/v1/invoices/shared?token=…", "expiresAt": "ISO-8601 (24 h)" }
+            }
+          ],
+          "nextCursor": "opaque token or null (last page)"
+        }
+      },
+      "errors": [
+        { "status": 401, "domainCode": "PORTAL_SESSION_INVALID", "reaction": "delete the stored token, back to the phone screen" },
+        { "status": 429, "domainCode": "PORTAL_TOO_MANY_REQUESTS", "reaction": "show the message, retry after a minute" },
+        { "status": 400, "domainCode": "VALIDATION_ERROR", "reaction": "bad cursor or limit: reload from the first page" }
+      ],
+      "notes": "Newest first across merchants, limit 1–50 (20 by default). Keep paging while nextCursor is not null: a page may hold fewer items than the limit (an invoice no longer listable is skipped), even none, without being the last one. 'link' is null for a cancelled invoice. The link opens the invoice PDF without sign-in and stops after 24 h: never cache it, re-list to get a fresh one. Amounts are XAF integers. Online only (no offline copy)."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/portal/auth/logout",
+      "auth": "Bearer kvc_… (optional)",
+      "response": "204, no body (also when the token is unknown)",
+      "notes": "Delete the stored token whatever the answer. Too many unknown tokens from one address are ignored (still 204)."
+    }
+  ]
+}

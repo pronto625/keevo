@@ -29,7 +29,8 @@ class ModuleIdsAtGoLivePinTest {
             "finance", // 20.11 — owner-disabled for existing tenants by V58
             "ai-assistant", // 21.4 — owner-disabled for existing tenants by V65
             "mcp-access", // 21.9 — owner-disabled for existing tenants by V66
-            "whatsapp-cloud"); // 21.5 — owner-disabled for existing tenants by V68
+            "whatsapp-cloud", // 21.5 — owner-disabled for existing tenants by V68
+            "client-portal"); // 21.7 — owner-disabled for existing tenants by V70
 
     @Test
     @DisplayName("every shipped module id is pinned (a new module ships its owner-disabling migration first)")

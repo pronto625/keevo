@@ -26,7 +26,7 @@ class ClasspathModuleManifestsTest {
                 "profitability", "exports", "invoicing", "expenses", "finance", "ai-assistant", "mcp-access",
                 "whatsapp-cloud");
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
-                "messaging", "sync", "admin", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
+                "messaging", "sync", "admin", "client-portal", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
                 "profitability", "exports", "invoicing", "expenses", "finance", "ai-assistant", "mcp-access",
                 "whatsapp-cloud");
         assertThat(byId.values()).allSatisfy(m -> {
@@ -117,6 +117,12 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("whatsapp-cloud").category()).isEqualTo(ModuleCategory.PREMIUM);
         assertThat(byId.get("whatsapp-cloud").displayName()).isEqualTo("WhatsApp Business");
         assertThat(byId.get("whatsapp-cloud").free()).isFalse();
+        // 21.7: client-portal — free business module (the merchant's switch is « Mes modules »), core only, no route
+        assertThat(byId.get("client-portal").requires()).containsExactly("core");
+        assertThat(byId.get("client-portal").category()).isEqualTo(ModuleCategory.BUSINESS);
+        assertThat(byId.get("client-portal").displayName()).isEqualTo("Portail client");
+        assertThat(byId.get("client-portal").free()).isTrue();
+        assertThat(byId.get("client-portal").ownerCanToggle()).isTrue();
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing") && !m.id().equals("expenses")
                         && !m.id().equals("finance"))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
@@ -132,7 +138,7 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.values()).filteredOn(m -> !m.isCore())
                 .allSatisfy(m -> assertThat(m.requires()).contains("core"));
         assertThat(byId.values().stream().filter(m -> m.category() == ModuleCategory.BUSINESS).map(ModuleManifest::id)
-                .toList()).hasSize(7);
+                .toList()).hasSize(8); // 21.7: + client-portal
         assertThat(List.copyOf(byId.values())).allSatisfy(m -> assertThat(m.displayName()).isNotBlank());
         // 15.2: route -> module mapping (app guard); the free CSV export screens stay unmapped
         assertThat(byId.get("exports").routes()).containsExactly("/exports", "/exports/:id");

@@ -196,6 +196,8 @@ public final class ErrorMessages {
             Map.entry("CAMPAIGN_NO_RECIPIENT",       "Aucun destinataire ne peut recevoir cette campagne"),
             Map.entry("CAMPAIGN_TOO_MANY_RECIPIENTS", "Trop de destinataires pour une seule campagne : affinez le ciblage"),
             Map.entry("PLATFORM_WHATSAPP_UNAVAILABLE", "Le numéro WhatsApp de la plateforme n'est pas configuré"),
+            Map.entry("PORTAL_SESSION_INVALID",      "Votre session a expiré : reconnectez-vous avec le code reçu par SMS."),
+            Map.entry("PORTAL_TOO_MANY_REQUESTS",    "Trop de demandes : patientez une minute avant de réessayer."),
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer"),
             Map.entry("INVALID_AMOUNT", "Montant invalide"),
             Map.entry("NEGATIVE_MONETARY_VALUE", "Un montant ne peut pas être négatif"),

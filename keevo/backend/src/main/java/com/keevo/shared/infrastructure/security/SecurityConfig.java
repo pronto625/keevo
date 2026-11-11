@@ -81,6 +81,7 @@ public class SecurityConfig {
             "/api/v1/invoices/public/*",     // 20.7 — old Bref public link of an imported invoice (UUID token, no JWT)
             "/api/v1/payments/webhook/**",   // 21.1 — Mobile Money provider callback (secret path + signature, no JWT)
             "/api/v1/whatsapp/webhook",      // 21.5 — Meta WhatsApp webhook (verify token / X-Hub-Signature-256, no JWT)
+            "/api/v1/portal/**",             // 21.7 — client portal: own session token (kvc_), a merchant JWT is refused
             "/v3/api-docs",
             "/v3/api-docs/**",
             "/swagger-ui/**",

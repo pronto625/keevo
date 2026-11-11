@@ -261,6 +261,9 @@ public enum ErrorCode {
     CAMPAIGN_NO_RECIPIENT,            // HTTP 422 — nobody can receive the campaign
     CAMPAIGN_TOO_MANY_RECIPIENTS,     // HTTP 422 — audience above the per-campaign limit
     PLATFORM_WHATSAPP_UNAVAILABLE,    // HTTP 503 — the platform WhatsApp number is not configured
+    // ── Client portal (Story 21.7) ───────────────────────────────────
+    PORTAL_SESSION_INVALID,           // HTTP 401 — portal session token missing, unknown or expired (or a merchant JWT)
+    PORTAL_TOO_MANY_REQUESTS,         // HTTP 429 — too many portal requests for the session, or failed ones for the IP
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

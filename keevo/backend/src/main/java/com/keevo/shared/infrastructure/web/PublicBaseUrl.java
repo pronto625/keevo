@@ -1,6 +1,5 @@
-package com.keevo.invoicing.invoice.adapter.in.rest;
+package com.keevo.shared.infrastructure.web;
 
-import com.keevo.invoicing.invoice.application.usecase.InvoicePublicLinkUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -13,6 +12,8 @@ import org.springframework.web.util.UriComponents;
  * Absolute base URL of the links sent outside the app (Story 14.2): {@code keevo.public-base-url} when set (prod:
  * {@code https://keevo.ad2s.cm}), else derived from the current request — {@code Forwarded} /
  * {@code X-Forwarded-*} headers honoured (the backend runs behind a reverse proxy) — plus the context path.
+ *
+ * <p>Moved to the core in Story 21.7: invoicing and the client portal both build absolute links.
  */
 @Component
 public class PublicBaseUrl {
@@ -25,7 +26,7 @@ public class PublicBaseUrl {
 
     public String resolve(HttpServletRequest request) {
         if (!configured.isEmpty()) {
-            return InvoicePublicLinkUseCase.stripTrailingSlash(configured);
+            return configured.endsWith("/") ? configured.substring(0, configured.length() - 1) : configured;
         }
         ServletServerHttpRequest server = new ServletServerHttpRequest(request);
         HttpHeaders headers = server.getHeaders();

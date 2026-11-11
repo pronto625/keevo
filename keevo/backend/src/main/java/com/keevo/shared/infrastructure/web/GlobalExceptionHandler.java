@@ -290,6 +290,7 @@ public class GlobalExceptionHandler {
                  "ACCOUNT_INACTIVE",
                  "STORE_REASSIGNED",
                  "MCP_TOKEN_INVALID",          // 21.9 — personal access token of the MCP server
+                 "PORTAL_SESSION_INVALID",     // 21.7 — client portal session token
                  "SESSION_REVOKED" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
                  "USERNAME_ALREADY_EXISTS",
@@ -428,6 +429,7 @@ public class GlobalExceptionHandler {
             case "RATE_LIMIT_EXCEEDED",
                  "OTP_TOO_MANY_ATTEMPTS",
                  "OTP_TOO_MANY_REQUESTS",
+                 "PORTAL_TOO_MANY_REQUESTS",   // 21.7 — client portal brake
                  "INVOICE_LINK_RATE_LIMITED",
                  "EXPORT_QUEUE_FULL",
                  "AI_QUESTION_IN_PROGRESS" -> HttpStatus.TOO_MANY_REQUESTS;  // 21.4 — one question at a time per user
