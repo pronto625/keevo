@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -27,26 +28,46 @@ import java.util.List;
 /**
  * Story 21.7 — {@code GET /api/v1/portal/invoices}: the invoices issued to the signed-in client's phone by every
  * merchant that shows them, newest first, keyset-paged. Authenticated by the portal session token
- * ({@code Authorization: Bearer kvc_…}), never by a merchant JWT (401 {@code PORTAL_SESSION_INVALID}). Only the
- * minimum of each invoice: merchant, reference, dates, total, payment state (French label) and a 24-hour link to the
- * PDF (none for a cancelled invoice). No identifier is returned.
+ * ({@code Authorization: Bearer kvc_…}), never by a merchant JWT (401 {@code PORTAL_SESSION_INVALID}). Each invoice:
+ * merchant, reference, dates, total, payment state (French label), a 24-hour link to the PDF (none for a cancelled
+ * invoice) and — reprise 11/11/2026, what Bref's screens show — the merchant's phone, the amounts paid and remaining,
+ * the lines and the payments; the first page also carries the client's totals. No identifier, no client data, no
+ * internal note is returned.
  */
 @Tag(name = "Client portal", description = "End clients find their invoices by phone (Story 21.7)")
 @EntitlementExempt("portail client : clients finaux hors compte commerçant, chaque commerçant filtré par son module")
 @RestController
 public class PortalInvoiceController {
 
-    /** One invoice as the client sees it. */
+    /**
+     * One invoice as the client sees it. Reprise 11/11/2026 (Bref's detail screen, read from the list): the merchant's
+     * phone, the amounts paid and remaining, the lines and the payments / instalments — appended, the 21.7 fields
+     * unchanged.
+     */
     public record PortalInvoiceDto(String merchantName, String reference, LocalDate issueDate, LocalDate dueDate,
-                                   long totalTtc, String paymentState, String paymentStateLabel, LinkDto link) {
+                                   long totalTtc, String paymentState, String paymentStateLabel, LinkDto link,
+                                   String merchantPhone, long amountPaid, long amountRemaining, List<LineDto> lines,
+                                   List<PaymentDto> payments) {
     }
 
     /** Signed link to the PDF and when it stops opening. */
     public record LinkDto(String url, Instant expiresAt) {
     }
 
-    /** One page and the token of the next one (null on the last page). */
-    public record PageDto(List<PortalInvoiceDto> items, String nextCursor) {
+    /** One printed line: unit price as typed (excluding VAT when the invoice's prices exclude it), total with VAT. */
+    public record LineDto(String reference, String description, BigDecimal quantity, long unitPrice, long totalTtc) {
+    }
+
+    /** A payment received ({@code paid}, {@code paidDate}) or an instalment ({@code dueDate}). */
+    public record PaymentDto(long amount, LocalDate dueDate, boolean paid, LocalDate paidDate, String method) {
+    }
+
+    /** The client's totals (Bref's header): invoices listed and the amount of those not cancelled. */
+    public record SummaryDto(long invoiceCount, long totalTtc) {
+    }
+
+    /** One page, the token of the next one (null on the last page) and, on the first page only, the totals. */
+    public record PageDto(List<PortalInvoiceDto> items, String nextCursor, SummaryDto summary) {
     }
 
     private final PortalAuthService auth;
@@ -61,7 +82,8 @@ public class PortalInvoiceController {
 
     @Operation(summary = "The signed-in client's invoices across merchants",
             description = "Bearer = portal session token. limit 1–50 (20 by default); cursor = nextCursor of the "
-                    + "previous page. 401 PORTAL_SESSION_INVALID, 429 PORTAL_TOO_MANY_REQUESTS, 400 "
+                    + "previous page (summary on the first page only). 401 PORTAL_SESSION_INVALID, 429 "
+                    + "PORTAL_TOO_MANY_REQUESTS, 400 "
                     + "VALIDATION_ERROR (cursor or limit).")
     @SecurityRequirements
     @GetMapping("/api/v1/portal/invoices")
@@ -85,12 +107,19 @@ public class PortalInvoiceController {
         }
         PortalInvoiceService.Page page = invoices.list(client.phone(), after, size, publicBaseUrl.resolve(request));
         List<PortalInvoiceDto> items = page.items().stream().map(PortalInvoiceController::dto).toList();
-        return ResponseEntity.ok(ApiResponseWrapper.ok(new PageDto(items, page.nextCursor())));
+        SummaryDto summary = page.summary() == null ? null
+                : new SummaryDto(page.summary().invoiceCount(), page.summary().totalTtc());
+        return ResponseEntity.ok(ApiResponseWrapper.ok(new PageDto(items, page.nextCursor(), summary)));
     }
 
     static PortalInvoiceDto dto(PortalDocument d) {
         return new PortalInvoiceDto(d.merchantName(), d.reference(), d.issueDate(), d.dueDate(), d.totalTtc(),
                 d.paymentState(), d.paymentStateLabel(),
-                d.linkUrl() == null ? null : new LinkDto(d.linkUrl(), d.linkExpiresAt()));
+                d.linkUrl() == null ? null : new LinkDto(d.linkUrl(), d.linkExpiresAt()),
+                d.merchantPhone(), d.amountPaid(), d.amountRemaining(),
+                d.lines().stream().map(l -> new LineDto(l.reference(), l.description(), l.quantity(), l.unitPrice(),
+                        l.totalTtc())).toList(),
+                d.payments().stream().map(p -> new PaymentDto(p.amount(), p.dueDate(), p.paid(), p.paidDate(),
+                        p.method())).toList());
     }
 }

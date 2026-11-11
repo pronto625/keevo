@@ -4,6 +4,7 @@ import com.keevo.clientportal.invoice.domain.model.PortalCursor;
 import com.keevo.clientportal.invoice.domain.port.out.PortalIndexReader;
 import com.keevo.shared.capability.portal.PortalDocuments;
 import com.keevo.shared.capability.portal.PortalDocuments.PortalDocument;
+import com.keevo.shared.capability.portal.PortalDocuments.Summary;
 import com.keevo.shared.module.ModuleProvisioner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,8 @@ import java.util.UUID;
  *       fields and a 24-hour signed link to the PDF; a document no longer listable (draft, deleted) is skipped.</li>
  * </ol>
  * The cursor is the last index row of the page, so filtered rows never break the paging. Read-only, no transaction.
+ * Reprise 11/11/2026: the first page also carries the client's totals ({@link #summary}: one bounded index scan and
+ * one aggregate statement more, first page only).
  */
 @Service
 public class PortalInvoiceService {
@@ -41,8 +44,11 @@ public class PortalInvoiceService {
     /** The module whose tables hold the documents (no dependency on it: the id only). */
     static final String INVOICING = "invoicing";
 
-    /** One page: the documents in index order and the token of the next page (null on the last one). */
-    public record Page(List<PortalDocument> items, String nextCursor) {
+    /**
+     * One page: the documents in index order, the token of the next page (null on the last one) and, on the first page
+     * only, the client's totals (null on the following pages).
+     */
+    public record Page(List<PortalDocument> items, String nextCursor, Summary summary) {
     }
 
     private final PortalIndexReader index;
@@ -66,23 +72,24 @@ public class PortalInvoiceService {
         if (size < 1 || size > MAX_LIMIT) {
             throw new IllegalArgumentException("portal page size out of range");
         }
+        Map<String, Boolean> shown = new HashMap<>();
+        Summary summary = after == null ? summary(phone, shown) : null;
         List<PortalIndexReader.Row> rows = index.page(phone, after, size + 1);
         boolean more = rows.size() > size;
         List<PortalIndexReader.Row> page = more ? rows.subList(0, size) : rows;
         if (page.isEmpty()) {
-            return new Page(List.of(), null);
+            return new Page(List.of(), null, summary);
         }
         String next = more ? page.get(page.size() - 1).cursor().encode() : null;
 
         Map<String, List<UUID>> idsBySchema = new LinkedHashMap<>();
-        Map<String, Boolean> shown = new HashMap<>();
         for (PortalIndexReader.Row row : page) {
             if (shown.computeIfAbsent(row.tenantSchema(), this::merchantShowsDocuments)) {
                 idsBySchema.computeIfAbsent(row.tenantSchema(), s -> new ArrayList<>()).add(row.invoiceId());
             }
         }
         if (idsBySchema.isEmpty()) {
-            return new Page(List.of(), next);
+            return new Page(List.of(), next, summary);
         }
         Map<String, PortalDocument> byKey = new HashMap<>();
         for (PortalDocument d : documents.find(idsBySchema, baseUrl)) {
@@ -95,7 +102,23 @@ public class PortalInvoiceService {
                 items.add(d);
             }
         }
-        return new Page(items, next);
+        return new Page(items, next, summary);
+    }
+
+    /**
+     * Reprise 11/11/2026 — Bref's header (number of invoices, amount): the visible merchants of the phone
+     * ({@link PortalIndexReader#merchantsOf}, one row each), then one aggregate statement over them joining the index
+     * to each merchant's invoices — exact, no id loaded ({@code shown} is filled for the page that follows: each
+     * merchant is provisioned once per request).
+     */
+    private Summary summary(String phone, Map<String, Boolean> shown) {
+        Map<String, UUID> visible = new LinkedHashMap<>();
+        index.merchantsOf(phone).forEach((schema, tenantId) -> {
+            if (shown.computeIfAbsent(schema, this::merchantShowsDocuments)) {
+                visible.put(schema, tenantId);
+            }
+        });
+        return visible.isEmpty() ? Summary.EMPTY : documents.summarize(visible, phone);
     }
 
     /** The merchant's invoice tables are up to date; a failure hides the merchant from this page. */

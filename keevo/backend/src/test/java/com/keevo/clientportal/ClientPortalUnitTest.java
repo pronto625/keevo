@@ -1,5 +1,6 @@
 package com.keevo.clientportal;
 
+import com.keevo.clientportal.auth.application.PortalAuthService;
 import com.keevo.clientportal.auth.application.PortalRateLimiter;
 import com.keevo.clientportal.auth.domain.model.PortalTokens;
 import com.keevo.clientportal.invoice.domain.model.PortalCursor;
@@ -59,7 +60,7 @@ class ClientPortalUnitTest {
     @DisplayName("rate limits: per session per minute, failed authentications per IP; a new minute resets")
     void rateLimits() {
         MutableClock clock = new MutableClock();
-        PortalRateLimiter limiter = new PortalRateLimiter(clock, 3, 2);
+        PortalRateLimiter limiter = new PortalRateLimiter(clock, 3, 2, 30, 10);
         assertThat(limiter.tryAcquire("s1")).isTrue();
         assertThat(limiter.tryAcquire("s1")).isTrue();
         assertThat(limiter.tryAcquire("s1")).isTrue();
@@ -76,6 +77,35 @@ class ClientPortalUnitTest {
         clock.now = clock.now.plusSeconds(61);
         assertThat(limiter.tryAcquire("s1")).isTrue();
         assertThat(limiter.tooManyFailures("1.2.3.4")).isFalse();
+    }
+
+    @Test
+    @DisplayName("reprise 11/11: Bref's login brake — per IP and per identifier, every attempt counted, 15-minute window")
+    void loginBrake() {
+        MutableClock clock = new MutableClock();
+        PortalRateLimiter limiter = new PortalRateLimiter(clock, 60, 30, 3, 2);
+        assertThat(limiter.tryLogin("1.1.1.1", "+237677000111")).isTrue();
+        assertThat(limiter.tryLogin("1.1.1.1", "+237677000111")).isTrue();
+        assertThat(limiter.tryLogin("2.2.2.2", "+237677000111")).as("3rd attempt on one identifier").isFalse();
+        assertThat(limiter.tryLogin("1.1.1.1", "client@example.com")).as("3rd attempt from one IP").isTrue();
+        assertThat(limiter.tryLogin("1.1.1.1", "autre@example.com")).as("4th attempt from one IP").isFalse();
+        assertThat(limiter.tryLogin(null, "neuf@example.com")).as("no IP: identifier only").isTrue();
+
+        clock.now = clock.now.plusSeconds(14 * 60);
+        assertThat(limiter.tryLogin("3.3.3.3", "+237677000111")).as("still inside the 15 minutes").isFalse();
+        clock.now = clock.now.plusSeconds(61);
+        assertThat(limiter.tryLogin("1.1.1.1", "+237677000111")).as("window reset").isTrue();
+    }
+
+    @Test
+    @DisplayName("reprise 11/11: sign-in identifier — e-mail lower-cased, phone in E.164 (+237 for 9 digits), else none")
+    void identifierKeys() {
+        assertThat(PortalAuthService.identifierKey(" Client@Example.COM ")).isEqualTo("client@example.com");
+        assertThat(PortalAuthService.identifierKey("677 00 01 11")).isEqualTo("+237677000111");
+        assertThat(PortalAuthService.identifierKey("+237677000111")).isEqualTo("+237677000111");
+        assertThat(PortalAuthService.identifierKey("pas un numéro")).isNull();
+        assertThat(PortalAuthService.identifierKey("a@b")).isNull();
+        assertThat(PortalAuthService.identifierKey(" ")).isNull();
     }
 
     static final class MutableClock extends Clock {

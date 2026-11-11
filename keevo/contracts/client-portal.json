@@ -1,5 +1,5 @@
 {
-  "description": "Story 21.7 — « Portail client » (module client-portal, free): an end client of the merchants (never a Keevo user) signs in with a code sent to his phone and lists the invoices every merchant issued to that phone. Public paths (no merchant JWT): the portal has its own session token 'kvc_…' (30 days), sent as 'Authorization: Bearer kvc_…' on GET /api/v1/portal/invoices only. A merchant JWT is refused there (401 PORTAL_SESSION_INVALID) and the portal token is refused everywhere else. The merchant's switch is the module client-portal in « Mes modules » (PUT /api/v1/tenants/me/modules/client-portal/activation): off = its invoices disappear from the portal at the next request; companies that existed before the portal start with it off, new companies with it on. Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. No identifier is ever returned: show the fields as they are. Change this file only with both sides.",
+  "description": "Story 21.7 — « Portail client » (module client-portal, free), aligned on Bref's « retrouver mes factures » on 11/11/2026: an end client of the merchants (never a Keevo user) creates his account once with a code sent to his phone, a name and a password (optional e-mail), then signs in by phone or e-mail + password without SMS (Bref's flow); signing in with a code alone stays possible (it is also the way back after a forgotten password: register again with a new code). He lists the invoices every merchant issued to that phone, each with what Bref's screens show (lines, payments, paid / remaining, merchant phone) and a link to the PDF. Public paths (no merchant JWT): the portal has its own session token 'kvc_…' (24 hours, like Bref's client token), sent as 'Authorization: Bearer kvc_…' on GET /api/v1/portal/invoices only. A merchant JWT is refused there (401 PORTAL_SESSION_INVALID) and the portal token is refused everywhere else. Like Bref, the portal is on for every company; the merchant can still switch it off: module client-portal in « Mes modules » (PUT /api/v1/tenants/me/modules/client-portal/activation) — off = its invoices disappear from the portal at the next request. Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. No identifier is ever returned: show the fields as they are. Change this file only with both sides; fields are only ever added.",
   "endpoints": [
     {
       "method": "POST",
@@ -14,14 +14,45 @@
         { "status": 422, "domainCode": "VALIDATION_ERROR", "reaction": "phone missing or too long: show the message" },
         { "status": 429, "domainCode": "OTP_TOO_MANY_REQUESTS", "reaction": "show the message, disable « Renvoyer le code » for a few minutes" }
       ],
-      "notes": "Same answer whether the phone has invoices or not. The code goes by SMS (and WhatsApp when configured), 6 digits, valid 5 minutes. Limits shared with the merchant sign-in codes of the same phone: 3 per 10 minutes, 5 per hour, 10 per hour per network address."
+      "notes": "Bref's POST /v1/clients/otp/request. Same answer whether the phone has invoices or not. The code goes by SMS (and WhatsApp when configured), 6 digits, valid 5 minutes; it is used by /register (Bref's flow) or /otp/verify. Limits shared with the merchant sign-in codes of the same phone: 3 per 10 minutes, 5 per hour, 10 per hour per network address."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/portal/auth/register",
+      "auth": "none",
+      "request": { "name": "Awa Ndiaye (1–120 characters)", "phone": "same value as the code request", "code": "123456", "password": "8–72 characters", "email": "optional, awa@example.com (sign-in identifier, lower-cased)" },
+      "response": { "status": 201, "data": { "accessToken": "kvc_ + 43 characters", "expiresAt": "ISO-8601 (24 h)" } },
+      "errors": [
+        { "status": 401, "domainCode": "OTP_INVALID", "reaction": "« Code incorrect ou expiré » — let the client retype or ask a new code" },
+        { "status": 429, "domainCode": "OTP_TOO_MANY_ATTEMPTS", "reaction": "the code is dead: ask a new one" },
+        { "status": 429, "domainCode": "OTP_TOO_MANY_REQUESTS", "reaction": "show the message, retry later" },
+        { "status": 429, "domainCode": "PORTAL_TOO_MANY_REQUESTS", "reaction": "too many attempts for this phone or address: show the message, retry in a few minutes" },
+        { "status": 409, "domainCode": "EMAIL_ALREADY_EXISTS", "reaction": "show the message on the e-mail field; the code is used: ask a new one and send another e-mail or none (told only after a valid code, so nobody can probe e-mails)" },
+        { "status": 422, "domainCode": "PHONE_COUNTRY_NOT_SUPPORTED", "reaction": "show the message, back to the phone screen" },
+        { "status": 422, "domainCode": "VALIDATION_FAILED", "reaction": "not a phone, malformed e-mail or password over 72 bytes: show the message" },
+        { "status": 422, "domainCode": "VALIDATION_ERROR", "reaction": "field missing, password under 8 characters: show the message" }
+      ],
+      "notes": "Bref's POST /v1/clients/register (name, phone, password, otpCode → here 'code', email?). Bref's minimum password length is 6: Keevo asks 8 (same rule as merchant accounts). Bref refused a phone that already had an account (422); here the code proves the phone, so registering again sets the new password (and the e-mail when sent) and signs out the other devices — the « mot de passe oublié » path. Bref's refreshToken is not returned (Bref had no refresh route for clients): sign in again after 24 h."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/portal/auth/login",
+      "auth": "none",
+      "request": { "identifier": "phone (+237677000111 or 677000111) or e-mail", "password": "…" },
+      "response": { "data": { "accessToken": "kvc_ + 43 characters", "expiresAt": "ISO-8601 (24 h)" } },
+      "errors": [
+        { "status": 401, "domainCode": "INVALID_CREDENTIALS", "reaction": "« Numéro, e-mail ou mot de passe incorrect. » — same answer for an unknown client, an account without password and a wrong password; offer « Recevoir un code » (register again)" },
+        { "status": 429, "domainCode": "PORTAL_TOO_MANY_REQUESTS", "reaction": "show the message, retry in a few minutes" },
+        { "status": 422, "domainCode": "VALIDATION_ERROR", "reaction": "field missing: show the message" }
+      ],
+      "notes": "Bref's POST /v1/clients/login: no code, no SMS. Failed sign-ins never block registering again with a new code (separate limit). Limits (Bref's 'login'): 30 attempts per address and 10 per phone / e-mail per 15 minutes, right or wrong."
     },
     {
       "method": "POST",
       "path": "/api/v1/portal/auth/otp/verify",
       "auth": "none",
       "request": { "phone": "same value as the request", "code": "123456" },
-      "response": { "data": { "accessToken": "kvc_ + 43 characters", "expiresAt": "ISO-8601 (30 days)" } },
+      "response": { "data": { "accessToken": "kvc_ + 43 characters", "expiresAt": "ISO-8601 (24 h)" } },
       "errors": [
         { "status": 401, "domainCode": "OTP_INVALID", "reaction": "« Code incorrect ou expiré » — let the client retype or ask a new code" },
         { "status": 429, "domainCode": "OTP_TOO_MANY_ATTEMPTS", "reaction": "the code is dead: ask a new one" },
@@ -31,7 +62,7 @@
         { "status": 422, "domainCode": "VALIDATION_ERROR", "reaction": "phone or code missing: show the message" },
         { "status": 500, "domainCode": "INTERNAL_ERROR", "reaction": "rare: the code may already be used — offer « Recevoir un nouveau code »" }
       ],
-      "notes": "Store accessToken in the secure store (never in plain storage, never logged). A merchant sign-in code is refused here and a portal code is refused on /api/v1/auth/otp/verify."
+      "notes": "Sign-in with the code alone (no account needed, no password). Store accessToken in the secure store (never in plain storage, never logged). A merchant sign-in code is refused here and a portal code is refused on /api/v1/auth/otp/verify."
     },
     {
       "method": "GET",
@@ -48,18 +79,29 @@
               "totalTtc": 23850,
               "paymentState": "UNPAID | PARTIAL | PAID | OVERDUE | CANCELLED (colour only, never shown)",
               "paymentStateLabel": "Non payée | Partiellement payée | Payée | En retard | Annulée",
-              "link": { "url": "https://keevo.ad2s.cm/api/v1/invoices/shared?token=…", "expiresAt": "ISO-8601 (24 h)" }
+              "link": { "url": "https://keevo.ad2s.cm/api/v1/invoices/shared?token=…", "expiresAt": "ISO-8601 (24 h)" },
+              "merchantPhone": "+237699000111 or null",
+              "amountPaid": 5000,
+              "amountRemaining": 18850,
+              "lines": [
+                { "reference": "RIZ-25 or null", "description": "Sac de riz 25 kg", "quantity": 2, "unitPrice": 11925, "totalTtc": 23850 }
+              ],
+              "payments": [
+                { "amount": 5000, "dueDate": null, "paid": true, "paidDate": "2026-11-10", "method": "Mobile Money or null" },
+                { "amount": 1000, "dueDate": "2026-11-20", "paid": false, "paidDate": null, "method": null }
+              ]
             }
           ],
-          "nextCursor": "opaque token or null (last page)"
+          "nextCursor": "opaque token or null (last page)",
+          "summary": { "invoiceCount": 7, "totalTtc": 154300 }
         }
       },
       "errors": [
-        { "status": 401, "domainCode": "PORTAL_SESSION_INVALID", "reaction": "delete the stored token, back to the phone screen" },
+        { "status": 401, "domainCode": "PORTAL_SESSION_INVALID", "reaction": "delete the stored token, back to the sign-in screen" },
         { "status": 429, "domainCode": "PORTAL_TOO_MANY_REQUESTS", "reaction": "show the message, retry after a minute" },
         { "status": 400, "domainCode": "VALIDATION_ERROR", "reaction": "bad cursor or limit: reload from the first page" }
       ],
-      "notes": "Newest first across merchants, limit 1–50 (20 by default). Keep paging while nextCursor is not null: a page may hold fewer items than the limit (an invoice no longer listable is skipped), even none, without being the last one. 'link' is null for a cancelled invoice. The link opens the invoice PDF without sign-in and stops after 24 h: never cache it, re-list to get a fresh one. Amounts are XAF integers. Online only (no offline copy)."
+      "notes": "Bref's GET /v1/clients/invoices, paged: newest first across merchants, limit 1–50 (20 by default). Keep paging while nextCursor is not null: a page may hold fewer items than the limit (an invoice no longer listable is skipped), even none, without being the last one. 'summary' (Bref's header: number of invoices, amount) is on the first page only (null / absent on the next ones): invoiceCount counts every listed invoice; totalTtc is the sum of their printed totals (totalTtc), leaving out the cancelled ones (credit notes and payments are not subtracted: they show per invoice in amountRemaining). Exact, never truncated. The detail screen reads the item itself (Bref read its cache): lines (unitPrice as typed — excluding VAT when the invoice's prices exclude it; totalTtc with VAT), payments (received: paid + paidDate; instalments: dueDate, paid false until settled), amountPaid, amountRemaining (0 when cancelled), merchantPhone. 'link' is null for a cancelled invoice. The link opens the invoice PDF without sign-in and stops after 24 h: never cache it, re-list to get a fresh one. Amounts are XAF integers. Online only (no offline copy). Not ported from Bref: GET /v1/invoices/public/count (it told anyone whether a phone has invoices) — go straight to sign-in."
     },
     {
       "method": "POST",

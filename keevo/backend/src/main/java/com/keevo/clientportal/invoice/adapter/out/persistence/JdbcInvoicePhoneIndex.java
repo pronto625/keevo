@@ -12,7 +12,9 @@ import org.springframework.stereotype.Component;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -49,8 +51,8 @@ public class JdbcInvoicePhoneIndex implements InvoicePhoneIndex, PortalIndexRead
             "INSERT INTO public.invoice_phone_index (tenant_id, invoice_id, phone_normalized, issued_at) "
             + "VALUES (?, ?, ?, ?) " + ON_CONFLICT;
 
-    static final String PAGE_SQL =
-            "SELECT t.schema_name, i.tenant_id, i.invoice_id, i.issued_at FROM public.invoice_phone_index i "
+    /** The phone's rows of the tenants that may show them (ACTIVE, portal usable): shared by the page and merchants. */
+    private static final String VISIBLE_SQL = "FROM public.invoice_phone_index i "
             + "JOIN public.tenants t ON t.id = i.tenant_id AND t.status = 'ACTIVE' "
             + "WHERE i.phone_normalized = ? "
             + "AND NOT EXISTS (SELECT 1 FROM public.tenant_module_activation a WHERE a.tenant_id = i.tenant_id "
@@ -59,6 +61,9 @@ public class JdbcInvoicePhoneIndex implements InvoicePhoneIndex, PortalIndexRead
             + "AND m.module_id = '" + ClientPortalModule.ID + "' AND (m.status IN ('DISABLED', 'AVAILABLE') "
             + "OR ((m.status = 'EXPIRED' OR (m.expires_at IS NOT NULL AND m.expires_at <= now())) "
             + "AND (m.grace_until IS NULL OR m.grace_until <= now())))) ";
+    static final String PAGE_SQL = "SELECT t.schema_name, i.tenant_id, i.invoice_id, i.issued_at " + VISIBLE_SQL;
+    /** Reprise 11/11/2026 — the visible merchants of a phone (≤ D rows; range of the phone index). */
+    static final String MERCHANTS_SQL = "SELECT DISTINCT t.schema_name, i.tenant_id " + VISIBLE_SQL;
     static final String AFTER_SQL = "AND (i.issued_at, i.tenant_id, i.invoice_id) < (?, ?, ?) ";
     static final String ORDER_SQL = "ORDER BY i.issued_at DESC, i.tenant_id DESC, i.invoice_id DESC LIMIT ?";
 
@@ -108,6 +113,15 @@ public class JdbcInvoicePhoneIndex implements InvoicePhoneIndex, PortalIndexRead
         }
         return jdbc.query(PAGE_SQL + AFTER_SQL + ORDER_SQL, (rs, n) -> row(rs), phone,
                 Timestamp.from(after.issuedAt()), after.tenantId(), after.invoiceId(), limit);
+    }
+
+    @Override
+    public Map<String, UUID> merchantsOf(String phone) {
+        Map<String, UUID> merchants = new LinkedHashMap<>();
+        jdbc.query(MERCHANTS_SQL, rs -> {
+            merchants.put(rs.getString("schema_name"), rs.getObject("tenant_id", UUID.class));
+        }, phone);
+        return merchants;
     }
 
     private static Row row(java.sql.ResultSet rs) throws java.sql.SQLException {

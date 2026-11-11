@@ -197,6 +197,12 @@ class ClientPortalFullContextTest extends FullContextIntegrationTest {
                 String.class, invoiceId);
     }
 
+    /** Whether the listed item is that merchant's invoice (two merchants can both number FAC-…-000001). */
+    private boolean is(JsonNode item, Owner o, String invoiceId) {
+        return item.path("reference").asText().equals(number(o, invoiceId))
+                && item.path("merchantName").asText().equals(merchant(o, invoiceId));
+    }
+
     private String merchant(Owner o, String invoiceId) {
         return jdbc.queryForObject("SELECT seller_legal_name FROM \"" + o.schema() + "\".invoices WHERE id = ?::uuid",
                 String.class, invoiceId);
@@ -359,7 +365,7 @@ class ClientPortalFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("activation rows: none = on (new company); an owner-disabled row (what V70 writes for existing ones) = off")
+    @DisplayName("activation rows: none = on (new company); an owner-disabled row = off")
     void activationRows() throws Exception {
         issuedInvoice(a, phone);
         String token = signIn(phone);
@@ -461,6 +467,248 @@ class ClientPortalFullContextTest extends FullContextIntegrationTest {
         byte[] forged = java.nio.ByteBuffer.allocate(40).putLong(Long.MIN_VALUE).array();
         assertError(list(token, "cursor=" + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(forged)),
                 400, "VALIDATION_ERROR");
+    }
+
+    // ── reprise 11/11/2026: Bref's account (code once + password), what Bref's screens show ─────────────────
+
+    private JsonNode register(String phoneNumber, String code, String password, String email, int status)
+            throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", "Awa Ndiaye");
+        body.put("phone", phoneNumber);
+        body.put("code", code);
+        body.put("password", password);
+        if (email != null) {
+            body.put("email", email);
+        }
+        return data(call(MockMvcRequestBuilders.post("/api/v1/portal/auth/register"), null, body), status);
+    }
+
+    private MvcResult login(String identifier, String password) throws Exception {
+        return call(MockMvcRequestBuilders.post("/api/v1/portal/auth/login"), null,
+                Map.of("identifier", identifier, "password", password));
+    }
+
+    private void codeFor(String phoneNumber, String code) throws Exception {
+        data(call(MockMvcRequestBuilders.post("/api/v1/portal/auth/otp/request"), null, Map.of("phone", phoneNumber)),
+                200);
+        setKnownCode("portal:" + phoneNumber, code);
+    }
+
+    @Test
+    @DisplayName("Bref's account: the code once + name + password (+ e-mail), then sign-in by phone or e-mail without SMS; 24-hour sessions")
+    void registerThenPasswordSignIn() throws Exception {
+        issuedInvoice(a, phone);
+        codeFor(phone, "314159");
+        java.time.Instant before = java.time.Instant.now();
+        JsonNode session = register(phone.substring(4), "314159", "motdepasse1", " Awa@Example.COM ", 201);
+        String first = session.path("accessToken").asText();
+        assertThat(first).startsWith("kvc_").hasSize(47);
+        java.time.Instant expiresAt = java.time.Instant.parse(session.path("expiresAt").asText());
+        assertThat(expiresAt).isBetween(before.plus(java.time.Duration.ofHours(23)),
+                before.plus(java.time.Duration.ofHours(25)));
+        Map<String, Object> row = jdbc.queryForMap("SELECT name, email, password_hash FROM public.portal_clients "
+                + "WHERE phone = ?", phone);
+        assertThat(row.get("name")).isEqualTo("Awa Ndiaye");
+        assertThat(row.get("email")).isEqualTo("awa@example.com");
+        assertThat((String) row.get("password_hash")).startsWith("$2").doesNotContain("motdepasse1");
+        assertThat(references(data(list(first, null), 200))).hasSize(1);
+
+        // sign-in by phone (typed locally) and by e-mail (any case): no code, no SMS
+        String byPhone = data(login(phone.substring(4), "motdepasse1"), 200).path("accessToken").asText();
+        assertThat(references(data(list(byPhone, null), 200))).hasSize(1);
+        data(login("AWA@example.com", "motdepasse1"), 200);
+        int challenges = jdbc.queryForObject("SELECT count(*) FROM public.otp_challenges WHERE identifier = ?",
+                Integer.class, "portal:" + phone);
+
+        // one answer for a wrong password, an unknown phone or e-mail, and a code-only client
+        assertError(login(phone, "mauvais-mdp"), 401, "INVALID_CREDENTIALS");
+        assertError(login(randomPhone(), "motdepasse1"), 401, "INVALID_CREDENTIALS");
+        assertError(login("personne@example.com", "motdepasse1"), 401, "INVALID_CREDENTIALS");
+        signIn(otherPhone);
+        assertError(login(otherPhone, "motdepasse1"), 401, "INVALID_CREDENTIALS");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.otp_challenges WHERE identifier = ?",
+                Integer.class, "portal:" + phone)).as("no code sent by a password sign-in").isEqualTo(challenges);
+
+        // another phone cannot take the e-mail; without a valid code nobody learns it is taken (no e-mail probing)
+        MvcResult probe = call(MockMvcRequestBuilders.post("/api/v1/portal/auth/register"), null,
+                Map.of("name", "Autre", "phone", otherPhone, "code", "999999", "password", "motdepasse2",
+                        "email", "awa@example.com"));
+        assertError(probe, 401, "OTP_INVALID");
+        codeFor(otherPhone, "271828");
+        MvcResult taken = call(MockMvcRequestBuilders.post("/api/v1/portal/auth/register"), null,
+                Map.of("name", "Autre", "phone", otherPhone, "code", "271828", "password", "motdepasse2",
+                        "email", "awa@example.com"));
+        assertError(taken, 409, "EMAIL_ALREADY_EXISTS");
+        codeFor(otherPhone, "271829");
+        register(otherPhone, "271829", "motdepasse2", null, 201);
+
+        // 10 failed password sign-ins on the phone never block its way back (a new code): separate brakes
+        String locked = randomPhone();
+        for (int i = 0; i < 11; i++) {
+            login(locked, "essai-" + i);
+        }
+        assertError(login(locked, "essai-x"), 429, "PORTAL_TOO_MANY_REQUESTS");
+        codeFor(locked, "141421");
+        register(locked, "141421", "motdepasse3", null, 201);
+
+        // a password BCrypt cannot hold (over 72 bytes in 40 accented characters): 422 to register, 401 to sign in
+        String accented = "é".repeat(40);
+        assertError(call(MockMvcRequestBuilders.post("/api/v1/portal/auth/register"), null,
+                Map.of("name", "X", "phone", phone, "code", "000111", "password", accented)), 422,
+                "VALIDATION_FAILED");
+        assertError(login(phone, accented), 401, "INVALID_CREDENTIALS");
+
+        // registering again with a new code sets a new password and ends the other sessions (Bref had no way back)
+        codeFor(phone, "161803");
+        String renewed = register(phone, "161803", "nouveau-mdp-9", null, 201).path("accessToken").asText();
+        assertError(list(first, null), 401, "PORTAL_SESSION_INVALID");
+        assertError(list(byPhone, null), 401, "PORTAL_SESSION_INVALID");
+        data(list(renewed, null), 200);
+        assertError(login(phone, "motdepasse1"), 401, "INVALID_CREDENTIALS");
+        data(login("awa@example.com", "nouveau-mdp-9"), 200); // e-mail kept when not sent again
+
+        // a password sign-in keeps the cap of 10 sessions per client (the oldest goes)
+        UUID client = jdbc.queryForObject("SELECT id FROM public.portal_clients WHERE phone = ?", UUID.class, phone);
+        jdbc.update("UPDATE public.portal_sessions SET created_at = now() - interval '2 hours' WHERE client_id = ?",
+                client);
+        for (int i = 0; i < 10; i++) {
+            jdbc.update("INSERT INTO public.portal_sessions (token_hash, client_id, created_at, expires_at) VALUES "
+                    + "(?, ?, now() - interval '1 hour', now() + interval '20 hours')",
+                    PortalTokens.hash(PortalTokens.generate()), client);
+        }
+        String newest = data(login(phone, "nouveau-mdp-9"), 200).path("accessToken").asText();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.portal_sessions WHERE client_id = ?",
+                Integer.class, client)).isEqualTo(10);
+        assertError(list(renewed, null), 401, "PORTAL_SESSION_INVALID");
+        data(list(newest, null), 200);
+
+        // Keevo's password rule (8–72) and a malformed e-mail: refused before any code is read
+        assertError(call(MockMvcRequestBuilders.post("/api/v1/portal/auth/register"), null,
+                Map.of("name", "X", "phone", phone, "code", "000111", "password", "court")), 422, "VALIDATION_ERROR");
+        assertError(call(MockMvcRequestBuilders.post("/api/v1/portal/auth/register"), null,
+                Map.of("name", "X", "phone", phone, "code", "000111", "password", "motdepasse1", "email",
+                        "pas-un-email")), 422, "VALIDATION_FAILED");
+    }
+
+    @Test
+    @DisplayName("Bref's login brake: 10 attempts per identifier in 15 minutes, the 11th → 429 before any password check")
+    void loginBrake() throws Exception {
+        String target = randomPhone();
+        for (int i = 0; i < 10; i++) {
+            assertError(login(target, "essai-" + i), 401, "INVALID_CREDENTIALS");
+        }
+        assertError(login(target.substring(4), "essai-x"), 429, "PORTAL_TOO_MANY_REQUESTS");
+    }
+
+    @Test
+    @DisplayName("what Bref's screens show: lines, payments and instalments, paid / remaining, merchant phone; totals on the first page only")
+    void detailsAndSummary() throws Exception {
+        String a1 = issuedInvoice(a, phone);
+        String b1 = issuedInvoice(b, phone);
+        jdbc.update("UPDATE \"" + a.schema() + "\".invoices SET seller_phone = '+237699000111', "
+                + "seller_legal_name = 'Boutique A' WHERE id = ?::uuid", a1);
+        jdbc.update("UPDATE \"" + b.schema() + "\".invoices SET seller_legal_name = 'Boutique B' WHERE id = ?::uuid",
+                b1);
+        long total = jdbc.queryForObject("SELECT total_ttc FROM \"" + a.schema() + "\".invoices WHERE id = ?::uuid",
+                Long.class, a1);
+        // a second printed line (position 2) inserted before the first in the table: lines come back in printed order
+        jdbc.update("INSERT INTO \"" + a.schema() + "\".invoice_items (id, invoice_id, position, description, quantity, "
+                + "unit_price, vat_treatment, vat_rate, total_ht, total_vat, total_ttc) SELECT gen_random_uuid(), "
+                + "invoice_id, 2, 'Huile 1 L', 10.000, 0, vat_treatment, vat_rate, 0, 0, 0 FROM \"" + a.schema()
+                + "\".invoice_items WHERE invoice_id = ?::uuid AND position = 1", a1);
+        data(rest(a, HttpMethod.POST, "/api/v1/invoices/" + a1 + "/payments", Map.of("amount", 5_000, "paidAt",
+                java.time.LocalDate.now(java.time.ZoneId.of("Africa/Douala")).toString(), "method", "Mobile Money")),
+                201);
+        data(rest(a, HttpMethod.POST, "/api/v1/invoices/" + a1 + "/payments", Map.of("amount", 1_000, "dueDate",
+                java.time.LocalDate.now(java.time.ZoneId.of("Africa/Douala")).plusDays(10).toString())), 201);
+        String token = signIn(phone);
+
+        JsonNode first = data(list(token, "limit=1"), 200);
+        assertThat(first.path("summary").path("invoiceCount").asLong()).isEqualTo(2);
+        long totalB = jdbc.queryForObject("SELECT total_ttc FROM \"" + b.schema() + "\".invoices WHERE id = ?::uuid",
+                Long.class, b1);
+        assertThat(first.path("summary").path("totalTtc").asLong()).isEqualTo(total + totalB);
+        JsonNode second = data(list(token, "limit=1&cursor=" + first.path("nextCursor").asText()), 200);
+        assertThat(second.path("summary").isMissingNode() || second.path("summary").isNull()).isTrue();
+
+        JsonNode item = null;
+        for (JsonNode page : List.of(first, second)) {
+            for (JsonNode i : page.path("items")) {
+                if (is(i, a, a1)) {
+                    item = i;
+                }
+            }
+        }
+        assertThat(item).isNotNull();
+        assertThat(item.path("merchantPhone").asText()).isEqualTo("+237699000111");
+        assertThat(item.path("paymentState").asText()).isEqualTo("PARTIAL");
+        assertThat(item.path("amountPaid").asLong()).isEqualTo(5_000);
+        assertThat(item.path("amountRemaining").asLong()).isEqualTo(total - 5_000);
+        assertThat(item.path("lines")).hasSize(2);
+        assertThat(item.path("lines").get(1).path("description").asText()).isEqualTo("Huile 1 L");
+        assertThat(item.path("lines").get(1).path("quantity").toString()).isEqualTo("10"); // never 1E+1
+        JsonNode line = item.path("lines").get(0);
+        assertThat(line.path("description").asText()).isEqualTo("Sac de riz 25 kg");
+        assertThat(line.path("quantity").decimalValue()).isEqualByComparingTo("2");
+        assertThat(line.path("unitPrice").asLong()).isEqualTo(11_925);
+        assertThat(line.path("totalTtc").asLong()).isEqualTo(total);
+        assertThat(item.path("payments")).hasSize(2);
+        JsonNode received = item.path("payments").get(0);
+        assertThat(received.path("paid").asBoolean()).isTrue();
+        assertThat(received.path("amount").asLong()).isEqualTo(5_000);
+        assertThat(received.path("method").asText()).isEqualTo("Mobile Money");
+        assertThat(received.path("paidDate").asText()).isNotBlank();
+        JsonNode instalment = item.path("payments").get(1);
+        assertThat(instalment.path("paid").asBoolean()).isFalse();
+        assertThat(instalment.path("dueDate").asText()).isNotBlank();
+        String text = list(token, null).getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(text).doesNotContain(a1, b1, a.schema(), b.schema(), "Jean Mbarga");
+
+        // a merchant who switches the portal off leaves the totals too
+        switchPortal(b, false);
+        JsonNode hidden = data(list(token, null), 200);
+        assertThat(hidden.path("summary").path("invoiceCount").asLong()).isEqualTo(1);
+        assertThat(hidden.path("summary").path("totalTtc").asLong()).isEqualTo(total);
+        switchPortal(b, true);
+
+        // a cancelled invoice stays listed (count) but leaves the amount; nothing remains to pay on it
+        data(rest(b, HttpMethod.POST, "/api/v1/invoices/" + b1 + "/cancel", Map.of("reason", "Erreur de saisie")),
+                200);
+        JsonNode after = data(list(token, null), 200);
+        assertThat(after.path("summary").path("invoiceCount").asLong()).isEqualTo(2);
+        assertThat(after.path("summary").path("totalTtc").asLong()).isEqualTo(total);
+        for (JsonNode i : after.path("items")) {
+            if (is(i, b, b1)) {
+                assertThat(i.path("amountRemaining").asLong()).isZero();
+                assertThat(i.path("lines")).hasSize(1);
+            }
+        }
+
+        // a credit note lowers what the client owes (total less credit notes less paid)
+        jdbc.update("INSERT INTO \"" + a.schema() + "\".credit_notes (id, number, invoice_id, reason, total_ht, "
+                + "total_vat, total_ttc, issued_at) VALUES (gen_random_uuid(), 'AV-T217R-1', ?::uuid, 'Geste', 0, 0, "
+                + "3000, now())", a1);
+        for (JsonNode i : data(list(token, null), 200).path("items")) {
+            if (is(i, a, a1)) {
+                assertThat(i.path("amountRemaining").asLong()).isEqualTo(total - 3_000 - 5_000);
+            }
+        }
+
+        // an invoice paid before 20.4 (no payment row) shows one payment of its amount due
+        jdbc.update("UPDATE \"" + a.schema() + "\".invoices SET status = 'PAID', paid_at = now(), payment_state = NULL, "
+                + "payment_method = 'Espèces' WHERE id = ?::uuid", a1);
+        jdbc.update("DELETE FROM \"" + a.schema() + "\".invoice_payments WHERE invoice_id = ?::uuid", a1);
+        for (JsonNode i : data(list(token, null), 200).path("items")) {
+            if (is(i, a, a1)) {
+                assertThat(i.path("paymentState").asText()).isEqualTo("PAID");
+                assertThat(i.path("amountPaid").asLong()).isEqualTo(total - 3_000);
+                assertThat(i.path("amountRemaining").asLong()).isZero();
+                assertThat(i.path("payments")).hasSize(1);
+                assertThat(i.path("payments").get(0).path("amount").asLong()).isEqualTo(total - 3_000);
+                assertThat(i.path("payments").get(0).path("method").asText()).isEqualTo("Espèces");
+            }
+        }
     }
 
     // ── back-fill ────────────────────────────────────────────────────────────────────────────────────────

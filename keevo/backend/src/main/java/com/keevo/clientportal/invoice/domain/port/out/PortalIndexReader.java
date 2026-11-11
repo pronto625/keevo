@@ -4,6 +4,7 @@ import com.keevo.clientportal.invoice.domain.model.PortalCursor;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -18,6 +19,13 @@ public interface PortalIndexReader {
      * @param limit maximum rows
      */
     List<Row> page(String phone, PortalCursor after, int limit);
+
+    /**
+     * Reprise 11/11/2026 — the merchants (tenant schema → tenant id) that have indexed invoices for the phone and may
+     * show them (same tenant filter as {@link #page}): the scope of the client's totals (Bref's header). One index
+     * range scan, one row per merchant.
+     */
+    Map<String, UUID> merchantsOf(String phone);
 
     /** One indexed invoice with its tenant schema (to read it) and its keyset position. */
     record Row(String tenantSchema, UUID tenantId, UUID invoiceId, Instant issuedAt) {

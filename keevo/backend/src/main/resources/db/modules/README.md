@@ -52,6 +52,12 @@ is orthogonal to the entitlement.
 Shipped so far (each pinned in `ModuleIdsAtGoLivePinTest`, which fails when a new module ships without its line): `expenses`
 (V56), `finance` (V58), `ai-assistant` (V65), `mcp-access` (V66), `whatsapp-cloud` (V68), `client-portal` (V70).
 
+**Exception — `client-portal` (V84, user decision of 11/11/2026):** the client portal behaves like Bref's « retrouver
+mes factures », where every merchant's invoices are visible to the client: V84 removes V70's own rows (owner-disabled,
+no actor, tenant created before V70 ran), so the portal is on for every company; an owner who switched it off since
+keeps his choice, and the owner can still switch it off in *Mes modules*. A future exception follows the same shape
+(delete only the rows the go-live migration wrote, never an owner's choice).
+
 ## Paid modules with tables (lazy provisioning)
 
 A paid module's tables (e.g. `ai-assistant`, `whatsapp-cloud`) are created only for the tenants that use it, on their

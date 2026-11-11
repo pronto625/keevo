@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 404 — gated: 171, exempt: 233.
+Handlers: 406 — gated: 171, exempt: 235.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -302,9 +302,11 @@ Handlers: 404 — gated: 171, exempt: 233.
 | GET | `/api/v1/payments/{id}` | — | — | — | core: abonnement | PaymentsController#status |
 | POST | `/api/v1/payments/{id}/authorize` | — | — | — | core: abonnement | PaymentsController#authorize |
 | POST | `/api/v1/payments/{id}/cancel` | — | — | — | core: abonnement | PaymentsController#cancel |
+| POST | `/api/v1/portal/auth/login` | — | — | — | portail client : clients finaux hors compte commerçant, session propre | PortalAuthController#login |
 | POST | `/api/v1/portal/auth/logout` | — | — | — | portail client : clients finaux hors compte commerçant, session propre | PortalAuthController#logout |
 | POST | `/api/v1/portal/auth/otp/request` | — | — | — | portail client : clients finaux hors compte commerçant, session propre | PortalAuthController#requestCode |
 | POST | `/api/v1/portal/auth/otp/verify` | — | — | — | portail client : clients finaux hors compte commerçant, session propre | PortalAuthController#verifyCode |
+| POST | `/api/v1/portal/auth/register` | — | — | — | portail client : clients finaux hors compte commerçant, session propre | PortalAuthController#register |
 | GET | `/api/v1/portal/invoices` | — | — | — | portail client : clients finaux hors compte commerçant, chaque commerçant filtré par son module | PortalInvoiceController#list |
 | GET | `/api/v1/products` | `catalog` | READ | — |  | ProductController#listProducts |
 | POST | `/api/v1/products` | `catalog` | WRITE | — |  | ProductController#createProduct |

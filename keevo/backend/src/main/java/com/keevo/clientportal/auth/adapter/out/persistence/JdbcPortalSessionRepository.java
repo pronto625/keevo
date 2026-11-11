@@ -4,6 +4,8 @@ import com.keevo.clientportal.auth.domain.port.out.PortalSessionRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -31,11 +33,58 @@ public class JdbcPortalSessionRepository implements PortalSessionRepository {
             + "WHERE s.token_hash = ? AND s.expires_at > ?";
     static final String DELETE_SQL = "DELETE FROM public.portal_sessions WHERE token_hash = ?";
     static final String PURGE_SQL = "DELETE FROM public.portal_sessions WHERE expires_at < ?";
+    static final String BY_PHONE_SQL = "SELECT id, phone, password_hash FROM public.portal_clients WHERE phone = ?";
+    static final String BY_EMAIL_SQL = "SELECT id, phone, password_hash FROM public.portal_clients WHERE email = ?";
+    static final String EMAIL_TAKEN_SQL =
+            "SELECT EXISTS (SELECT 1 FROM public.portal_clients WHERE email = ? AND phone <> ?)";
+    static final String REGISTER_SQL =
+            "INSERT INTO public.portal_clients (id, phone, name, email, password_hash, created_at, last_login_at) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, "
+            + "email = COALESCE(EXCLUDED.email, portal_clients.email), password_hash = EXCLUDED.password_hash, "
+            + "last_login_at = EXCLUDED.last_login_at RETURNING id";
+    static final String TOUCH_SQL = "UPDATE public.portal_clients SET last_login_at = ? WHERE id = ?";
+    static final String DELETE_CLIENT_SESSIONS_SQL = "DELETE FROM public.portal_sessions WHERE client_id = ?";
 
     private final JdbcTemplate jdbc;
 
     public JdbcPortalSessionRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+    }
+
+    @Override
+    public Optional<Credentials> findByPhone(String phone) {
+        return jdbc.query(BY_PHONE_SQL, (rs, i) -> credentials(rs), phone).stream().findFirst();
+    }
+
+    @Override
+    public Optional<Credentials> findByEmail(String email) {
+        return jdbc.query(BY_EMAIL_SQL, (rs, i) -> credentials(rs), email).stream().findFirst();
+    }
+
+    @Override
+    public boolean emailTakenByOther(String email, String phone) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(EMAIL_TAKEN_SQL, Boolean.class, email, phone));
+    }
+
+    @Override
+    public UUID register(String phone, String name, String email, String passwordHash, Instant now) {
+        Timestamp at = Timestamp.from(now);
+        return jdbc.queryForObject(REGISTER_SQL, UUID.class, UUID.randomUUID(), phone, name, email, passwordHash, at,
+                at);
+    }
+
+    @Override
+    public void touchLogin(UUID clientId, Instant now) {
+        jdbc.update(TOUCH_SQL, Timestamp.from(now), clientId);
+    }
+
+    @Override
+    public int deleteSessionsOf(UUID clientId) {
+        return jdbc.update(DELETE_CLIENT_SESSIONS_SQL, clientId);
+    }
+
+    private static Credentials credentials(ResultSet rs) throws SQLException {
+        return new Credentials(rs.getObject("id", UUID.class), rs.getString("phone"), rs.getString("password_hash"));
     }
 
     @Override
