@@ -63,15 +63,22 @@ public class DocumentAccess {
         return scope;
     }
 
-    /** The document {@code invoiceId} (invoice or quote) is in the actor's scope, else 404 {@code INVOICE_NOT_FOUND}. */
-    public void requireInvoice(UUID invoiceId) {
+    /**
+     * The document {@code invoiceId} (invoice or quote) is in the actor's scope, else 404 {@code INVOICE_NOT_FOUND}.
+     *
+     * @return the document's owner and kind when it was read for the check (a restricted actor), else {@code null}
+     *         (owner: nothing read) — Story 19.5b reuses it instead of reading the row again
+     */
+    public DocumentScope.Owner requireInvoice(UUID invoiceId) {
         DocumentScope scope = current();
         if (scope.all() || invoiceId == null) {
-            return;
+            return null;
         }
-        if (!invoices.ownerOf(invoiceId).map(scope::sees).orElse(false)) {
+        DocumentScope.Owner owner = invoices.ownerOf(invoiceId).filter(scope::sees).orElse(null);
+        if (owner == null) {
             throw InvoiceQueryUseCase.notFound();
         }
+        return owner;
     }
 
     /**

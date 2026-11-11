@@ -33,7 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * EMPLOYEE → 403 ({@code CurrentActor.requireOwner}), OWNER → 200.
  */
 @WebMvcTest(EmployeeController.class)
-@Import({SecurityConfig.class, ClockConfig.class, EmployeeTeamScope.class})
+@Import({SecurityConfig.class, ClockConfig.class, EmployeeTeamScope.class,
+        com.keevo.shared.infrastructure.security.ActorPermissions.class})
 @DisplayName("EmployeeController activity — security slice (v1s-14-6)")
 class EmployeeActivityControllerSecurityTest {
 

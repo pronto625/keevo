@@ -84,8 +84,12 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
 
     private void setActive(UUID userId, UUID tenantId, boolean active, boolean deactivatedByManager) {
         springRepository.findByUserIdAndTenantId(userId, tenantId).ifPresent(m -> {
+            // Story 19.5b — re-deactivating an already inactive membership may only LOWER the flag (an owner's
+            // repeat makes it owner-level), never raise it: a delegate cannot turn the owner's deactivation into his
+            boolean flag = !active && (m.isActive() ? deactivatedByManager
+                    : m.isDeactivatedByManager() && deactivatedByManager);
             m.setActive(active);
-            m.setDeactivatedByManager(deactivatedByManager);
+            m.setDeactivatedByManager(flag);
             springRepository.save(m);
         });
     }
@@ -117,8 +121,10 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private UserTenantMembershipJpaEntity toEntity(UserTenantMembership m) {
-        return new UserTenantMembershipJpaEntity(
+        UserTenantMembershipJpaEntity entity = new UserTenantMembershipJpaEntity(
                 m.getId(), m.getUserId(), m.getTenantId(), m.getRole(), m.isActive());
+        entity.setDeactivatedByManager(m.isDeactivatedByManager()); // 19.5b — never lost on a save
+        return entity;
     }
 
     private UserTenantMembership toDomain(UserTenantMembershipJpaEntity e) {

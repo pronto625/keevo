@@ -124,12 +124,23 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("client-portal").free()).isTrue();
         assertThat(byId.get("client-portal").ownerCanToggle()).isTrue();
         // 16.13 reprise (2026-11-10): catalog — purchase prices for OWNER and MANAGER only
-        assertThat(byId.get("catalog").permissions()).containsExactly("PURCHASE_PRICE_VIEW");
-        assertThat(byId.get("catalog").rolePermissions().get("MANAGER")).containsExactly("PURCHASE_PRICE_VIEW");
+        // 19.5b (2026-11-11): + PRODUCT_MERGE for OWNER and MANAGER
+        assertThat(byId.get("catalog").permissions()).containsExactly("PURCHASE_PRICE_VIEW", "PRODUCT_MERGE");
+        assertThat(byId.get("catalog").rolePermissions().get("MANAGER"))
+                .containsExactly("PURCHASE_PRICE_VIEW", "PRODUCT_MERGE");
         assertThat(byId.get("catalog").rolePermissions().get("EMPLOYEE")).isEmpty();
         assertThat(byId.get("catalog").rolePermissions().get("VIEWER")).isEmpty();
-        assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing") && !m.id().equals("expenses")
-                        && !m.id().equals("finance") && !m.id().equals("catalog"))
+        // 19.5b — fine rights of the store manager (and the viewer's store sales)
+        assertThat(byId.get("pos").permissions()).containsExactly("STORE_SALES_VIEW");
+        assertThat(byId.get("pos").rolePermissions().get("MANAGER")).containsExactly("STORE_SALES_VIEW");
+        assertThat(byId.get("pos").rolePermissions().get("VIEWER")).containsExactly("STORE_SALES_VIEW");
+        assertThat(byId.get("pos").rolePermissions().get("EMPLOYEE")).isEmpty();
+        assertThat(byId.get("counting").permissions()).containsExactly("INVENTORY_SESSION_MANAGE");
+        assertThat(byId.get("counting").rolePermissions().get("MANAGER")).containsExactly("INVENTORY_SESSION_MANAGE");
+        assertThat(byId.get("core").permissions()).containsExactly("TEAM_MANAGE");
+        assertThat(byId.get("core").rolePermissions().get("MANAGER")).containsExactly("TEAM_MANAGE");
+        assertThat(byId.values()).filteredOn(m -> !List.of("invoicing", "expenses", "finance", "catalog", "pos",
+                        "counting", "core").contains(m.id()))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm") && !m.id().equals("catalog"))
                 .allSatisfy(m -> assertThat(m.provides()).isEmpty());

@@ -92,10 +92,18 @@ public class EmployeeTeamScope {
      * @throws DomainException FORBIDDEN otherwise (missing membership included); EMPLOYEE_NOT_FOUND for an unknown id
      */
     public void requireManageable(UUID employeeId) {
+        requireManageableUser(employeeId);
+    }
+
+    /**
+     * As {@link #requireManageable}; returns the member's user id when it was resolved for the check (a delegate),
+     * {@code null} for the owner (nothing read) — callers needing it then read it themselves.
+     */
+    public UUID requireManageableUser(UUID employeeId) {
         if (CurrentActor.isOwner()) {
-            return;
+            return null;
         }
-        requireManagedMembership(employeeId);
+        return requireManagedMembership(employeeId).getUserId();
     }
 
     /**

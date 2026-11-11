@@ -21,7 +21,12 @@ public record DocumentScope(boolean none, UUID creator, UUID store) {
     public static final DocumentScope NONE = new DocumentScope(true, null, null);
 
     /** The creator and the store of one document (a credit note: those of its invoice). */
-    public record Owner(UUID createdBy, UUID storeId) {
+    public record Owner(UUID createdBy, UUID storeId, boolean quote) {
+
+        /** Story 19.5b — the kind is read in the same primary-key query ({@code quote}: a QUOTE). */
+        public Owner(UUID createdBy, UUID storeId) {
+            this(createdBy, storeId, false);
+        }
     }
 
     /** A condition of a query and its arguments ({@code TRUE} for {@link #ALL}). */

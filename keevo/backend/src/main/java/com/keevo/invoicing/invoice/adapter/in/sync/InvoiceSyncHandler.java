@@ -202,9 +202,9 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
         } else if (CONVERT_QUOTE.equals(type)) {
             access.requireInvoice(parseUuid(p.get("quoteId")));
         } else {
-            access.requireInvoice(invoiceId(p));
+            var known = access.requireInvoice(invoiceId(p));
             if (CANCEL.equals(type)) {
-                cancelPermission.require(invoiceId(p)); // 19.5b — a quote: INVOICE_CREATE; an invoice: INVOICE_MANAGE
+                cancelPermission.require(invoiceId(p), known); // 19.5b — quote: INVOICE_CREATE; invoice: INVOICE_MANAGE
             }
         }
         Invoice result = switch (type) {

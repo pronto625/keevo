@@ -481,9 +481,10 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
 
     @Override
     public Optional<DocumentScope.Owner> ownerOf(UUID invoiceId) {
-        return jdbc.query("SELECT created_by, store_id FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                        + " WHERE id = ?", (rs, n) -> new DocumentScope.Owner(rs.getObject("created_by", UUID.class),
-                        rs.getObject("store_id", UUID.class)), invoiceId).stream().findFirst();
+        return jdbc.query("SELECT created_by, store_id, kind = 'QUOTE' AS quote FROM "
+                        + InvoicingTables.qualified(InvoicingTables.INVOICES) + " WHERE id = ?",
+                (rs, n) -> new DocumentScope.Owner(rs.getObject("created_by", UUID.class),
+                        rs.getObject("store_id", UUID.class), rs.getBoolean("quote")), invoiceId).stream().findFirst();
     }
 
     @Override

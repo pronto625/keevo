@@ -591,12 +591,19 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("permission first: EMPLOYEE cancel with the module DISABLED → FORBIDDEN; deactivation keeps the data")
+    @DisplayName("permission first: EMPLOYEE owner-only action (seller settings) with the module DISABLED → FORBIDDEN; "
+            + "deactivation keeps the data")
     void permissionBeforeEntitlementAndDeactivation() throws Exception {
         String id = createDraft(ownerToken);
         moduleRow("invoicing", "DISABLED");
-        assertError(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/cancel",
-                Map.of("reason", "Erreur")), 403, "FORBIDDEN");
+        // Story 19.5b — cancelling now opens to INVOICE_CREATE for a quote, so the owner-only probe is the settings
+        Map<String, Object> settings = new java.util.LinkedHashMap<>();
+        settings.put("legalName", "Boutique Awa SARL");
+        settings.put("address", "Rue Joss, Akwa, Douala");
+        settings.put("vatRegistered", false);
+        settings.put("vatRate", 19.25);
+        settings.put("pricesIncludeVat", true);
+        assertError(call(employeeToken, HttpMethod.PUT, "/api/v1/invoicing/settings", settings), 403, "FORBIDDEN");
         assertError(owner(HttpMethod.GET, "/api/v1/invoices", null), 403, "MODULE_NOT_ENTITLED");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM \"" + schema + "\".invoices", Integer.class)).isEqualTo(1);
     }

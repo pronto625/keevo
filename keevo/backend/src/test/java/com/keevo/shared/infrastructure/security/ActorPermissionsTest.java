@@ -10,7 +10,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Story 19.5b — the fine rights of each fixed role, read from the SHIPPED manifests through the single evaluator: the
@@ -44,13 +43,27 @@ class ActorPermissionsTest {
     }
 
     @Test
-    void unauthenticatedHoldsNothing_andRequireFailsClosed() {
+    void unauthenticatedHoldsNothing() {
         ActorPermissions permissions = ShippedActorPermissions.get();
 
         assertThat(permissions.currentActorHolds("TEAM_MANAGE")).isFalse();
         assertThat(permissions.holds(null, "TEAM_MANAGE")).isFalse();
-        assertThatThrownBy(() -> permissions.requireCurrentActorHolds("TEAM_MANAGE"))
-                .hasMessageContaining("TEAM_MANAGE");
+    }
+
+    @Test
+    @DisplayName("every permission constant asked through ActorPermissions is declared by a shipped manifest")
+    void callSiteConstantsAreDeclared() {
+        ActorPermissions permissions = ShippedActorPermissions.get();
+        for (String permission : java.util.List.of(
+                com.keevo.commerce.sale.adapter.in.SalesReadScope.PERMISSION,
+                com.keevo.identity.employee.adapter.in.rest.EmployeeTeamScope.PERMISSION,
+                com.keevo.inventory.counting.adapter.in.rest.InventorySessionController.MANAGE_PERMISSION,
+                com.keevo.catalog.product.adapter.in.web.ProductController.MERGE_PERMISSION,
+                com.keevo.invoicing.invoice.application.usecase.DocumentCancelPermission.QUOTE_PERMISSION,
+                PurchasePriceVisibility.PERMISSION)) {
+            assertThat(permissions.isDeclared(permission)).as(permission).isTrue();
+        }
+        assertThat(permissions.isDeclared("TEAM_MANAG")).isFalse();
     }
 
     @Test

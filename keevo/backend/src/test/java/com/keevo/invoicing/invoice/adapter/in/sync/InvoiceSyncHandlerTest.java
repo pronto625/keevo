@@ -264,6 +264,7 @@ class InvoiceSyncHandlerTest {
                 .reason()).isEqualTo("VALIDATION_ERROR");
 
         as("EMPLOYEE", EMPLOYEE);
+        when(invoiceRepository.isQuote(invoiceId)).thenReturn(java.util.Optional.of(false)); // an invoice
         SyncOperationResult r = handler.handle(op("CANCEL_INVOICE", Map.of("invoiceId", invoiceId.toString(),
                 "reason", "Erreur")), ACTOR, TENANT);
         assertThat(r.reason()).isEqualTo("FORBIDDEN");

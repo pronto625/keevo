@@ -1,14 +1,11 @@
 package com.keevo.shared.infrastructure.security;
 
 import com.keevo.identity.api.Role;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.application.ModulePermissions;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
-import java.util.Set;
 
 /**
  * Story 19.5b — THE single evaluator of « does the authenticated actor hold module permission P » for the rules that
@@ -24,7 +21,10 @@ import java.util.Set;
 @Component
 public class ActorPermissions {
 
+    private static final String OWNER_AUTHORITY = "ROLE_" + Role.OWNER.name();
+
     private final ObjectProvider<ModulePermissions> permissions;
+    private volatile ModulePermissions resolved;
 
     public ActorPermissions(ObjectProvider<ModulePermissions> permissions) {
         this.permissions = permissions;
@@ -40,20 +40,27 @@ public class ActorPermissions {
         if (authentication == null || permission == null) {
             return false;
         }
-        Set<String> roles = ModulePermissions.rolesOf(authentication);
-        if (roles.contains(Role.OWNER.name())) {
-            return true;
+        boolean owner = authentication.getAuthorities().stream()
+                .anyMatch(a -> OWNER_AUTHORITY.equals(a.getAuthority()));
+        if (owner) {
+            return true; // no role set built: the OWNER holds every declared permission
         }
-        ModulePermissions mapping = permissions == null ? null : permissions.getIfAvailable();
-        return mapping != null && mapping.permissionsOf(roles).contains(permission);
+        ModulePermissions mapping = mapping();
+        return mapping != null && mapping.permissionsOf(ModulePermissions.rolesOf(authentication)).contains(permission);
     }
 
-    /**
-     * @throws DomainException FORBIDDEN (the shared French message) when the current actor lacks {@code permission}
-     */
-    public void requireCurrentActorHolds(String permission) {
-        if (!currentActorHolds(permission)) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "Missing permission " + permission);
+    /** Whether {@code permission} is declared by an installed manifest (pins the call sites' constants). */
+    public boolean isDeclared(String permission) {
+        ModulePermissions mapping = mapping();
+        return mapping != null && mapping.isDeclared(permission);
+    }
+
+    private ModulePermissions mapping() {
+        ModulePermissions m = resolved;
+        if (m == null && permissions != null) {
+            m = permissions.getIfAvailable();
+            resolved = m;
         }
+        return m;
     }
 }

@@ -10,14 +10,15 @@ import java.util.UUID;
 
 /**
  * Story 19.5b — which sales history an actor reads (REST {@code GET /api/v1/sales/history} and the AI tool
- * {@code list_sales}), resolved once by the inbound adapter and handed to the use case as plain values:
+ * {@code sales_history}), resolved once by the inbound adapter and handed to the use case as plain values:
  * <ul>
- *   <li>OWNER (or an actor that is not a store member): the requested store, the optional employee filter;</li>
+ *   <li>OWNER: the requested store, the optional employee filter;</li>
  *   <li>store member holding {@value #PERMISSION} (MANAGER, VIEWER by default): every sale of HIS store, the optional
  *       employee filter honoured;</li>
  *   <li>any other store member (EMPLOYEE): his own sales of his store;</li>
  *   <li>a store member asking another store → 403 « Vous ne pouvez consulter que les ventes de votre boutique. »; a
- *       store member without store → 403 « Votre compte n'est rattaché à aucune boutique… ».</li>
+ *       store member without store → 403 « Votre compte n'est rattaché à aucune boutique… »; any other actor → 403
+ *       (fails closed).</li>
  * </ul>
  * <b>Hook for story 19-14:</b> the permission becomes the role checkbox « Voir les ventes de toute la boutique »; this
  * class does not change. Cost O(1): set lookups, no query.
@@ -53,8 +54,11 @@ public class SalesReadScope {
      * @throws DomainException FORBIDDEN (French message) for another store, or a store member without store
      */
     public Resolved resolve(UUID requestedStore, UUID requestedEmployee) {
-        if (CurrentActor.isOwner() || !CurrentActor.isStoreMember()) {
+        if (CurrentActor.isOwner()) {
             return new Resolved(requestedStore, requestedEmployee, false);
+        }
+        if (!CurrentActor.isStoreMember()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Sales history: neither owner nor store member");
         }
         UUID own = CurrentActor.assignedStoreIdOrNull();
         if (own == null) {

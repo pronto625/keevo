@@ -248,7 +248,7 @@ Handlers: 381 — gated: 171, exempt: 210.
 | DELETE | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#delete |
 | GET | `/api/v1/invoices/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#get |
 | PUT | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#update |
-| POST | `/api/v1/invoices/{id}/cancel` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoiceController#cancel |
+| POST | `/api/v1/invoices/{id}/cancel` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#cancel |
 | POST | `/api/v1/invoices/{id}/convert` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#convert |
 | POST | `/api/v1/invoices/{id}/credit-notes` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | CreditNoteController#create |
 | POST | `/api/v1/invoices/{id}/issue` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#issue |
@@ -299,7 +299,7 @@ Handlers: 381 — gated: 171, exempt: 210.
 | GET | `/api/v1/products/{id}` | `catalog` | READ | — |  | ProductController#getProduct |
 | PATCH | `/api/v1/products/{id}` | `catalog` | WRITE | — |  | ProductController#updateProduct |
 | PATCH | `/api/v1/products/{id}/archive` | `catalog` | WRITE | — |  | ProductController#archiveProduct |
-| POST | `/api/v1/products/{id}/merge` | `catalog` | WRITE | — |  | ProductController#mergeProduct |
+| POST | `/api/v1/products/{id}/merge` | `catalog` | WRITE | `PRODUCT_MERGE` |  | ProductController#mergeProduct |
 | DELETE | `/api/v1/products/{id}/photo` | `catalog` | WRITE | — |  | ProductPhotoController#delete |
 | GET | `/api/v1/products/{id}/photo` | `catalog` | READ | — |  | ProductPhotoController#read |
 | POST | `/api/v1/products/{id}/photo` | `catalog` | WRITE | — |  | ProductPhotoController#upload |

@@ -168,7 +168,7 @@ public class ProductController {
     /**
      * Story 20.1 — merges the path product AWAY into {@code targetId} (Bref convention): the path product is archived
      * and redirected, the answer is the target. Story 19.5b — irreversible, so reserved to the holders of
-     * {@value #MERGE_PERMISSION} (OWNER, MANAGER by default; 19-14: « Fusionner des produits »): EMPLOYEE → 403.
+     * {@value #MERGE_PERMISSION} (OWNER, MANAGER by default; 19-14: « Fusionner des produits »): EMPLOYEE → 403 (a VIEWER is refused by the write guard first).
      * POST /api/v1/products/{id}/merge
      */
     @RequiresPermission(MERGE_PERMISSION)

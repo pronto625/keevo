@@ -76,8 +76,7 @@ public class DeviceSessionController {
     @GetMapping("/api/v1/employees/{employeeId}/sessions")
     public ResponseEntity<ApiResponseWrapper<List<DeviceSessionDto>>> employeeSessions(
             @PathVariable UUID employeeId) {
-        teamScope.requireManageable(employeeId); // 19.5b — owner, or the delegate of the member's store
-        UUID userId = sessions.employeeUserId(employeeId);
+        UUID userId = userOf(employeeId);
         UUID current = userId.equals(CurrentActor.actorId()) ? CurrentActor.sessionIdOrNull() : null;
         return ResponseEntity.ok(ApiResponseWrapper.ok(toDtos(sessions.list(userId, tenant(), current))));
     }
@@ -86,8 +85,7 @@ public class DeviceSessionController {
     @DeleteMapping("/api/v1/employees/{employeeId}/sessions/{sessionId}")
     public ResponseEntity<ApiResponseWrapper<Void>> closeEmployeeSession(@PathVariable UUID employeeId,
                                                                         @PathVariable UUID sessionId) {
-        teamScope.requireManageable(employeeId); // 19.5b — owner, or the delegate of the member's store
-        UUID userId = sessions.employeeUserId(employeeId);
+        UUID userId = userOf(employeeId);
         sessions.close(CurrentActor.actorId(), userId, tenant(), sessionId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
     }
@@ -96,11 +94,16 @@ public class DeviceSessionController {
     @DeleteMapping("/api/v1/employees/{employeeId}/sessions")
     public ResponseEntity<ApiResponseWrapper<Map<String, Integer>>> closeEmployeeSessions(
             @PathVariable UUID employeeId) {
-        teamScope.requireManageable(employeeId); // 19.5b — owner, or the delegate of the member's store
-        UUID userId = sessions.employeeUserId(employeeId);
+        UUID userId = userOf(employeeId);
         UUID keep = userId.equals(CurrentActor.actorId()) ? CurrentActor.sessionIdOrNull() : null;
         int closed = sessions.closeOthers(CurrentActor.actorId(), userId, tenant(), keep, false);
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("closed", closed)));
+    }
+
+    /** Story 19.5b — the team rule (owner, or the delegate of the member's store), then the member's user id. */
+    private UUID userOf(UUID employeeId) {
+        UUID checked = teamScope.requireManageableUser(employeeId);
+        return checked != null ? checked : sessions.employeeUserId(employeeId);
     }
 
     private static String tenant() {

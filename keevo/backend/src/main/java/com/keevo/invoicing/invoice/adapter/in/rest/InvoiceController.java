@@ -285,8 +285,8 @@ public class InvoiceController {
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> cancel(
             @PathVariable UUID id, @Valid @RequestBody CancelInvoiceRequestDto request) {
-        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
-        cancelPermission.require(id); // Story 19.5b — quote: INVOICE_CREATE; invoice: INVOICE_MANAGE
+        var known = access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
+        cancelPermission.require(id, known); // Story 19.5b — quote: INVOICE_CREATE; invoice: INVOICE_MANAGE
         Invoice cancelled = lifecycle.cancel(id, request.reason(), CurrentActor.actorId(),
                 TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(cancelled)));

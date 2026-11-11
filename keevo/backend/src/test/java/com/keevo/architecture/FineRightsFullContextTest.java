@@ -232,6 +232,18 @@ class FineRightsFullContextTest extends FullContextIntegrationTest {
         expect(call(seller2.token(), HttpMethod.GET, "/api/v1/employees/" + seller1.employee() + "/sessions", null),
                 403);
         expect(call(owner, HttpMethod.GET, "/api/v1/employees/" + managerA.employee() + "/sessions", null), 200);
+
+        // the closing endpoints follow the same team rule
+        Member managerA2 = member("MANAGER", storeA);
+        UUID anySession = UUID.randomUUID();
+        for (String path : List.of("/sessions", "/sessions/" + anySession)) {
+            expect(call(managerA.token(), HttpMethod.DELETE, "/api/v1/employees/" + sellerB.employee() + path, null),
+                    403);
+            expect(call(seller2.token(), HttpMethod.DELETE, "/api/v1/employees/" + seller1.employee() + path, null),
+                    403);
+            expect(call(managerA.token(), HttpMethod.DELETE, "/api/v1/employees/" + managerA2.employee() + path,
+                    null), 403);
+        }
     }
 
     @Test
@@ -244,6 +256,12 @@ class FineRightsFullContextTest extends FullContextIntegrationTest {
                 "/api/v1/employees/" + seller1.employee() + "/reactivate", null);
         expect(refused, 403);
         assertThat(body(refused)).contains("Ce membre a été désactivé par le propriétaire : lui seul peut le réactiver.");
+        // deactivating him again does not turn the owner's deactivation into the manager's
+        expect(call(managerA.token(), HttpMethod.PATCH, "/api/v1/employees/" + seller1.employee() + "/deactivate",
+                null), 200);
+        assertThat(deactivatedByManager(seller1)).isFalse();
+        expect(call(managerA.token(), HttpMethod.PATCH, "/api/v1/employees/" + seller1.employee() + "/reactivate",
+                null), 403);
 
         expect(call(managerA.token(), HttpMethod.PATCH, "/api/v1/employees/" + seller2.employee() + "/deactivate",
                 null), 200);
