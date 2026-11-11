@@ -1849,6 +1849,9 @@ So that **l'historique commercial et les impayés sont intacts**.
 **Éléments routés depuis 24.2 (2026-11-11) :**
 - [ ] [Deferred-from: 24.2, 2026-11-11] Réglages de facturation de l'entreprise importée depuis sa première boutique (§10.2 étape 2 : « la première boutique alimente `invoicing_settings` ») [keevo/backend/src/main/java/com/keevo/migration/application/step/StoresStep.java] — 24.2 importe les boutiques sans toucher au module invoicing ; l'étape d'import des documents (pipeline `ImportStep`, ordre 90) doit écrire `invoicing_settings` (nom, adresse, téléphone, NIU, RCCM de la boutique la plus ancienne) par le port d'import du module invoicing. Réglé par le test d'import qui vérifie l'en-tête d'une facture importée.
 
+**Éléments routés depuis 24.7 (2026-11-11) :**
+- [ ] [Deferred-from: 24.7, 2026-11-11] Auteur des documents et dépenses d'un compte Bref rattaché [keevo/backend/src/main/java/com/keevo/migration/application/ImportRun.java `accountId`] — depuis 24.7, un owner ou un membre Bref déjà inscrit dans Keevo garde son compte Keevo (id différent de l'id Bref, record `linked_users`) et un membre seulement invité n'a pas encore de fiche employé ; toute référence Bref à un utilisateur (`invoice.userId`, auteur de dépense, de paiement) doit passer par `ImportRun.accountId(brefUserId)` (id Bref si créé, compte Keevo si rattaché, `null` si le membre est seulement invité ou n'est pas importé : l'auteur reste alors l'owner ou est laissé vide selon la règle de 24.4) et jamais réutiliser l'id Bref tel quel. Réglé par le test d'import d'une facture d'un owner rattaché.
+
 ### Story 24.5 : Import de la monétisation (ADR-07)
 
 As a **outil de migration**,
@@ -1900,11 +1903,11 @@ So that **je n'ai pas deux identités (R2)**.
 **Then** l'import de l'owner est bloqué avant écriture avec un cas listé dans le rapport à résoudre manuellement
 
 **Éléments reportés routés vers 24.7 (revue 19.3, 2026-11-04) :**
-- [ ] [Deferred-from: revue 19.3, 2026-11-04] importer `users.social_id`/`provider` de Bref dans `public.user_authenticators` (V48, `(provider, subject)` unique) pour chaque owner importé — sans ces lignes, un owner Bref Google/Apple n'est pas retrouvé par son identité sociale et retombe sur la liaison par email ou un nouveau compte [`JdbcUserAuthenticatorRepository`].
+- [x] [Deferred-from: revue 19.3, 2026-11-04] (fait par 24.7 le 11/11/2026 : `SocialAccountsStep`, ordre 55, `LegacyIdentityImportPort.importAuthenticators`) importer `users.social_id`/`provider` de Bref dans `public.user_authenticators` (V48, `(provider, subject)` unique) pour chaque owner importé — sans ces lignes, un owner Bref Google/Apple n'est pas retrouvé par son identité sociale et retombe sur la liaison par email ou un nouveau compte [`JdbcUserAuthenticatorRepository`].
 
 **Éléments routés depuis 24.2 (2026-11-11) :**
-- [ ] [Deferred-from: 24.2, 2026-11-11] Rapprochement des comptes existants [keevo/backend/src/main/java/com/keevo/migration/domain/service/BrefSnapshotValidator.java, identity.api `LegacyIdentityImportPort.findConflicts`] — 24.2 bloque tout owner ou membre dont le téléphone, l'e-mail ou l'identifiant appartient déjà à un compte Keevo (cas `ACCOUNT_EXISTS`, aucune écriture) et tout identifiant interne déjà pris (`ACCOUNT_ID_TAKEN`). 24.7 remplace ce blocage par le bridge (owner : compte Keevo conservé + membership OWNER sur l'entreprise importée, enregistrement `migration_records` vers le compte existant ; membre : invitation ou liaison selon la règle 19.6b) et garde le blocage pour les cas listés (identifiant égal à un téléphone, etc.). Réglé par un test d'import avec un téléphone déjà inscrit dans Keevo.
-- [ ] [Deferred-from: revue 24.2, 2026-11-11] Owner Bref connecté par Google/Apple [keevo/backend/src/main/java/com/keevo/migration/application/step/IdentityStep.java, note `OWNER_SOCIAL_SIGN_IN`] — 24.2 importe l'owner sans authentificateur social et le signale dans le lot ; l'import de `socialId`/`provider` (item ci-dessus) lève la note.
+- [x] [Deferred-from: 24.2, 2026-11-11] (fait par 24.7 le 11/11/2026 : `IdentityBridge` — lien owner/membre prouvé, invitation 19.6b pour un téléphone de membre non confirmé, cas listés) Rapprochement des comptes existants [keevo/backend/src/main/java/com/keevo/migration/domain/service/BrefSnapshotValidator.java, identity.api `LegacyIdentityImportPort.findConflicts`] — 24.2 bloque tout owner ou membre dont le téléphone, l'e-mail ou l'identifiant appartient déjà à un compte Keevo (cas `ACCOUNT_EXISTS`, aucune écriture) et tout identifiant interne déjà pris (`ACCOUNT_ID_TAKEN`). 24.7 remplace ce blocage par le bridge (owner : compte Keevo conservé + membership OWNER sur l'entreprise importée, enregistrement `migration_records` vers le compte existant ; membre : invitation ou liaison selon la règle 19.6b) et garde le blocage pour les cas listés (identifiant égal à un téléphone, etc.). Réglé par un test d'import avec un téléphone déjà inscrit dans Keevo.
+- [x] [Deferred-from: revue 24.2, 2026-11-11] (fait par 24.7 le 11/11/2026 : la note ne reste que pour un fournisseur inconnu ou sans identifiant) Owner Bref connecté par Google/Apple [keevo/backend/src/main/java/com/keevo/migration/application/step/IdentityStep.java, note `OWNER_SOCIAL_SIGN_IN`] — 24.2 importe l'owner sans authentificateur social et le signale dans le lot ; l'import de `socialId`/`provider` (item ci-dessus) lève la note.
 
 ### Story 24.8 : Réconciliation automatique et bloquante
 
@@ -1955,6 +1958,9 @@ So that **la bascule se fait en une coupure, est observable et réversible jusqu
 
 **Éléments routés depuis 24.3 (2026-11-11) :**
 - [ ] [Deferred-from: revue 24.3, 2026-11-11] Lecture et écriture bornées pour la bascule de tous les owners [keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JdbcBrefSource.java `rows`, catalog/crm `Jdbc*ImportWriter`] — 24.3 lit les produits et clients d'un owner sans taille de lot (résultat entier en mémoire, table `product` parcourue par owner via `lower(btrim("shopId"))`) et les insère en une instruction par table : suffisant pour un owner ; la commande de bascule doit fixer une taille de lot à la lecture (`setFetchSize`, connexion déjà hors auto-commit), découper les insertions (2 000 à 5 000 lignes, représentants avant produits fusionnés) et, si le volume l'exige, lire les produits de tous les owners en une passe. Réglé par la mesure de la répétition générale (24.12).
+
+**Éléments routés depuis 24.7 (2026-11-11) :**
+- [ ] [Deferred-from: 24.7, 2026-11-11] Retour arrière d'un owner rattaché à un compte Keevo existant [keevo/backend/src/main/java/com/keevo/migration/domain/model/MigrationRecord.java `LINKED_USERS`, `AUTHENTICATORS`] — un compte rattaché ou invité est tracé sous la cible `linked_users` (jamais `users`) : le retour arrière ne doit supprimer que les cibles `users` ; il doit en revanche supprimer les lignes `user_authenticators` tracées (identité Google/Apple ajoutée à un compte qui existait avant l'import, non supprimée avec l'entreprise) ; les invitations et adhésions partent avec l'entreprise (CASCADE). Activation : les invitations 19.6b créées par l'import (membres trouvés par un téléphone non confirmé, `PENDING`, invisibles tant que l'entreprise est suspendue) doivent être redatées en une instruction ensembliste (`invited_at = now()`, `expires_at = now() + 7 j`, `last_sent_at` remis pour que le premier message 19.6b parte) — sinon une activation plus de 7 jours après l'import les trouve expirées. Réglé par le test de retour arrière d'un owner rattaché.
 
 ### Story 24.10 : Redirection des anciens liens publics Bref vers Keevo
 
@@ -2021,6 +2027,9 @@ So that **la coupure se déroule comme répétée et les owners savent quoi fair
 **Given** les messages WhatsApp/SMS/email (annonce, rappel, « c'est fait », incident)
 **When** ils sont préparés
 **Then** ils existent en fr et en et partent par les campagnes plateforme (21.6)
+
+**Éléments routés depuis 24.7 (2026-11-11) :**
+- [ ] [Deferred-from: 24.7, 2026-11-11] Continuité des comptes Apple [keevo/backend/src/main/java/com/keevo/migration/application/step/SocialAccountsStep.java] — 24.7 reprend l'identifiant Apple (`sub`) des owners Bref ; il n'est valable que si l'app RN est publiée sous la même équipe Apple (Team ID) que Bref Point et que Keevo vérifie les jetons avec le bon `client_id` : le runbook vérifie l'équipe et le bundle avant J0 (action utilisateur) et prévoit, sinon, la connexion par code puis la reliaison Apple depuis le profil (19.3b). Les cas bloquants d'identité (24.7 : identité non prouvée, deux comptes Keevo, identifiant pris) sont à résoudre à la main avant la décision « go » : le runbook en donne la marche à suivre.
 
 ### Story 24.14 : Vagues pilotes *(retirée le 11/11/2026)*
 
