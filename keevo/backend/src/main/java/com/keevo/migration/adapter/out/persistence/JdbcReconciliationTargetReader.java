@@ -260,8 +260,9 @@ class JdbcReconciliationTargetReader implements ReconciliationTargetReader {
         return value == null ? "" : value;
     }
 
-    /** {@code "schema".table} — the schema is validated by {@link TenantSchema#validate} in {@link #read}. */
+    /** {@code "schema".table} — the schema is re-validated here (also validated in {@link #read}). */
     private static String q(String schema, String table) {
-        return "\"" + schema + "\"." + table;
+        String valid = TenantSchema.validate(schema);
+        return "\"" + valid + "\"." + table;
     }
 }
