@@ -1,5 +1,6 @@
 package com.keevo.crm.contact.adapter.out.export;
 
+import com.keevo.crm.contact.adapter.out.persistence.ClientPurchaseAggregate;
 import com.keevo.shared.application.port.export.ExportColumn;
 import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import com.keevo.shared.application.port.export.ExportColumnType;
@@ -81,8 +82,8 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String selectList(ExportFilter filter) {
-        return "c.name, c.phone, c.email, c.notes, agg.sales_count, agg.total_spent,"
-                + " agg.last_purchase, c.archived, c.created_at,"
+        return "c.name, c.phone, c.email, c.notes, agg." + ClientPurchaseAggregate.COUNT + ", agg."
+                + ClientPurchaseAggregate.TOTAL + ", agg." + ClientPurchaseAggregate.LAST + ", c.archived, c.created_at,"
                 + " c.client_type, c.niu, c.rccm, c.address, c.contact_name, c.website, c.birth_date, st.name,"
                 + " c.marketing_consent_at, c.marketing_opt_out_at";
     }
@@ -92,9 +93,8 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
         // Story 20.14 — the single revenue source (sales + invoices − credit notes, a bridged sale counted once),
         // resolved once per page inside the page's transaction; client_id = c.id is pushed into every branch
         // (idx_sales_client_id, idx_invoices_client, then idx_credit_notes_invoice)
-        return "clients c LEFT JOIN LATERAL (SELECT COALESCE(SUM(r.doc_count), 0) AS sales_count,"
-                + " COALESCE(SUM(r.total_amount), 0) AS total_spent,"
-                + " MAX(COALESCE(r.recorded_at, r.created_at)) FILTER (WHERE r.doc_count > 0) AS last_purchase"
+        // Story 20.2 reprise — the aggregate shared with the client profile and the marketing audience
+        return "clients c LEFT JOIN LATERAL (SELECT " + ClientPurchaseAggregate.select("r")
                 + " FROM " + revenue.current().documents() + " r WHERE r.client_id = c.id) agg ON TRUE"
                 + " LEFT JOIN stores st ON st.id = c.store_id";
     }

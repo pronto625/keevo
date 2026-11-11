@@ -102,13 +102,15 @@ class ClientControllerTest {
     @DisplayName("GET /api/v1/clients/{id} returns client profile")
     void should_get_client_profile() throws Exception {
         UUID id = sampleClient.id();
-        var result = new GetClientProfileUseCase.ClientProfileResult(sampleClient, 3L, 45000L);
+        var result = new GetClientProfileUseCase.ClientProfileResult(sampleClient, 3L, 45000L,
+                Instant.parse("2026-11-10T09:00:00Z"));
         when(getClientProfileUseCase.execute(eq(id), any(), any())).thenReturn(result);
 
         mockMvc.perform(get("/api/v1/clients/" + id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("Alice"))
-                .andExpect(jsonPath("$.data.purchaseCount").value(3));
+                .andExpect(jsonPath("$.data.purchaseCount").value(3))
+                .andExpect(jsonPath("$.data.lastPurchaseAt").exists());
     }
 
     @Test

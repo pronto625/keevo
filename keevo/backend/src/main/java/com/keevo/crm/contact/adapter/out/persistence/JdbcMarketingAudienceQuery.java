@@ -18,8 +18,9 @@ import java.util.stream.Collectors;
 /**
  * Story 21.11 — {@link MarketingAudienceQuery} on the clients table and the single revenue source
  * ({@link RevenueQueryPort}): the purchases of a number are those of every client record with that number (any store,
- * archived included) — count {@code SUM(doc_count)} (sales + invoices), net total {@code SUM(total_amount)} (credit
- * notes deducted), last purchase {@code MAX(COALESCE(recorded_at, created_at))} over the purchases (the clients-export
+ * archived included) — {@link ClientPurchaseAggregate} (shared with the client profile and the export, Story 20.2
+ * reprise): count {@code SUM(doc_count)} (sales + invoices), net total {@code SUM(total_amount)} (credit notes
+ * deducted), last purchase {@code MAX(COALESCE(recorded_at, created_at))} over the purchases (the clients-export
  * definitions, Story 20.14). With target stores, only their documents count ({@link RevenueQueryPort#storeScoped()}).
  *
  * <p>One statement: the eligible clients de-duplicated by phone (partial index {@code idx_clients_marketing_audience},
@@ -77,10 +78,11 @@ public class JdbcMarketingAudienceQuery implements MarketingAudienceQuery {
             args.add(storeArray);
         }
         sql.append(" ORDER BY phone_normalized, updated_at DESC, id) a ")
-                .append("LEFT JOIN LATERAL (SELECT COALESCE(SUM(d.n), 0) AS n, COALESCE(SUM(d.spent), 0) AS spent, ")
-                .append("MAX(d.last_at) AS last_at FROM clients pc CROSS JOIN LATERAL (SELECT SUM(r.doc_count) AS n, ")
-                .append("SUM(r.total_amount) AS spent, MAX(COALESCE(r.recorded_at, r.created_at)) ")
-                .append("FILTER (WHERE r.doc_count > 0) AS last_at FROM ").append(documents)
+                .append("LEFT JOIN LATERAL (SELECT COALESCE(SUM(d.").append(ClientPurchaseAggregate.COUNT)
+                .append("), 0) AS n, COALESCE(SUM(d.").append(ClientPurchaseAggregate.TOTAL).append("), 0) AS spent, ")
+                .append("MAX(d.").append(ClientPurchaseAggregate.LAST).append(") AS last_at FROM clients pc ")
+                .append("CROSS JOIN LATERAL (SELECT ").append(ClientPurchaseAggregate.select("r")).append(" FROM ")
+                .append(documents)
                 .append(" r WHERE r.client_id = pc.id");
         if (stores) {
             sql.append(" AND r.store_id = ANY(CAST(? AS uuid[]))");

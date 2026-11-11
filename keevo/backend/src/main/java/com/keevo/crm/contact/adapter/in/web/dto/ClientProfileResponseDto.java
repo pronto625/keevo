@@ -6,8 +6,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Response DTO for the client profile endpoint, including sales statistics (Story 2.5). Story 20.2 — additive fields
- * of {@link ClientResponseDto}.
+ * Response DTO for the client profile endpoint, including the purchase figures (Story 2.5). Story 20.2 — additive
+ * fields of {@link ClientResponseDto}. Reprise 11/11/2026 — {@code purchaseCount} / {@code totalSpentXaf} read the
+ * single revenue source (sales + invoices − credit notes); {@code lastPurchaseAt} (nullable) added.
  */
 public record ClientProfileResponseDto(
         UUID id,
@@ -32,7 +33,8 @@ public record ClientProfileResponseDto(
         Instant marketingConsentAt,
         Instant marketingOptOutAt,
         UUID marketingConsentBy,
-        boolean marketingEligible
+        boolean marketingEligible,
+        Instant lastPurchaseAt
 ) {
     public static ClientProfileResponseDto fromResult(GetClientProfileUseCase.ClientProfileResult result) {
         var c = ClientResponseDto.fromDomain(result.client());
@@ -42,7 +44,8 @@ public record ClientProfileResponseDto(
                 result.purchaseCount(), result.totalSpentXaf(),
                 c.clientType(), c.niu(), c.rccm(), c.address(), c.contactName(), c.website(), c.birthDate(),
                 c.storeId(), c.phoneNormalized(), c.marketingConsentAt(), c.marketingOptOutAt(),
-                c.marketingConsentBy(), c.marketingEligible()
+                c.marketingConsentBy(), c.marketingEligible(),
+                result.lastPurchaseAt()
         );
     }
 }

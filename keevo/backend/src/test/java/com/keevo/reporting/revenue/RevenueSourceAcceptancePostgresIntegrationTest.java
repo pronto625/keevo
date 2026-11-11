@@ -541,18 +541,139 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
         java.lang.reflect.Method from = provider.getClass().getDeclaredMethod("fromClause");
         from.setAccessible(true);
         String fromClause = (String) from.invoke(provider);
-        Map<String, Object> row = jdbc.queryForMap("SELECT agg.sales_count, agg.total_spent, agg.last_purchase FROM "
-                + fromClause + " WHERE c.id = ?", client);
-        assertThat(((Number) row.get("sales_count")).longValue()).isEqualTo(2);
+        Map<String, Object> row = jdbc.queryForMap("SELECT agg.purchase_count, agg.total_spent, agg.last_purchase_at "
+                + "FROM " + fromClause + " WHERE c.id = ?", client);
+        assertThat(((Number) row.get("purchase_count")).longValue()).isEqualTo(2);
         assertThat(((Number) row.get("total_spent")).longValue()).isEqualTo(3_000 + 10_000 - 4_000);
         Timestamp issuedAt = jdbc.queryForObject("SELECT issued_at FROM invoices WHERE id = ?", Timestamp.class, inv);
-        assertThat(((Timestamp) row.get("last_purchase")).toInstant()).isEqualTo(issuedAt.toInstant());
+        assertThat(((Timestamp) row.get("last_purchase_at")).toInstant()).isEqualTo(issuedAt.toInstant());
+
+        // Story 20.2 reprise — the client profile reads the same figures (owner: every store)
+        var profile = new com.keevo.crm.contact.adapter.out.persistence.JdbcClientPurchaseStats(jdbc,
+                FixedRevenueSource.ALL).statsOf(client, null);
+        assertThat(profile.purchaseCount()).isEqualTo(2);
+        assertThat(profile.totalSpent()).isEqualTo(3_000 + 10_000 - 4_000);
+        assertThat(profile.lastPurchaseAt()).isEqualTo(issuedAt.toInstant());
 
         String plan = explain("SELECT agg.total_spent FROM " + fromClause + " WHERE c.id = '" + client + "'::uuid");
         // client_id = c.id is pushed into the three branches; invoices and their credit notes are reached through
         // idx_invoices_client (on empty tables the planner may read sales through any of their indexes)
         assertThat(plan.split("client_id = c\\.id", -1)).hasSize(4);
         assertThat(plan).contains("Index Scan using idx_invoices_client").contains("idx_credit_notes_invoice");
+    }
+
+    @Test
+    @DisplayName("20.2 reprise: client profile — a client with invoices only (DOCUMENT flow, Bref import) counts its "
+            + "issued / paid invoices; drafts, cancelled invoices, quotes, cancelled / pending sales do not")
+    void clientProfileInvoicesOnly() throws Exception {
+        UUID client = UUID.randomUUID();
+        Timestamp t = Timestamp.from(Instant.parse("2025-01-01T00:00:00Z"));
+        jdbc.update("INSERT INTO clients (id, archived, created_at, updated_at, name, phone) "
+                + "VALUES (?, false, ?, ?, 'Client Bref', '+237699001133')", client, t, t);
+        UUID issued = invoice("ISSUED", TODAY.minusDays(3), 20_000, null, line(null, 1, 20_000));
+        UUID paid = invoice("PAID", TODAY.minusDays(1), 5_000, null, line(null, 1, 5_000));
+        UUID draft = invoice("DRAFT", TODAY, 70_000, null, line(null, 1, 70_000));
+        UUID cancelled = invoice("CANCELLED", TODAY, 80_000, null, line(null, 1, 80_000));
+        jdbc.update("UPDATE invoices SET client_id = ? WHERE id IN (?, ?, ?, ?)", client, issued, paid, draft,
+                cancelled);
+        quote("DRAFT", 90_000, null);
+        jdbc.update("UPDATE invoices SET client_id = ? WHERE kind = 'QUOTE'", client);
+        UUID bridged = sale(TODAY_10H.minusSeconds(7 * 86_400), 4_000, "COMPLETED"); // + its automatic invoice: once
+        UUID auto = invoice("PAID", TODAY.minusDays(7), 4_000, bridged, line(product, 1, 4_000));
+        jdbc.update("UPDATE sales SET client_id = ? WHERE id = ?", client, bridged);
+        jdbc.update("UPDATE invoices SET client_id = ? WHERE id = ?", client, auto);
+        UUID pending = sale(TODAY_10H, 60_000, "PENDING_VALIDATION");
+        UUID voided = sale(TODAY_10H, 40_000, "CANCELLED");
+        jdbc.update("UPDATE sales SET client_id = ? WHERE id IN (?, ?)", client, pending, voided);
+
+        var stats = new com.keevo.crm.contact.adapter.out.persistence.JdbcClientPurchaseStats(jdbc,
+                FixedRevenueSource.ALL).statsOf(client, null);
+
+        assertThat(stats.purchaseCount()).isEqualTo(3);
+        assertThat(stats.totalSpent()).isEqualTo(25_000 + 4_000);
+        Timestamp paidAt = jdbc.queryForObject("SELECT issued_at FROM invoices WHERE id = ?", Timestamp.class, paid);
+        assertThat(stats.lastPurchaseAt()).isEqualTo(paidAt.toInstant());
+
+        UUID nobody = UUID.randomUUID();
+        var none = new com.keevo.crm.contact.adapter.out.persistence.JdbcClientPurchaseStats(jdbc,
+                FixedRevenueSource.ALL).statsOf(nobody, null);
+        assertThat(none.purchaseCount()).isZero();
+        assertThat(none.totalSpent()).isZero();
+        assertThat(none.lastPurchaseAt()).isNull();
+
+        String plan = explain("SELECT " + com.keevo.crm.contact.adapter.out.persistence.ClientPurchaseAggregate
+                .select("r") + " FROM " + FixedRevenueSource.ALL.current().documents()
+                + " r WHERE r.client_id = '" + client + "'::uuid");
+        assertThat(plan).contains("idx_invoices_client").contains("idx_credit_notes_invoice");
+    }
+
+    @Test
+    @DisplayName("20.2 reprise: client profile of a store member — only the documents of its visible stores")
+    void clientProfileStoreScope() {
+        UUID storeB = UUID.randomUUID();
+        Timestamp t = Timestamp.from(Instant.parse("2025-01-01T00:00:00Z"));
+        jdbc.update("INSERT INTO stores (id, created_at, updated_at, is_active, name, type) "
+                + "VALUES (?, ?, ?, true, 'Boutique B', 'STORE')", storeB, t, t);
+        UUID client = UUID.randomUUID();
+        jdbc.update("INSERT INTO clients (id, archived, created_at, updated_at, name, phone) "
+                + "VALUES (?, false, ?, ?, 'Client commun', '+237699001144')", client, t, t);
+        UUID inA = sale(TODAY_10H, 3_000, "COMPLETED");
+        jdbc.update("UPDATE sales SET client_id = ? WHERE id = ?", client, inA);
+        UUID inB = invoiceIn(storeB, "ISSUED", TODAY, 10_000, line(null, 1, 10_000));
+        UUID noStore = invoice("PAID", TODAY, 7_000, null, line(null, 1, 7_000));
+        jdbc.update("UPDATE invoices SET client_id = ? WHERE id IN (?, ?)", client, inB, noStore);
+        creditNote(inB, 1_000, TODAY_10H.plusSeconds(7_200), 1, 1, 1_000); // deducted with B's invoice only
+        var stats = new com.keevo.crm.contact.adapter.out.persistence.JdbcClientPurchaseStats(jdbc,
+                FixedRevenueSource.ALL);
+        Instant invoiceAt = jdbc.queryForObject("SELECT issued_at FROM invoices WHERE id = ?", Timestamp.class, inB)
+                .toInstant();
+
+        var memberA = stats.statsOf(client, java.util.Set.of(store));
+        assertThat(memberA.purchaseCount()).isEqualTo(1);
+        assertThat(memberA.totalSpent()).isEqualTo(3_000);
+        assertThat(memberA.lastPurchaseAt()).isEqualTo(TODAY_10H);
+
+        var sharing = stats.statsOf(client, java.util.Set.of(store, storeB));
+        assertThat(sharing.purchaseCount()).isEqualTo(2);
+        assertThat(sharing.totalSpent()).isEqualTo(3_000 + 10_000 - 1_000);
+        assertThat(sharing.lastPurchaseAt()).isEqualTo(java.util.Collections.max(List.of(TODAY_10H, invoiceAt)));
+
+        var owner = stats.statsOf(client, null);
+        assertThat(owner.purchaseCount()).isEqualTo(3); // the document without store counts for the owner only
+        assertThat(owner.totalSpent()).isEqualTo(3_000 + 10_000 - 1_000 + 7_000);
+    }
+
+    @Test
+    @DisplayName("20.2 reprise: marketing audience (21.11) on the shared aggregate — an invoices-only client is a buyer, "
+            + "the same count and net total as its profile")
+    void audienceOnTheSharedAggregate() {
+        Timestamp t = Timestamp.from(Instant.parse("2025-01-01T00:00:00Z"));
+        UUID buyer = UUID.randomUUID();
+        UUID idle = UUID.randomUUID();
+        for (Object[] c : List.of(new Object[]{buyer, "Acheteur", "+237699001155"},
+                new Object[]{idle, "Sans achat", "+237699001166"})) {
+            jdbc.update("INSERT INTO clients (id, archived, created_at, updated_at, name, phone, phone_normalized, "
+                    + "store_id, marketing_consent_at) VALUES (?, false, ?, ?, ?, ?, ?, ?, ?)",
+                    c[0], t, t, c[1], c[2], c[2], store, t);
+        }
+        UUID inv = invoice("ISSUED", TODAY, 10_000, null, line(null, 1, 10_000));
+        UUID paid = invoice("PAID", TODAY, 2_000, null, line(null, 1, 2_000));
+        jdbc.update("UPDATE invoices SET client_id = ? WHERE id IN (?, ?)", buyer, inv, paid);
+        creditNote(inv, 4_000, TODAY_10H.plusSeconds(3_600), 1, 1, 4_000);
+        var audience = new com.keevo.crm.contact.adapter.out.persistence.JdbcMarketingAudienceQuery(jdbc,
+                FixedRevenueSource.ALL);
+
+        var twoOrMore = new com.keevo.crm.api.PurchaseFilter(null, null, null, null, 2, null);
+        assertThat(audience.audience(null, twoOrMore, 10)).extracting(r -> r.clientId()).containsExactly(buyer);
+        var netEightThousand = new com.keevo.crm.api.PurchaseFilter(null, null, 8_000L, 8_000L, null, null);
+        assertThat(audience.count(null, netEightThousand, 10)).isEqualTo(1);
+        var none = new com.keevo.crm.api.PurchaseFilter(null, null, null, null, null, 0);
+        assertThat(audience.audience(null, none, 10)).extracting(r -> r.clientId()).containsExactly(idle);
+
+        var profile = new com.keevo.crm.contact.adapter.out.persistence.JdbcClientPurchaseStats(jdbc,
+                FixedRevenueSource.ALL).statsOf(buyer, null);
+        assertThat(profile.purchaseCount()).isEqualTo(2);
+        assertThat(profile.totalSpent()).isEqualTo(8_000);
     }
 
     @Test
