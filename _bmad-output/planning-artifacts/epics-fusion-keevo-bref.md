@@ -2035,6 +2035,8 @@ So that **la coupure se déroule comme répétée et les owners savent quoi fair
 **When** ils sont préparés
 **Then** ils existent en fr et en et partent par les campagnes plateforme (21.6)
 
+**Amorcé par 24.10 (2026-11-11) :** `docs/RUNBOOK_BASCULE_BREF.md` existe ; ses §1 (proxy de redirection des liens publics Bref, modèle `keevo/ops/traefik/bref-legacy-links.yml`, contrôles 302 → 200) et §2 (URL exactes des webhooks RevenueCat, MyCoolPay et Meta, ancienne → nouvelle, secrets à reprendre, test par fournisseur, retour arrière) sont écrits ; 24.13 complète le reste dans ce même fichier.
+
 **Éléments routés depuis 24.7 (2026-11-11) :**
 - [ ] [Deferred-from: 24.7, 2026-11-11] Continuité des comptes Apple [keevo/backend/src/main/java/com/keevo/migration/application/step/SocialAccountsStep.java] — 24.7 reprend l'identifiant Apple (`sub`) des owners Bref ; il n'est valable que si l'app RN est publiée sous la même équipe Apple (Team ID) que Bref Point et que Keevo vérifie les jetons avec le bon `client_id` : le runbook vérifie l'équipe et le bundle avant J0 (action utilisateur) et prévoit, sinon, la connexion par code puis la reliaison Apple depuis le profil (19.3b). Les cas bloquants d'identité (24.7 : identité non prouvée, deux comptes Keevo, identifiant pris) sont à résoudre à la main avant la décision « go » : le runbook en donne la marche à suivre.
 
