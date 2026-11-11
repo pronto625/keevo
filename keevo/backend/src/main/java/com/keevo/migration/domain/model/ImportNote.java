@@ -60,6 +60,7 @@ public record ImportNote(String code, String label, int count) {
         EXPENSE_CATEGORY_UNKNOWN("Catégorie de dépense inconnue : classée « Autre »"),
         EXPENSE_METHOD_UNKNOWN("Moyen de paiement de dépense inconnu, non repris"),
         EXPENSE_DELETED("Dépense supprimée dans Bref, importée archivée"),
+        AUTHOR_REPLACED("Auteur Bref sans compte Keevo (membre non importé ou seulement invité) : propriétaire indiqué"),
         // Story 24.5 — monetisation
         PLAN_IN_GRACE("Abonnement App Store en période de grâce : plan conservé jusqu'à la fin de la grâce"),
         PLAN_WITHOUT_END("Abonnement sans date de fin dans Bref : plan payant sans échéance"),

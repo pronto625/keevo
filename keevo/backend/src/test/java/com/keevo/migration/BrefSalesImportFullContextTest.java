@@ -123,9 +123,13 @@ class BrefSalesImportFullContextTest extends FullContextIntegrationTest {
     }
 
     private static UUID owner() {
+        return owner(phone());
+    }
+
+    private static UUID owner(String phone) {
         UUID id = UUID.randomUUID();
         bref.update("INSERT INTO \"user\" (id, phone, role, \"isActive\", \"isVerified\", \"createdAt\", \"updatedAt\") "
-                + "VALUES (?, ?, 'owner', true, true, ?, ?)", id, phone(), utc(T0), utc(T0));
+                + "VALUES (?, ?, 'owner', true, true, ?, ?)", id, phone, utc(T0), utc(T0));
         return id;
     }
 
@@ -338,7 +342,8 @@ class BrefSalesImportFullContextTest extends FullContextIntegrationTest {
         TenantContext.clear();
         assertThat(read.number()).startsWith("BRF-");
         assertThat(read.seller().legalName()).startsWith("Epicerie ");
-        assertThat(read.lines()).singleElement().satisfies(l -> assertThat(l.productId()).isNotNull());
+        assertThat(read.lines()).extracting(l -> l.position()).containsExactly(1, 2, 3);
+        assertThat(read.lines().get(0).productId()).isNotNull(); // « Savon » (barcode key of shop B)
         assertThat(read.totals().totalTtc()).isEqualTo(11925);
 
         // settings from the oldest shop, 90-day links, the old link registered
@@ -438,6 +443,38 @@ class BrefSalesImportFullContextTest extends FullContextIntegrationTest {
         JsonNode batch = data(importOwner(owner, "DATABASE", adminToken()));
         assertThat(batch.path("status").asText()).isEqualTo("BLOCKED");
         assertThat(batch.path("cases").toString()).contains("DOCUMENT_INVALID", "remise supérieure au sous-total");
+        assertThat(count("SELECT count(*) FROM public.users WHERE id = ?", owner)).isZero();
+    }
+
+    @Test
+    @DisplayName("24.7 item — owner linked to an existing Keevo account: documents, payments and expenses carry that account; an author without Keevo account → the owner, noted")
+    void linkedOwnerAuthors() throws Exception {
+        String ownerPhone = phone();
+        UUID keevoOwner = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, phone_number, "
+                + "role) VALUES (?, now(), now(), true, 0, ?, 'OWNER')", keevoOwner, ownerPhone);
+        UUID owner = owner(ownerPhone);
+        UUID shop = shop(owner, "Rattachée " + tag(), "other", T0);
+        UUID own = invoice(UUID.randomUUID(), owner, shop.toString(), "sale", "paid", "500", "0", "0", "0", "500",
+                "500", "2026-03-01", null, null, T0, null);
+        item(own, "Article", "REF-1", "1", "500", "500");
+        UUID ghostAuthor = invoice(UUID.randomUUID(), owner, shop.toString(), "sale", "pending", "300", "0", "0",
+                "0", "300", "0", "2026-03-02", null, null, T0.plusSeconds(1), null);
+        bref.update("UPDATE invoice SET \"userId\" = ? WHERE id = ?", UUID.randomUUID().toString(), ghostAuthor);
+        item(ghostAuthor, "Article", "REF-2", "1", "300", "300");
+        UUID exp = expense(owner, shop, "100", "rent", "2026-03-03", "cash", null);
+
+        JsonNode batch = data(importOwner(owner, "DATABASE", adminToken()));
+        assertThat(batch.path("status").asText()).as(batch.toString()).isEqualTo("COMPLETED");
+        assertThat(batch.path("notes").toString()).contains("OWNER_LINKED", "AUTHOR_REPLACED");
+        String schema = jdbc.queryForObject("SELECT schema_name FROM public.tenants WHERE id = ?", String.class,
+                UUID.fromString(batch.path("tenantId").asText()));
+        assertThat(jdbc.queryForList("SELECT DISTINCT created_by FROM \"" + schema + "\".invoices", UUID.class))
+                .containsExactly(keevoOwner);
+        assertThat(jdbc.queryForList("SELECT DISTINCT created_by FROM \"" + schema + "\".invoice_payments",
+                UUID.class)).containsExactly(keevoOwner);
+        assertThat(jdbc.queryForObject("SELECT created_by FROM \"" + schema + "\".expenses WHERE id = ?", UUID.class,
+                exp)).isEqualTo(keevoOwner);
         assertThat(count("SELECT count(*) FROM public.users WHERE id = ?", owner)).isZero();
     }
 

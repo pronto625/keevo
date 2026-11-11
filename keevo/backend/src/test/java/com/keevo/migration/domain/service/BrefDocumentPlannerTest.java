@@ -432,6 +432,33 @@ class BrefDocumentPlannerTest {
     }
 
     @Test
+    @DisplayName("authors through the Keevo account of the Bref user (24.7); none → the owner's account, noted")
+    void authors() {
+        UUID keevoOwner = UUID.randomUUID();
+        UUID member = UUID.randomUUID();
+        UUID keevoMember = UUID.randomUUID();
+        Lookup lookup = new Lookup(Map.of(), Map.of(), id -> id.equals(member) ? keevoMember : null);
+        Inv mine = new Inv();
+        Plan plan = BrefDocumentPlanner.plan(List.of(SHOP_A), List.of(mine.build()), keevoOwner, lookup);
+        PlannedDocument p = plan.documents().get(0);
+        assertThat(p.document().createdBy()).isEqualTo(keevoOwner);
+        assertThat(p.payments().get(0).row().createdBy()).isEqualTo(keevoOwner);
+        assertThat(p.notes()).contains(Kind.AUTHOR_REPLACED); // the Bref owner id is not a Keevo account here
+
+        BrefInvoice byMember = new Inv().build();
+        BrefInvoice withMember = new BrefInvoice(byMember.id(), member.toString(), byMember.shopId(),
+                byMember.customerName(), byMember.customerPhone(), null, null, null, null, null, null,
+                byMember.subtotal(), byMember.tax(), byMember.discount(), byMember.deliveryFee(), byMember.total(),
+                byMember.status(), byMember.paymentMethod(), byMember.initialPayment(), null, null, byMember.date(),
+                null, null, null, null, null, byMember.type(), null, byMember.createdAt(), byMember.updatedAt(), null,
+                byMember.items(), byMember.payments());
+        PlannedDocument m = BrefDocumentPlanner.plan(List.of(SHOP_A), List.of(withMember), keevoOwner, lookup)
+                .documents().get(0);
+        assertThat(m.document().createdBy()).isEqualTo(keevoMember);
+        assertThat(m.notes()).doesNotContain(Kind.AUTHOR_REPLACED);
+    }
+
+    @Test
     @DisplayName("the note never exceeds 300 characters")
     void noteBounded() {
         Inv sale = new Inv();

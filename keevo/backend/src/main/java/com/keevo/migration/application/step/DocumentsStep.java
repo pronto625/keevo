@@ -87,7 +87,8 @@ class DocumentsStep implements ImportStep {
 
     @Override
     public Set<String> targetTables() {
-        return Set.of(INVOICES, INVOICE_ITEMS, INVOICE_PAYMENTS, INVOICING_SETTINGS, PRODUCTS, CLIENTS);
+        return Set.of(INVOICES, INVOICE_ITEMS, INVOICE_PAYMENTS, INVOICING_SETTINGS, PRODUCTS, CLIENTS,
+                MigrationRecord.USERS, MigrationRecord.LINKED_USERS, MigrationRecord.INVITATIONS); // ImportRun.accountId
     }
 
     @Override
@@ -96,7 +97,7 @@ class DocumentsStep implements ImportStep {
             run.count(key, 0);
         }
         BrefDocumentPlanner.Plan plan = BrefDocumentPlanner.plan(run.snapshot().shops(), run.snapshot().invoices(),
-                run.ownerId(), lookup(run));
+                ownerAccount(run), lookup(run));
         BrefShop settingsShop = plan.settingsShop();
         boolean settingsDone = settingsShop == null || run.imported(BREF_SHOP, settingsShop.id(), INVOICING_SETTINGS);
         if (settingsDone) {
@@ -182,6 +183,12 @@ class DocumentsStep implements ImportStep {
      * merged in Bref keeps its own archived row, the line cites it as Bref did) and the client of each phone per shop
      * (ADR-08: per establishment).
      */
+    /** Story 24.7 — the owner's Keevo account (created with the Bref id, or the existing account it was linked to). */
+    static UUID ownerAccount(ImportRun run) {
+        UUID account = run.accountId(run.ownerId());
+        return account != null ? account : run.ownerId();
+    }
+
     private static BrefDocumentPlanner.Lookup lookup(ImportRun run) {
         Map<String, UUID> products = new HashMap<>();
         for (BrefProduct p : run.snapshot().products()) {
@@ -198,6 +205,6 @@ class DocumentsStep implements ImportStep {
                 clients.putIfAbsent(BrefDocumentPlanner.shopKey(c.shopId(), phone), target);
             }
         }
-        return new BrefDocumentPlanner.Lookup(products, clients);
+        return new BrefDocumentPlanner.Lookup(products, clients, run::accountId);
     }
 }

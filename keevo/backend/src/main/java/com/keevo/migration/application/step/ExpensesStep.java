@@ -57,7 +57,7 @@ class ExpensesStep implements ImportStep {
 
     @Override
     public Set<String> targetTables() {
-        return Set.of(EXPENSES);
+        return Set.of(EXPENSES, MigrationRecord.USERS, MigrationRecord.LINKED_USERS, MigrationRecord.INVITATIONS);
     }
 
     @Override
@@ -72,7 +72,7 @@ class ExpensesStep implements ImportStep {
                 already++;
                 continue;
             }
-            MappedExpense m = BrefExpenseMapper.map(e, run.ownerId());
+            MappedExpense m = BrefExpenseMapper.map(e, DocumentsStep.ownerAccount(run), run::accountId);
             toInsert.add(m.expense());
             notes.put(e.id(), m.notes());
             pending.add(new MigrationRecord(EXPENSES, e.id(), BREF_EXPENSE, e.id(), Canonical.sha256(e.canonical()),

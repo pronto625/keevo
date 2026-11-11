@@ -58,6 +58,6 @@ class BrefExpenseMapperTest {
         assertThat(m.expense().archivedAt()).isEqualTo(deleted);
         assertThat(m.expense().createdBy()).isEqualTo(OWNER);
         assertThat(m.notes()).containsExactly(Kind.EXPENSE_CATEGORY_UNKNOWN, Kind.EXPENSE_METHOD_UNKNOWN,
-                Kind.EXPENSE_FIELD_SHORTENED, Kind.EXPENSE_DELETED);
+                Kind.EXPENSE_FIELD_SHORTENED, Kind.EXPENSE_DELETED, Kind.AUTHOR_REPLACED);
     }
 }

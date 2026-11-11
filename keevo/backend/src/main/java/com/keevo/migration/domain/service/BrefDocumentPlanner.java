@@ -69,8 +69,33 @@ public final class BrefDocumentPlanner {
      *
      * @param products Keevo product id by {@link #shopKey}{@code (shop, Bref productKey)}
      * @param clients  Keevo client id by {@link #shopKey}{@code (shop, phone key)} ({@link #phoneKey})
+     * @param accounts Story 24.7 — the Keevo account of a Bref user ({@code ImportRun.accountId}: the Bref id when the
+     *                 import created it, the existing account it was linked to, {@code null} when not imported or
+     *                 only invited); a Bref user id is never stored as is
      */
-    public record Lookup(Map<String, UUID> products, Map<String, UUID> clients) {
+    public record Lookup(Map<String, UUID> products, Map<String, UUID> clients,
+                         java.util.function.Function<UUID, UUID> accounts) {
+
+        /** Without account mapping (every Bref user id is its Keevo account) — tests. */
+        public Lookup(Map<String, UUID> products, Map<String, UUID> clients) {
+            this(products, clients, id -> id);
+        }
+    }
+
+    /**
+     * The Keevo author of a Bref user reference (D10): its Keevo account, else the owner's account — noted when a
+     * given author has no Keevo account (member not imported, or only invited).
+     */
+    static UUID author(String brefUserId, UUID ownerAccount, Lookup lookup, List<Kind> notes, Kind replaced) {
+        UUID bref = BrefMappings.uuidOrNull(brefUserId);
+        UUID account = bref == null ? null : lookup.accounts().apply(bref);
+        if (account == null) {
+            if (BrefMappings.trimmed(brefUserId) != null && !notes.contains(replaced)) {
+                notes.add(replaced);
+            }
+            return ownerAccount;
+        }
+        return account;
     }
 
     /** A planned Keevo row and the Bref row it comes from (record: source table and canonical form). */
@@ -114,7 +139,7 @@ public final class BrefDocumentPlanner {
                 .thenComparing(BrefShop::id)).findFirst().orElse(null);
     }
 
-    public static Plan plan(List<BrefShop> shops, List<BrefInvoice> invoices, UUID ownerId, Lookup lookup) {
+    public static Plan plan(List<BrefShop> shops, List<BrefInvoice> invoices, UUID ownerAccount, Lookup lookup) {
         Map<UUID, BrefShop> shopById = new HashMap<>();
         shops.forEach(s -> shopById.put(s.id(), s));
         BrefShop first = settingsShop(shops);
@@ -124,7 +149,7 @@ public final class BrefDocumentPlanner {
         invoices.stream()
                 .sorted(Comparator.comparing((BrefInvoice i) -> !i.quote()).thenComparing(BrefInvoice::createdAt)
                         .thenComparing(BrefInvoice::id))
-                .forEach(i -> planned.add(document(i, shopById, numbers.get(i.id()), ownerId, lookup)));
+                .forEach(i -> planned.add(document(i, shopById, numbers.get(i.id()), ownerAccount, lookup)));
         return new Plan(first, settings, planned);
     }
 
@@ -206,10 +231,7 @@ public final class BrefDocumentPlanner {
             notes.add(Kind.DOCUMENT_DELETED);
         }
         String method = method(i.paymentMethod());
-        UUID createdBy = BrefMappings.uuidOrNull(i.userId());
-        if (createdBy == null) {
-            createdBy = ownerId;
-        }
+        UUID createdBy = author(i.userId(), ownerId, lookup, notes, Kind.AUTHOR_REPLACED);
 
         // payments (D3): the acompte as one paid row, then Bref's instalments
         List<Row<Payment>> payments = new ArrayList<>();

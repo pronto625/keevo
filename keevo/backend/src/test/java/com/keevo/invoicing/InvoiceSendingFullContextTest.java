@@ -461,7 +461,7 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
                 + "DROP COLUMN invoice_template, DROP COLUMN ticket_width, DROP COLUMN signature_client_path, "
                 + "DROP COLUMN signature_seller_path, DROP COLUMN public_link_version, "
                 + "DROP COLUMN legacy_public_token, DROP COLUMN legacy_reference, DROP COLUMN link_shared_at, "
-                + "DROP COLUMN last_sent_channel"); // 20.8 V18
+                + "DROP COLUMN last_sent_channel, DROP COLUMN legacy_notes"); // 20.8 V18, 24.4 V19
         jdbc.execute("DROP TABLE " + q + "invoicing_document_preferences");
         jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
         jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13
@@ -473,7 +473,7 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
         jdbc.execute("ALTER TABLE " + q + "invoices DROP COLUMN store_id");
         jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_sync_keyset");
         jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3', '4', '5', '6', '7', '8', '9', '10', "
-                + "'11', '12', '13', '14', '15', '16', '17', '18')"); // 20.13: V17, 20.8: V18
+                + "'11', '12', '13', '14', '15', '16', '17', '18', '19')"); // 20.13: V17, 20.8: V18, 24.4: V19
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, seller_legal_name, "
                 + "vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, issued_at) VALUES "
