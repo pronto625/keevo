@@ -14,7 +14,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,13 +30,19 @@ import java.util.UUID;
  * <p>Pattern: Facade over the identity internals the import needs ({@link TenantFactory} with import options,
  * {@link TenantSchemaPort#assignOwnerRole}, the {@link LegacyIdentityStore} batches). No {@code @Transactional}: the
  * caller (the migration step) owns the unit of work. No event is published — an imported owner is not a registration
- * (no welcome, no {@code UserRegisteredEvent}), and the tenant is suspended until its wave activates it (24.9).
+ * (no welcome, no {@code UserRegisteredEvent}), and the tenant is suspended until its wave activates it (24.9). Story
+ * 24.7: a linked account is only given a membership (and an employee record), never rewritten; an invitation is
+ * recorded without its message (19.6b's message goes out only from the owner's own « add member »).
  *
- * <p>Complexity: {@link #findConflicts} one query; {@link #createOwnerTenant} the registration's statements plus two
- * inserts; {@link #importMembers} three JDBC batches whatever the number of members.
+ * <p>Complexity: {@link #findMatches} one query; {@link #createOwnerTenant} the registration's statements plus two
+ * inserts; {@link #importMembers} three set-based statements; {@link #inviteMembers} and
+ * {@link #importAuthenticators} one statement each — whatever the number of rows.
  */
 @Service
 public class LegacyIdentityImportService implements LegacyIdentityImportPort {
+
+    /** Story 24.7 — the validity of an imported invitation: 19.6b's (7 days, {@code MembershipInvitationService}). */
+    static final Duration INVITATION_VALIDITY = Duration.ofDays(7);
 
     private final LegacyIdentityStore store;
     private final TenantFactory tenantFactory;
@@ -49,17 +58,20 @@ public class LegacyIdentityImportService implements LegacyIdentityImportPort {
     }
 
     @Override
-    public Map<UUID, Set<ConflictKind>> findConflicts(Collection<LegacyAccount> accounts) {
+    public Map<UUID, List<AccountMatch>> findMatches(Collection<LegacyAccount> accounts) {
         if (accounts == null || accounts.isEmpty()) {
             return Map.of();
         }
-        return store.findConflicts(accounts);
+        return store.findMatches(accounts);
     }
 
     @Override
-    public ImportedTenant createOwnerTenant(LegacyAccount owner, String tenantName) {
+    public ImportedTenant createOwnerTenant(LegacyAccount owner, UUID linkedAccountId, String tenantName) {
         Objects.requireNonNull(owner, "owner");
-        boolean ownerInserted = !store.insertAccounts(List.of(owner), List.of(Role.OWNER), List.of(true)).isEmpty();
+        // a linked owner keeps his Keevo account as is: no insert, the membership goes to that account
+        LegacyAccount member = linkedAccountId == null ? owner : owner.withId(linkedAccountId);
+        boolean ownerInserted = linkedAccountId == null
+                && !store.insertAccounts(List.of(owner), List.of(Role.OWNER), List.of(true)).isEmpty();
         Tenant tenant = tenantFactory.create(new TenantFactory.TenantCreation(tenantName, TenantStatus.SUSPENDED,
                 PlanChangeCause.MIGRATION_BREF, false));
         // the schema was committed on its own connection: if the caller's transaction rolls back (a later insert of
@@ -75,11 +87,11 @@ public class LegacyIdentityImportService implements LegacyIdentityImportPort {
                 }
             });
         }
-        Map<UUID, UUID> membership = store.insertMemberships(tenant.getId(), List.of(owner), List.of(Role.OWNER),
+        Map<UUID, UUID> membership = store.insertMemberships(tenant.getId(), List.of(member), List.of(Role.OWNER),
                 List.of(true));
-        tenantSchemaPort.assignOwnerRole(tenant.getSchemaName(), owner.id());
+        tenantSchemaPort.assignOwnerRole(tenant.getSchemaName(), member.id());
         return new ImportedTenant(tenant.getId(), tenant.getSchemaName(), tenant.getCode(), ownerInserted,
-                membership.get(owner.id()));
+                membership.get(member.id()));
     }
 
     @Override
@@ -97,12 +109,37 @@ public class LegacyIdentityImportService implements LegacyIdentityImportPort {
         if (members == null || members.isEmpty()) {
             return new MemberImportResult(Set.of(), Map.of(), Set.of());
         }
-        List<LegacyAccount> accounts = members.stream().map(ImportedMember::account).toList();
-        List<Role> roles = members.stream().map(ImportedMember::role).toList();
-        List<Boolean> active = members.stream().map(ImportedMember::active).toList();
-        Set<UUID> users = store.insertAccounts(accounts, roles, active);
-        Map<UUID, UUID> memberships = store.insertMemberships(tenantId, accounts, roles, active);
+        List<ImportedMember> created = members.stream().filter(m -> m.linkedAccountId() == null).toList();
+        Set<UUID> users = store.insertAccounts(created.stream().map(ImportedMember::account).toList(),
+                created.stream().map(ImportedMember::role).toList(),
+                created.stream().map(ImportedMember::active).toList());
+        // memberships belong to the Keevo account (the linked one for a linked member); the result speaks Bref ids
+        Map<UUID, UUID> importedIdOf = new HashMap<>();
+        members.forEach(m -> importedIdOf.put(m.userId(), m.account().id()));
+        Map<UUID, UUID> byUser = store.insertMemberships(tenantId,
+                members.stream().map(m -> m.account().withId(m.userId())).toList(),
+                members.stream().map(ImportedMember::role).toList(),
+                members.stream().map(ImportedMember::active).toList());
+        Map<UUID, UUID> memberships = new LinkedHashMap<>();
+        byUser.forEach((userId, membershipId) -> memberships.put(importedIdOf.get(userId), membershipId));
         Set<UUID> employees = store.insertEmployees(schema, members);
         return new MemberImportResult(users, memberships, employees);
+    }
+
+    @Override
+    public Map<UUID, UUID> inviteMembers(UUID tenantId, UUID invitedBy, List<LegacyInvitation> invitations) {
+        Objects.requireNonNull(tenantId, "tenantId");
+        if (invitations == null || invitations.isEmpty()) {
+            return Map.of();
+        }
+        return store.insertInvitations(tenantId, invitedBy, invitations, INVITATION_VALIDITY);
+    }
+
+    @Override
+    public List<AuthenticatorOutcome> importAuthenticators(List<SocialIdentity> identities) {
+        if (identities == null || identities.isEmpty()) {
+            return List.of();
+        }
+        return store.insertAuthenticators(identities);
     }
 }

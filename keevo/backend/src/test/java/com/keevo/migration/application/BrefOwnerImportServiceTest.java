@@ -93,7 +93,7 @@ class BrefOwnerImportServiceTest {
         when(store.findTargets(eq(ownerId), any())).thenAnswer(i -> new java.util.HashMap<>());
         when(store.findBatch(batchId)).thenReturn(Optional.of(new MigrationBatch(batchId, ownerId,
                 SourceKind.DATABASE, BatchStatus.COMPLETED, null, actor, T, T, Map.of(), List.of(), List.of(), null)));
-        when(identity.findConflicts(any())).thenReturn(Map.of());
+        when(identity.findMatches(any())).thenReturn(Map.of());
         service = new BrefOwnerImportService(List.of(database, export), store, identity, tenants, storeRules,
                 List.of(step("un", null), step("deux", new IllegalStateException("+237600000001 duplicate")),
                         step("trois", null)));
@@ -143,7 +143,8 @@ class BrefOwnerImportServiceTest {
                 "KV-ABC123", "kv_abc123", "X", com.keevo.identity.api.TenantStatus.DELETED,
                 com.keevo.identity.api.PlanType.FREE, T, null)));
         service.importOwner(ownerId, "DATABASE", actor);
-        verify(store).findTargets(ownerId, List.of("stores", "tenants", "users"));
+        verify(store).findTargets(ownerId,
+                List.of("linked_users", "membership_invitations", "stores", "tenants", "users"));
         verify(store).finishBatch(eq(batchId), eq(BatchStatus.BLOCKED), isNull(), anyMap(),
                 org.mockito.ArgumentMatchers.argThat(cases -> cases.size() == 1
                         && cases.get(0).code().equals("TENANT_GONE")), anyList(), isNull());

@@ -483,24 +483,208 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
         assertThat(viaExport.path("counts").path("clientsCreated").asInt()).isZero();
     }
 
+    // ── Story 24.7 — identity bridge ─────────────────────────────────────────
+
+    /** A Bref account with every identity flag explicit (synthetic values). */
+    private static UUID brefAccount(String role, String phone, boolean phoneVerified, String email,
+                                    boolean emailVerified, String username, String shopId, boolean active,
+                                    String provider, String socialId) {
+        UUID id = UUID.randomUUID();
+        bref.update("INSERT INTO \"user\" (id, email, password, \"firstName\", \"lastName\", phone, role, \"shopId\", "
+                        + "\"isActive\", username, \"isVerified\", \"emailVerified\", provider, \"socialId\", "
+                        + "\"createdAt\", \"updatedAt\") VALUES (?, ?, ?, 'Prénom', 'Nom', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                        + "?)",
+                id, email, "owner".equals(role) ? null : HASH_SELLER, phone, role, shopId, active, username,
+                phoneVerified, emailVerified, provider, socialId, utc(T0), utc(T0.plusSeconds(60)));
+        return id;
+    }
+
+    /** A Keevo account (synthetic) with the given identifiers. */
+    private UUID keevoAccount(String phone, String email, boolean emailVerified, String username, String hash) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, phone_number, "
+                        + "email, email_verified_at, username, password_hash, role) VALUES (?, now(), now(), true, 0, ?, "
+                        + "?, ?, ?, ?, 'OWNER')", id, phone, email, emailVerified ? Timestamp.from(T0) : null,
+                username, hash);
+        return id;
+    }
+
     @Test
-    @DisplayName("an owner whose phone already belongs to a Keevo account is blocked, nothing written; unknown owner 404")
+    @DisplayName("24.7 — owner already in Keevo by phone: Keevo account and hash kept, OWNER on the imported company "
+            + "(two companies at login), Google identity brought; members: proven email linked, unconfirmed phone "
+            + "invited, unproven email not carried; re-run changes nothing")
+    void identityBridgeLinksInvitesAndReruns() throws Exception {
+        String password = "Motdepasse-247";
+        String keevoHash = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode(password);
+        String ownerPhone = phone();
+        UUID keevoOwner = keevoAccount(ownerPhone, null, false, null, keevoHash);
+        // the Keevo owner already runs a company
+        String existingSchema = tx.execute(s -> tenantFactory.create()).getSchemaName();
+        TestAccess.grant(jdbc, keevoOwner, existingSchema, "OWNER");
+        String managerEmail = "m" + tag() + "@example.test";
+        UUID keevoManager = keevoAccount(phone(), managerEmail, true, null, null);
+        String sellerPhone = phone();
+        UUID keevoSeller = keevoAccount(sellerPhone, null, false, null, null);
+        String typedEmail = "t" + tag() + "@example.test";
+        keevoAccount(phone(), typedEmail, false, null, null);
+        String googleSubject = "g" + tag();
+
+        UUID owner = brefAccount("owner", ownerPhone, true, null, false, null, null, true, "google", googleSubject);
+        UUID shop = shop(owner, "Pont " + tag(), "electronics", null, T0, null);
+        UUID admin = brefAccount("admin", null, false, managerEmail, true, "a" + tag(), shop.toString(), true,
+                "email", null);
+        UUID invited = brefAccount("seller", sellerPhone, false, null, false, "i" + tag(), shop.toString(), true,
+                "email", null);
+        UUID fresh = brefAccount("viewer", null, false, typedEmail, false, "f" + tag(), shop.toString(), true,
+                "email", null);
+        String sleeperPhone = phone();
+        UUID keevoSleeper = keevoAccount(sleeperPhone, null, false, null, null);
+        UUID sleeper = brefAccount("seller", sleeperPhone, false, null, false, "z" + tag(), shop.toString(), false,
+                "email", null);
+
+        JsonNode batch = data(importOwner(owner, "DATABASE", adminToken()));
+        assertThat(batch.path("status").asText()).as(batch.toString()).isEqualTo("COMPLETED");
+        JsonNode counts = batch.path("counts");
+        assertThat(counts.path("accountsLinked").asInt()).isEqualTo(2);
+        assertThat(counts.path("membersInvited").asInt()).isEqualTo(1);
+        assertThat(counts.path("usersCreated").asInt()).isEqualTo(1);
+        assertThat(counts.path("membershipsCreated").asInt()).isEqualTo(3);
+        assertThat(counts.path("employeesCreated").asInt()).isEqualTo(2);
+        assertThat(counts.path("authenticatorsImported").asInt()).isEqualTo(1);
+        assertThat(batch.path("notes").toString()).contains("OWNER_LINKED", "MEMBER_LINKED", "MEMBER_INVITED",
+                "MEMBER_EMAIL_DROPPED", "MEMBER_INACTIVE_NOT_INVITED").doesNotContain("OWNER_SOCIAL_SIGN_IN");
+        UUID tenantId = UUID.fromString(batch.path("tenantId").asText());
+
+        // owner: Keevo account untouched, no account with the Bref id, OWNER on the imported company
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM public.users WHERE id = ?", String.class,
+                keevoOwner)).isEqualTo(keevoHash);
+        assertThat(count("SELECT count(*) FROM public.users WHERE id IN (?, ?, ?)", owner, admin, invited)).isZero();
+        assertThat(jdbc.queryForObject("SELECT role FROM public.user_tenant_memberships WHERE user_id = ? AND "
+                + "tenant_id = ?", String.class, keevoOwner, tenantId)).isEqualTo("OWNER");
+        assertThat(jdbc.queryForObject("SELECT provider || ':' || subject FROM public.user_authenticators "
+                + "WHERE user_id = ?", String.class, keevoOwner)).isEqualTo("GOOGLE:" + googleSubject);
+        // two companies at login (19.6): the Keevo one and the imported one
+        MvcResult login = mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"phoneNumber\":\"" + ownerPhone + "\",\"password\":\"" + password + "\"}")).andReturn();
+        assertThat(login.getResponse().getStatus()).as(login.getResponse().getContentAsString()).isEqualTo(200);
+        JsonNode session = objectMapper.readTree(login.getResponse().getContentAsString(StandardCharsets.UTF_8));
+        JsonNode memberships = session.has("data") ? session.path("data").path("memberships")
+                : session.path("memberships");
+        assertThat(memberships.size()).isEqualTo(2);
+
+        // members
+        String schema = jdbc.queryForObject("SELECT schema_name FROM public.tenants WHERE id = ?", String.class,
+                tenantId);
+        assertThat(jdbc.queryForObject("SELECT role FROM public.user_tenant_memberships WHERE user_id = ? AND "
+                + "tenant_id = ?", String.class, keevoManager, tenantId)).isEqualTo("MANAGER");
+        assertThat(jdbc.queryForMap("SELECT user_id, password_change_required FROM \"" + schema + "\".employees "
+                + "WHERE id = ?", admin)).containsEntry("user_id", keevoManager)
+                .containsEntry("password_change_required", false);
+        assertThat(jdbc.queryForMap("SELECT status, identifier_kind, role FROM public.membership_invitations "
+                + "WHERE tenant_id = ? AND user_id = ?", tenantId, keevoSeller))
+                .containsEntry("status", "PENDING").containsEntry("identifier_kind", "PHONE")
+                .containsEntry("role", "EMPLOYEE");
+        assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE user_id = ? AND tenant_id = ?",
+                keevoSeller, tenantId)).isZero();
+        assertThat(jdbc.queryForObject("SELECT invited_by FROM public.membership_invitations WHERE tenant_id = ?",
+                UUID.class, tenantId)).as("the owner invites, not the operator").isEqualTo(keevoOwner);
+        // deactivated in Bref and already in Keevo: neither invited nor imported
+        assertThat(count("SELECT count(*) FROM public.membership_invitations WHERE user_id = ?", keevoSleeper))
+                .isZero();
+        assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE user_id IN (?, ?)",
+                keevoSleeper, sleeper)).isZero();
+        assertThat(jdbc.queryForMap("SELECT email, username IS NOT NULL AS has_username FROM public.users "
+                + "WHERE id = ?", fresh)).containsEntry("has_username", true).containsEntry("email", null);
+
+        // records: linked accounts never under « users » (a rollback must not delete them)
+        assertThat(count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ? AND target_table = "
+                + "'linked_users'", owner)).isEqualTo(3);
+        assertThat(count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ? AND target_table = "
+                + "'users' AND target_id IN (?, ?, ?)", owner, keevoOwner, keevoManager, keevoSeller)).isZero();
+        assertThat(count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ? AND target_table IN "
+                + "('membership_invitations', 'user_authenticators')", owner)).isEqualTo(2);
+
+        // re-run: nothing written, the records decide (not the current Keevo identifiers): the linked manager's
+        // account changed meanwhile, which a fresh decision would refuse (LINK_TARGET_UNAVAILABLE)
+        jdbc.update("UPDATE public.users SET is_active = false WHERE id = ?", keevoManager);
+        JsonNode again = data(importOwner(owner, "DATABASE", adminToken()));
+        assertThat(again.path("status").asText()).as(again.toString()).isEqualTo("COMPLETED");
+        for (String key : List.of("tenantsCreated", "usersCreated", "membershipsCreated", "employeesCreated",
+                "accountsLinked", "membersInvited", "authenticatorsImported")) {
+            assertThat(again.path("counts").path(key).asInt()).as(key).isZero();
+        }
+        assertThat(again.path("counts").path("alreadyImported").asInt()).isPositive();
+        assertThat(again.path("cases").size()).isZero();
+        assertThat(count("SELECT count(*) FROM public.membership_invitations WHERE tenant_id = ?", tenantId))
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("24.7 — linked owner whose Keevo account already has another Google identity: kept, the Bref one is "
+            + "not added (note)")
+    void socialIdentityNotReplaced() throws Exception {
+        String ownerPhone = phone();
+        UUID keevoOwner = keevoAccount(ownerPhone, null, false, null, null);
+        String keevoSubject = "k" + tag();
+        jdbc.update("INSERT INTO public.user_authenticators (id, user_id, provider, subject) VALUES (?, ?, 'GOOGLE', ?)",
+                UUID.randomUUID(), keevoOwner, keevoSubject);
+        UUID owner = brefAccount("owner", ownerPhone, true, null, false, null, null, true, "google", "b" + tag());
+        shop(owner, "Google " + tag(), "electronics", null, T0, null);
+
+        JsonNode batch = data(importOwner(owner, "DATABASE", adminToken()));
+        assertThat(batch.path("status").asText()).as(batch.toString()).isEqualTo("COMPLETED");
+        assertThat(batch.path("counts").path("accountsLinked").asInt()).isEqualTo(1);
+        assertThat(batch.path("counts").path("authenticatorsImported").asInt()).isZero();
+        assertThat(batch.path("notes").toString()).contains("SOCIAL_NOT_LINKED");
+        assertThat(jdbc.queryForList("SELECT subject FROM public.user_authenticators WHERE user_id = ?", String.class,
+                keevoOwner)).containsExactly(keevoSubject);
+    }
+
+    @Test
+    @DisplayName("24.7 — owner's phone in Keevo but not confirmed in Bref, member username taken, username equal to "
+            + "a Keevo phone: blocked with the cases, nothing written; unknown owner 404")
     void collisionBlocksBeforeAnyWrite() throws Exception {
         String taken = phone();
-        UUID keevoUser = UUID.randomUUID();
-        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, phone_number, "
-                + "role) VALUES (?, now(), now(), true, 0, ?, 'OWNER')", keevoUser, taken);
-        UUID owner = user("owner", taken, null, null, null, null, true, false, null);
+        keevoAccount(taken, null, false, null, null);
+        String usedUsername = "u" + tag();
+        keevoAccount(phone(), null, false, usedUsername, null);
+        String keevoPhone = phone();
+        keevoAccount(keevoPhone, null, false, null, null);
+        UUID owner = brefAccount("owner", taken, false, null, false, null, null, true, "email", null);
         UUID shop = shop(owner, "Collision " + tag(), "services", null, T0, null);
-        user("seller", null, null, "c" + tag(), HASH_SELLER, shop.toString(), true, false, null);
+        UUID clash = brefAccount("seller", null, false, null, false, usedUsername.toUpperCase(), shop.toString(),
+                true, "email", null);
+        UUID numeric = brefAccount("seller", null, false, null, false, keevoPhone.substring(4), shop.toString(),
+                true, "email", null);
+        UUID other = keevoAccount(phone(), null, false, null, null);
+        String heldSubject = "h" + tag();
+        jdbc.update("INSERT INTO public.user_authenticators (id, user_id, provider, subject) VALUES (?, ?, 'GOOGLE', ?)",
+                UUID.randomUUID(), other, heldSubject);
+        UUID social = brefAccount("seller", null, false, null, false, "s" + tag(), shop.toString(), true, "google",
+                heldSubject);
+        String phoneAsUsername = phone();
+        keevoAccount(null, null, false, phoneAsUsername.substring(1), null);
+        UUID phoneUsed = brefAccount("seller", phoneAsUsername.substring(1), false, null, false, null,
+                shop.toString(), true, "email", null);
+        String inactivePhone = phone();
+        UUID inactiveKeevo = keevoAccount(inactivePhone, null, false, null, null);
+        jdbc.update("UPDATE public.users SET is_active = false WHERE id = ?", inactiveKeevo);
+        UUID toInactive = brefAccount("seller", inactivePhone, false, null, false, null, shop.toString(), true,
+                "email", null);
 
         MvcResult r = importOwner(owner, "DATABASE", adminToken());
         assertThat(r.getResponse().getStatus()).isEqualTo(201);
         JsonNode batch = data(r);
         assertThat(batch.path("status").asText()).isEqualTo("BLOCKED");
-        assertThat(batch.path("cases").get(0).path("code").asText()).isEqualTo("ACCOUNT_EXISTS");
-        assertThat(batch.path("cases").get(0).path("label").asText()).contains("24.7");
-        assertThat(batch.path("cases").get(0).path("sourceId").asText()).isEqualTo(owner.toString());
+        Map<String, String> cases = new java.util.LinkedHashMap<>();
+        batch.path("cases").forEach(c -> cases.put(c.path("code").asText(), c.path("sourceId").asText()));
+        assertThat(cases).containsEntry("IDENTITY_UNPROVEN", owner.toString())
+                .containsEntry("USERNAME_TAKEN", clash.toString())
+                .containsEntry("USERNAME_IS_PHONE", numeric.toString())
+                .containsEntry("SOCIAL_TAKEN", social.toString())
+                .containsEntry("ACCOUNT_EXISTS", phoneUsed.toString())
+                .containsEntry("LINK_TARGET_UNAVAILABLE", toInactive.toString());
+        assertThat(batch.path("cases").toString()).doesNotContain(taken, usedUsername, keevoPhone);
         assertThat(batch.path("tenantId").isNull()).isTrue();
         assertThat(count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ?", owner)).isZero();
         assertThat(count("SELECT count(*) FROM public.users WHERE id = ?", owner)).isZero();

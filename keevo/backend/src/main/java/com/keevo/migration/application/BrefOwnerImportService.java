@@ -1,7 +1,7 @@
 package com.keevo.migration.application;
 
 import com.keevo.identity.api.LegacyIdentityImportPort;
-import com.keevo.identity.api.LegacyIdentityImportPort.ConflictKind;
+import com.keevo.identity.api.LegacyIdentityImportPort.AccountMatch;
 import com.keevo.identity.api.LegacyIdentityImportPort.LegacyAccount;
 import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.identity.api.TenantStatus;
@@ -10,6 +10,7 @@ import com.keevo.migration.domain.model.BlockedCase;
 import com.keevo.migration.domain.model.BrefAccount;
 import com.keevo.migration.domain.model.BrefShop;
 import com.keevo.migration.domain.model.BrefSnapshot;
+import com.keevo.migration.domain.model.IdentityResolution;
 import com.keevo.migration.domain.model.MigrationBatch;
 import com.keevo.migration.domain.model.MigrationRecord;
 import com.keevo.migration.domain.model.SourceKind;
@@ -18,6 +19,7 @@ import com.keevo.migration.domain.port.out.BrefSourcePort;
 import com.keevo.migration.domain.port.out.MigrationRecordStore;
 import com.keevo.migration.domain.service.BrefMappings;
 import com.keevo.migration.domain.service.BrefSnapshotValidator;
+import com.keevo.migration.domain.service.IdentityBridge;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.api.StoreCommandPort;
@@ -29,7 +31,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -78,7 +80,8 @@ public class BrefOwnerImportService implements BrefOwnerImportUseCase {
         this.tenants = tenants;
         this.storeRules = storeRules;
         this.steps = List.copyOf(steps); // ordered by @Order
-        Set<String> tables = new java.util.TreeSet<>(List.of(MigrationRecord.TENANTS, MigrationRecord.USERS));
+        Set<String> tables = new java.util.TreeSet<>(List.of(MigrationRecord.TENANTS, MigrationRecord.USERS,
+                MigrationRecord.LINKED_USERS, MigrationRecord.INVITATIONS)); // read by the check (24.2, 24.7)
         steps.forEach(s -> tables.addAll(s.targetTables()));
         this.targetTables = List.copyOf(tables);
     }
@@ -159,15 +162,31 @@ public class BrefOwnerImportService implements BrefOwnerImportUseCase {
         accounts.add(snapshot.owner());
         snapshot.members().stream().filter(m -> !m.deleted()).forEach(accounts::add);
         List<LegacyAccount> legacy = accounts.stream().map(BrefMappings::toLegacy).toList();
-        Map<UUID, Set<ConflictKind>> conflicts = identity.findConflicts(legacy);
-        Set<UUID> imported = new HashSet<>();
+        Map<UUID, List<AccountMatch>> matches = identity.findMatches(legacy);
+        Map<UUID, IdentityResolution> identities = new HashMap<>();
         for (BrefAccount a : accounts) {
-            if (run.imported(BREF_USER, a.id(), USERS)) {
-                imported.add(a.id());
-            }
+            identities.put(a.id(), recorded(run, a.id()).orElseGet(() ->
+                    IdentityBridge.resolve(a, a == snapshot.owner(), matches.get(a.id()))));
         }
-        cases.addAll(BrefSnapshotValidator.validate(snapshot, conflicts, imported, this::shopProblem));
+        cases.addAll(BrefSnapshotValidator.validate(snapshot, identities, this::shopProblem));
+        run.identities(identities);
         return cases;
+    }
+
+    /**
+     * Story 24.7 — a decision a previous run already applied (its records are authoritative: the Keevo accounts may
+     * have changed since): created, linked, or invited.
+     */
+    private static Optional<IdentityResolution> recorded(ImportRun run, UUID brefUserId) {
+        if (run.imported(BREF_USER, brefUserId, USERS)) {
+            return Optional.of(IdentityResolution.create(false));
+        }
+        UUID linked = run.target(BREF_USER, brefUserId, MigrationRecord.LINKED_USERS);
+        if (linked == null) {
+            return Optional.empty();
+        }
+        return Optional.of(run.imported(BREF_USER, brefUserId, MigrationRecord.INVITATIONS)
+                ? IdentityResolution.invite(linked) : IdentityResolution.link(linked));
     }
 
     /** The store module's own rules (name, category, bounded fields, country), French message on refusal. */

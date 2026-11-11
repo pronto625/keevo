@@ -20,7 +20,7 @@ public record BlockedCase(String code, String label, String sourceTable, UUID so
                 : kind.label() + " : " + detail, sourceTable, sourceId);
     }
 
-    /** Every blocking case of 24.2 and 24.3 (24.7 adds the identity bridge cases). */
+    /** Every blocking case of 24.2, 24.3 and the identity bridge (24.7). */
     public enum Kind {
         OWNER_DELETED("Compte supprimé dans Bref"),
         OWNER_INACTIVE("Compte désactivé dans Bref"),
@@ -34,9 +34,16 @@ public record BlockedCase(String code, String label, String sourceTable, UUID so
         ROLE_UNKNOWN("Rôle Bref inconnu"),
         MEMBER_SHOP_UNKNOWN("Membre rattaché à une boutique absente de ce compte Bref"),
         DUPLICATE_IDENTIFIER("Téléphone, e-mail ou identifiant en double dans ce compte Bref"),
-        ACCOUNT_EXISTS("Un compte Keevo existe déjà avec ce téléphone, cet e-mail ou cet identifiant "
-                + "(rapprochement des comptes : story 24.7)"),
+        ACCOUNT_EXISTS("Un compte Keevo existe déjà avec ce téléphone, cet e-mail ou cet identifiant, sans "
+                + "rapprochement possible"),
         ACCOUNT_ID_TAKEN("Un compte Keevo non issu de cet import porte déjà le même identifiant interne"),
+        // Story 24.7 — identity bridge
+        IDENTITY_AMBIGUOUS("Rapprochement impossible : plusieurs comptes Keevo correspondent"),
+        IDENTITY_UNPROVEN("Un compte Keevo correspond, mais l'identité n'est pas prouvée dans Bref"),
+        LINK_TARGET_UNAVAILABLE("Le compte Keevo correspondant est désactivé ou réservé à l'administration"),
+        USERNAME_TAKEN("Identifiant de connexion Bref déjà utilisé par un autre compte Keevo"),
+        USERNAME_IS_PHONE("Identifiant de connexion Bref égal au téléphone d'un autre compte Keevo"),
+        SOCIAL_TAKEN("Compte Google ou Apple déjà relié à un autre compte Keevo"),
         SHOP_INVALID("Boutique invalide"),
         TENANT_GONE("L'entreprise importée précédemment n'existe plus (retour arrière à terminer)"),
         // Story 24.3

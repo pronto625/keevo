@@ -14,8 +14,16 @@ public record ImportNote(String code, String label, int count) {
         MEMBER_DELETED("Membre supprimé dans Bref, non importé"),
         MEMBER_INACTIVE("Membre désactivé dans Bref, importé désactivé"),
         MEMBER_NO_PASSWORD("Membre sans mot de passe : il devra en définir un"),
-        OWNER_SOCIAL_SIGN_IN("Propriétaire connecté par Google ou Apple dans Bref : reliaison du compte social à faire "
-                + "(story 24.7), connexion par code en attendant"),
+        OWNER_SOCIAL_SIGN_IN("Propriétaire connecté par un fournisseur externe dans Bref sans compte Google ou Apple "
+                + "exploitable : connexion par code"),
+        // Story 24.7 — identity bridge
+        OWNER_LINKED("Propriétaire déjà inscrit dans Keevo : entreprise ajoutée à son compte existant"),
+        MEMBER_LINKED("Membre déjà inscrit dans Keevo : rattaché à son compte existant, il se connecte avec ses "
+                + "identifiants Keevo"),
+        MEMBER_INVITED("Membre déjà inscrit dans Keevo : invitation à accepter à l'ouverture de l'entreprise"),
+        MEMBER_INACTIVE_NOT_INVITED("Membre désactivé dans Bref et déjà inscrit dans Keevo : non invité"),
+        MEMBER_EMAIL_DROPPED("E-mail de membre déjà utilisé par un autre compte Keevo, non repris"),
+        SOCIAL_NOT_LINKED("Compte Google ou Apple de Bref non relié : le compte Keevo en a déjà un autre"),
         LOGO_NOT_FETCHED("Logo non rapatrié (téléchargement désactivé ou adresse non autorisée)"),
         LOGO_FAILED("Logo non rapatrié (image indisponible ou refusée)"),
         // Story 24.3 — catalogue and clients

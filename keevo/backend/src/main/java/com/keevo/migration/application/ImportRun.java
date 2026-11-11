@@ -1,6 +1,7 @@
 package com.keevo.migration.application;
 
 import com.keevo.migration.domain.model.BrefSnapshot;
+import com.keevo.migration.domain.model.IdentityResolution;
 import com.keevo.migration.domain.model.ImportNote;
 import com.keevo.migration.domain.model.MigrationRecord;
 
@@ -27,6 +28,12 @@ public final class ImportRun {
     public static final String EMPLOYEES_CREATED = "employeesCreated";
     public static final String ALREADY_IMPORTED = "alreadyImported";
     public static final String MEMBERS_SKIPPED_DELETED = "membersSkippedDeleted";
+    /** Story 24.7 — Bref accounts attached to an existing Keevo account (owner or member). */
+    public static final String ACCOUNTS_LINKED = "accountsLinked";
+    /** Story 24.7 — existing Keevo accounts invited to the imported company (19.6b). */
+    public static final String MEMBERS_INVITED = "membersInvited";
+    /** Story 24.7 — Google / Apple identities brought from Bref. */
+    public static final String AUTHENTICATORS_IMPORTED = "authenticatorsImported";
     /** Story 24.3. */
     public static final String CATEGORIES_CREATED = "categoriesCreated";
     public static final String PRODUCTS_CREATED = "productsCreated";
@@ -42,12 +49,17 @@ public final class ImportRun {
     private final Map<ImportNote.Kind, Integer> notes = new EnumMap<>(ImportNote.Kind.class);
     private UUID tenantId;
     private String tenantSchema;
+    /** Story 24.7 — the identity bridge's decision per Bref account (owner and live members), set by the check. */
+    private Map<UUID, IdentityResolution> identities = Map.of();
 
     public ImportRun(BrefSnapshot snapshot, UUID batchId, UUID actorId, Map<MigrationRecord.Key, UUID> records) {
         this.snapshot = snapshot;
         this.batchId = batchId;
         this.actorId = actorId;
         this.records = records; // the store's mutable map, kept up to date by the steps (no copy)
+        for (String key : List.of(ACCOUNTS_LINKED, MEMBERS_INVITED, AUTHENTICATORS_IMPORTED)) { // Story 24.7
+            counts.put(key, 0);
+        }
         for (String key : List.of(TENANTS_CREATED, USERS_CREATED, MEMBERSHIPS_CREATED, STORES_CREATED,
                 LOGOS_IMPORTED, EMPLOYEES_CREATED, ALREADY_IMPORTED, MEMBERS_SKIPPED_DELETED, CATEGORIES_CREATED,
                 PRODUCTS_CREATED, PRODUCTS_MERGED, CLIENTS_CREATED)) {
@@ -101,6 +113,36 @@ public final class ImportRun {
         List<ImportNote> list = new ArrayList<>();
         notes.forEach((kind, n) -> list.add(new ImportNote(kind.name(), kind.label(), n)));
         return list;
+    }
+
+    /** Story 24.7 — the bridge's decisions, once checked (no account blocked). */
+    public void identities(Map<UUID, IdentityResolution> decided) {
+        this.identities = Map.copyOf(decided);
+    }
+
+    /** Story 24.7 — the bridge's decision for a Bref account (the owner and every live member are decided by the check). */
+    public IdentityResolution identity(UUID brefUserId) {
+        IdentityResolution decided = identities.get(brefUserId);
+        if (decided == null) {
+            // never default to a new account: that could give an existing person a second one (R2)
+            throw new IllegalStateException("No identity decision for a Bref account");
+        }
+        return decided;
+    }
+
+    /**
+     * Story 24.7 — the Keevo account standing for a Bref account once imported: its own id when the import created it,
+     * the existing account it was linked to, else {@code null} (not imported, or only invited: not a member until he accepts). Later steps (documents, expenses) map a
+     * Bref user reference through this, never through the Bref id itself.
+     */
+    public UUID accountId(UUID brefUserId) {
+        if (imported(MigrationRecord.BREF_USER, brefUserId, MigrationRecord.USERS)) {
+            return brefUserId;
+        }
+        if (imported(MigrationRecord.BREF_USER, brefUserId, MigrationRecord.INVITATIONS)) {
+            return null; // invited, not a member until he accepts
+        }
+        return target(MigrationRecord.BREF_USER, brefUserId, MigrationRecord.LINKED_USERS);
     }
 
     public void tenant(UUID id, String schema) {

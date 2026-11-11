@@ -19,6 +19,13 @@ public record MigrationRecord(String targetTable, UUID targetId, String sourceTa
     public static final String STORES = "stores";
     public static final String STORE_LOGOS = "store_logo";
     public static final String EMPLOYEES = "employees";
+    /**
+     * Story 24.7 — the existing Keevo account a Bref account was linked (or invited) to: a pseudo target that never
+     * proves a creation (the rollback deletes only {@link #USERS} targets).
+     */
+    public static final String LINKED_USERS = "linked_users";
+    public static final String INVITATIONS = "membership_invitations";
+    public static final String AUTHENTICATORS = "user_authenticators";
     /** Target tables written by 24.3. */
     public static final String CATEGORIES = "categories";
     public static final String PRODUCTS = "products";

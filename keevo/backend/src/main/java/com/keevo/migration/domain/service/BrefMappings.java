@@ -148,11 +148,32 @@ public final class BrefMappings {
     public static LegacyAccount toLegacy(BrefAccount a) {
         String phone = e164(a.phone());
         String email = trimmed(a.email());
+        String provider = socialProvider(a);
         return new LegacyAccount(a.id(), phone, email, trimmed(a.username()), trimmed(a.passwordHash()),
                 trimmed(a.firstName()), trimmed(a.lastName()),
                 a.emailVerified() && email != null ? a.updatedAt() : null,
                 a.verified() && phone != null ? a.updatedAt() : null,
-                a.createdAt(), a.updatedAt());
+                a.createdAt(), a.updatedAt(), provider, provider == null ? null : trimmed(a.socialId()));
+    }
+
+    /** Story 24.7 — Bref's social providers ({@code AuthProvidersEnum}) → Keevo authenticator providers (19.3). */
+    private static final Map<String, String> SOCIAL_PROVIDERS = Map.of("google", "GOOGLE", "apple", "APPLE");
+
+    /** The longest subject Keevo keeps ({@code user_authenticators.subject}). */
+    public static final int MAX_SOCIAL_SUBJECT = 255;
+
+    /**
+     * Story 24.7 — the Keevo provider of a Bref account signing in with Google or Apple ({@code GOOGLE} /
+     * {@code APPLE}); {@code null} for an email / code account, an unknown provider, or a missing or oversized
+     * {@code socialId}.
+     */
+    public static String socialProvider(BrefAccount a) {
+        String provider = trimmed(a.provider());
+        String subject = trimmed(a.socialId());
+        if (provider == null || subject == null || subject.length() > MAX_SOCIAL_SUBJECT) {
+            return null;
+        }
+        return SOCIAL_PROVIDERS.get(provider.toLowerCase(Locale.ROOT));
     }
 
     /** First name of a member's employee record: the first name, else the username, else « Membre ». */
