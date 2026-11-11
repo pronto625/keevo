@@ -440,9 +440,10 @@ development_status:
   # FUSION KEEVO × BREF POINT — Epics 18-25 (85 stories) — ajouté 2026-11-01
   # Source  : planning-artifacts/epics-fusion-keevo-bref.md (analyse : fusion-keevo-bref-analyse-2026-10-31.md)
   # Dépôts  : AI/Keevo (refonte/modulaire), AI/bref et AI/api-bref (develop)
-  # Ordre (2026-11-03, décision user) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.11 → 24.1–24.10, 24.12) = jalon GL → go-live refonte (17-9, 16-7) → stores, OTA, vagues 24. Pas de gel de Bref : 18-3 = suivi des évolutions.
-  # Ordre   : 18 → 19 → {20, 21} → 24-1..24-10 ; 22 démarre à 19 + 4 sem ; 23 après 22 ; 24-11..24-16 après 23-12 ; 25 en dernier
-  # Jalons  : G0 après 18-2 | G1 après 20-12 | G2 bêta 22-15 | G3 après 24-12 + 23-12 | G4 après 24-14 | G5 avant 25-1
+  # Ordre (2026-11-03, décision user) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.11 → 24.2–24.10, 24.12, 24.13) = jalon GL → go-live refonte (17-9, 16-7) = bascule unique Bref (ADR-10, 11/11) → 22.14–22.16. Pas de gel de Bref : 18-3 = suivi des évolutions.
+  # Ordre   : 18 → 19 → {20, 21} → 24-2..24-10 → 24-12 → 24-13 ; 22 démarre à 19 + 4 sem ; 23 après 22 ; bascule unique (24-9 exécutée, 23-12 publiée) le jour du GL ; 25 en dernier
+  # 2026-11-11 décision user (ADR-10, epics-fusion-keevo-bref.md Annexe D) : bascule unique (big bang) au lieu des vagues — 24-1, 24-11, 24-14, 24-15, 24-16 retirées (clés gardées) ; 24-9, 24-10, 24-12, 24-13 réécrites
+  # Jalons  : G0 après 18-2 | G1 après 20-12 | G2 bêta 22-15 | G3 décision « go » de la bascule (jour J) | G4 J+7 après la bascule | G5 avant arrêt définitif d'api-bref (25-1)
   # Statut du plan : ready depuis le 2026-11-03 (18-2 : ADR-01 à 09, Annexe C) — G0 attend les chiffres prod de 18-1 ; ne pas créer de story 19+ avant G0
   # Note : `epic-18` (fusion) ≠ `v1s-epic-18-export-audit` (piste V1, close)
   # ═══════════════════════════════════════════════════════════════════════
@@ -546,8 +547,8 @@ development_status:
   23-12-publication-identite-bref: backlog
   epic-23-retrospective: optional
 
-  epic-24: backlog  # P1c outil + P4 vagues
-  24-1-api-bref-statut-gel-export: backlog
+  epic-24: backlog  # P1c outil + P4 bascule unique (2026-11-11 ADR-10 : plus de vagues)
+  24-1-api-bref-statut-gel-export: backlog  # 2026-11-11 retirée : bascule unique (plus de gel ni d'export par owner côté api-bref ; source = base Bref restaurée)
   24-2-migration-identite-boutiques-membres: done  # 2026-11-11 build-auto (spec-24-2-migration-identite-boutiques-membres.md) — module plateforme migration (V81 : migration_batches, migration_records, cause MIGRATION_BREF), BrefSourcePort (export JSON contrat keevo/contracts/bref-export.json v1 + base Bref en lecture seule, même modèle), validation sans écriture (cas bloquants, collisions → 24.7), pipeline ImportStep idempotent (identité + entreprise SUSPENDED sans « Ma Boutique », profil DOCUMENT + règles 19.13 + fonctions Bref, boutiques, logos via StoreLogoUseCase, membres bcrypt + rôles), 2 endpoints super-admin ; revue 5 couches (47 constats : 33 corrigés, 13 rejetés motivés, 1 routé, 0 reporté ; 7 items routés → 24-3, 24-4, 24-5, 24-7 ×2, 24-9 ×2) ; tests verts (migration 21, architecture 171, identity 966, store 128, shared 1 398, admin 722) ; live bref_src_t242 → keevo_dev_t242 OK (1 owner, 1 boutique, 3 membres, re-run sans effet, logo Cloudinary rapatrié) ; revue de suivi recommandée
   24-3-import-produits-clients: backlog  # 2026-11-11 revue 24-2 — 1 item (catégories du secteur + « Produits importés » : l'entreprise importée n'a pas d'onboarding)
   24-4-import-documents-paiements-depenses: backlog  # 2026-11-11 revue 24-2 — 1 item (invoicing_settings depuis la première boutique) | 2026-11-08 revue 20-7 — 1 item (liens 90 j, anciens liens Bref, papiers 53/110 mm à l import) | 2026-11-08 revue 20-9 — boutique des factures importées (shopId) via 20-14
@@ -555,14 +556,14 @@ development_status:
   24-6-import-annexes-index-portail: backlog  # 2026-11-11 revue 21.7 — 1 item : les factures importées doivent être indexées par shared.capability.portal.InvoicePhoneIndex.indexAll (le rattrapage 21.7 ne tourne qu une fois)
   24-7-bridge-identite-collisions: backlog  # 2026-11-11 revue 24-2 — 1 item (remplacer le blocage ACCOUNT_EXISTS par le rapprochement ; reliaison Google/Apple de l'owner) | 2026-11-04 revue 19.3 — 1 item (import social_id Bref → user_authenticators)
   24-8-reconciliation-bloquante: backlog
-  24-9-pilotage-vagues-rollback: backlog  # 2026-11-11 revue 24-2 — 2 items (activation/rollback d'une entreprise importée SUSPENDED ; liste des lots + téléchargement de l'export api-bref)
-  24-10-liens-publics-webhooks: backlog
-  24-11-pre-migrateur-ota: backlog
-  24-12-dry-run-copie-prod: backlog
-  24-13-runbook-communication: backlog
-  24-14-vagues-pilotes: backlog
-  24-15-vagues-de-masse: backlog
-  24-16-retardataires-gel-global: backlog
+  24-9-pilotage-vagues-rollback: backlog  # 2026-11-11 réécrite (ADR-10) : commande de bascule — import de tous les owners d'une base Bref restaurée, réconciliation, activation globale, rapport, retour arrière = rallumer Bref | 2026-11-11 revue 24-2 — 2 items (activation/rollback des entreprises importées SUSPENDED ; liste des lots + commande de bascule — le téléchargement de l'export api-bref est abandonné avec 24-1)
+  24-10-liens-publics-webhooks: backlog  # 2026-11-11 réécrite (ADR-10) : redirection des anciens liens publics Bref vers Keevo ; plus de routeur de webhooks (RevenueCat/MyCoolPay/Meta repointés vers Keevo = action utilisateur du runbook 24-13)
+  24-11-pre-migrateur-ota: backlog  # 2026-11-11 retirée : bascule unique (mutations locales non synchronisées = risque résiduel, consigne dans l'annonce 24-13)
+  24-12-dry-run-copie-prod: backlog  # 2026-11-11 réécrite (ADR-10) : répétition générale sur une copie de la prod Bref, mesure de la durée de coupure
+  24-13-runbook-communication: backlog  # 2026-11-11 réécrite (ADR-10) : runbook de la bascule et communication (actions utilisateur : webhooks RevenueCat/MyCoolPay/Meta, proxy des liens publics)
+  24-14-vagues-pilotes: backlog  # 2026-11-11 retirée : bascule unique
+  24-15-vagues-de-masse: backlog  # 2026-11-11 retirée : bascule unique
+  24-16-retardataires-gel-global: backlog  # 2026-11-11 retirée : bascule unique
   epic-24-retrospective: optional
 
   epic-25: backlog  # P5 Convergence

@@ -22,7 +22,7 @@ decisionsLocked:
   - "D3 Un owner Bref = un tenant Keevo ; shops → stores ; membres → employees + memberships"
   - "D4 Identité étendue (email, username, OTP, Google, Apple) ; réconciliation téléphone E.164 puis email ; hash bcrypt Bref réutilisés tels quels"
   - "D5 Plans Bref → profils/bundles Keevo ; quotas d'usage ; module payments (MyCoolPay, StoreKit/RevenueCat) = auto-service"
-  - "D6 Strangler à double piste : Keevo sans migration de données ; Bref owner par owner (gel → export → import idempotent → réconciliation bloquante → activation), api-bref maintenu pour les non-migrés"
+  - "D6 (révisée 11/11, ADR-10) Keevo sans migration de données ; Bref par bascule unique le jour du go-live : arrêt de Bref, dump restauré à part, une commande importe tous les owners (import idempotent → réconciliation bloquante → activation globale), retour arrière = rallumer Bref (la migration owner par owner et par vagues est abandonnée)"
   - "D7 (révisée 03/11, ADR-02) Une seule identité store : com.brefpoint.app (Bref Point) ; Keevo, distribué en APK hors store, rejoint cette fiche"
   - "Deux parcours de vente : Caisse (pos → sales + stock) et Document (invoicing, sans stock) ; reporting = union sans double comptage"
   - "Factures émises non modifiables (conformité DGI) ; devis éditables ; correction = avoir + nouvelle facture"
@@ -36,6 +36,7 @@ decisionsTaken:  # 2026-11-03, story 18.2 — détail et stories impactées : An
   - "ADR-07 §7.10 owner Bref expiré → FREE à la migration (règle SUBSCRIPTION_IN_FORCE, pas de grâce) : il ne doit pas sentir la migration"
   - "ADR-08 §7.5 clients par établissement (boutique, restaurant…), vue « tous mes établissements » pour l'owner, partage optionnel par établissement, pas de fusion automatique"
   - "ADR-09 §9.5 publication précoce de l'app unifiée sous com.brefpoint.app avec mode legacy"
+  - "ADR-10 (11/11/2026) bascule unique (big bang) au lieu des vagues : 24.1, 24.11, 24.14, 24.15, 24.16 retirées ; 24.9, 24.10, 24.12, 24.13 réécrites (Annexe D)"
   - "§7.3 TRANCHÉ le 2026-11-01 : suivi de stock réglé par produit (track_stock), livré par 17.12"
 ---
 
@@ -47,7 +48,7 @@ Ce document est le **plan d'exécution BMAD** de la fusion décidée dans `fusio
 
 Il **complète** les epics 1–17 sans les remplacer.
 
-> **Décision du 03/11/2026 (owner produit) — la mise à jour de la refonte attend tout le merge Keevo × Bref.** La mise en production de la refonte (17.9 gate, 16.7 canary) n'a lieu qu'au jalon **GL** : tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) : **inventaire de parité fonction par fonction** (22.17) entièrement coché « présente, même comportement », et **tests avec de vrais utilisateurs** (22.18) concluants ; (3) outil de migration prêt et dry-run 100 % réconcilié sur copie de prod (24.1–24.10, 24.12). La refonte n'est donc plus un préalable de la fusion : tout se construit sur la branche et sur staging dès G0. Ne viennent **après** le go-live que les étapes qui exigent la prod : dernière release Flutter, bêta et publications store (22.14–22.16, 23.12), pré-migrateur OTA (24.11), runbook, pilotes et vagues (24.13–24.16), puis l'epic 25.
+> **Décision du 03/11/2026 (owner produit) — la mise à jour de la refonte attend tout le merge Keevo × Bref.** La mise en production de la refonte (17.9 gate, 16.7 canary) n'a lieu qu'au jalon **GL** : tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) : **inventaire de parité fonction par fonction** (22.17) entièrement coché « présente, même comportement », et **tests avec de vrais utilisateurs** (22.18) concluants ; (3) outil de migration prêt et répétition générale 100 % réconciliée sur copie de prod (24.2–24.10, 24.12) avec son runbook (24.13). La refonte n'est donc plus un préalable de la fusion : tout se construit sur la branche et sur staging dès G0. **Le go-live est aussi le jour de la bascule unique de Bref (ADR-10, 11/11/2026)** : arrêt de Bref, dump, import de tous les owners par une seule commande (24.9), réconciliation, publication de l'app React Native (23.12) pointée sur Keevo. Ne viennent **après** le go-live que la dernière release Flutter, la bêta et le retrait de l'APK Keevo (22.14–22.16), puis l'epic 25.
 
 Les epics 16 et 17 restent liés à la fusion :
 
@@ -67,10 +68,10 @@ Les epics 16 et 17 restent liés à la fusion :
 | **P0** Cadrage | **18** | 2 sem | chiffres connus, décisions écrites, évolutions de Bref suivies (pas de gel, 03/11) |
 | **P1a** Socle d'accueil | **19** | 6 sem | login OTP/social/username sur Keevo, rôles, quotas, plans ; app Flutter intacte |
 | **P1b** Modules Bref | **20**, **21** | 8 sem | API complète pour l'app unifiée ; parcours Bref vert sur Keevo |
-| **P1c** Outil de migration | **24** (24.1 → 24.10) | 3 sem (recouvrement P1b) | 100 % d'une copie de prod Bref importée sans écart |
+| **P1c** Outil de migration | **24** (24.2 → 24.10, 24.12, 24.13) | 3 sem (recouvrement P1b) | répétition générale : 100 % d'une copie de prod Bref importée sans écart, durée de coupure mesurée |
 | **P2** App RN parité Keevo | **22** | 10–12 sem (démarre à P1a + 4 sem) | tous les utilisateurs Keevo sur RN, Flutter retiré |
 | **P3** App RN parité Bref | **23** | 8–10 sem | app unifiée prête pour la fiche Bref Point (ADR-02) |
-| **P4** Vagues Bref | **24** (24.11 → 24.16) | 4–8 sem | plus aucun owner actif sur api-bref |
+| **P4** Bascule Bref (ADR-10) | **24** (24.9 exécutée en prod, runbook 24.13) | 1 jour (coupure de Bref) + J+7 de surveillance | tous les owners Bref sur Keevo, api-bref arrêté (rallumable jusqu'à la décision « go ») |
 | **P5** Convergence | **25** | 2–4 sem | une app, un backend |
 
 ---
@@ -120,7 +121,7 @@ Les epics 16 et 17 restent liés à la fusion :
 
 - **FUS-FR25 :** Module `expenses` : dépenses par boutique et catégorie (10 catégories Bref), hors ligne.
 - **FUS-FR26 :** Module `finance` : résultat (CA HT − dépenses), marge, variations, séries par période.
-- **FUS-FR27 :** Module `ai-assistant` : questions guidées gratuites, chat libre décompté par quota, fournisseur configurable. **Le chat libre répond par appels d'outils (FUS-FR39), jamais par génération de SQL** ; parité fonctionnelle avec « Bref Point » dès la vague de migration. *(Décision utilisateur du 02/11/2026.)*
+- **FUS-FR27 :** Module `ai-assistant` : questions guidées gratuites, chat libre décompté par quota, fournisseur configurable. **Le chat libre répond par appels d'outils (FUS-FR39), jamais par génération de SQL** ; parité fonctionnelle avec « Bref Point » dès la bascule (ADR-10). *(Décision utilisateur du 02/11/2026.)*
 - **FUS-FR28 :** Module `whatsapp-cloud` : compte WhatsApp Business par tenant, boîte de réception, modèles de messages, campagnes clients respectant le consentement marketing.
 - **FUS-FR29 :** Module `client-portal` : un client final retrouve, par OTP sur son téléphone, toutes ses factures quel que soit le commerçant.
 - **FUS-FR30 :** Notifications in-app persistantes (liste, lu/non lu) en plus des push FCM.
@@ -139,16 +140,16 @@ Les epics 16 et 17 restent liés à la fusion :
 
 ### Exigences de migration (`FUS-MIG`)
 
-- **FUS-MIG1 :** Un owner Bref est migré seul, de façon idempotente : rejouer son import est sans effet ou complète ce qui manque.
+- **FUS-MIG1 :** L'import de chaque owner Bref est idempotent : rejouer son import (seul ou dans la commande de bascule) est sans effet ou complète ce qui manque. *(11/11/2026, ADR-10 : la bascule unique importe tous les owners en une commande, owner par owner à l'intérieur.)*
 - **FUS-MIG2 :** Tous les identifiants Bref (UUID) sont conservés ; chaque ligne importée est tracée dans `migration_records` (table, id source, checksum, note).
-- **FUS-MIG3 :** L'activation d'un owner migré est bloquée tant que la réconciliation (§10.3) présente un écart hors tolérance.
-- **FUS-MIG4 :** Pendant la migration d'un owner, ses écritures (et celles de ses membres) sont refusées par api-bref avec 423 `ACCOUNT_MIGRATING`, ses lectures restent possibles.
-- **FUS-MIG5 :** Le retour arrière d'un owner est possible jusqu'à son activation (suppression du tenant importé, dégel api-bref).
-- **FUS-MIG6 :** Aucune mutation locale Bref n'est perdue : le gel est refusé tant que l'appareil a des mutations en attente ; les lignes locales sans équivalent serveur sont montrées à l'owner.
+- **FUS-MIG3 :** L'activation est bloquée tant que la réconciliation (§10.3) présente un écart hors tolérance. *(11/11/2026, ADR-10 : activation globale ; un owner en écart non documenté par la répétition générale 24.12 empêche le « go » de la bascule.)*
+- **FUS-MIG4 (révisée 11/11/2026, ADR-10) :** Pendant la bascule, api-bref est arrêté (aucune écriture possible) ; aucun gel par owner ni modification d'api-bref n'est nécessaire. La source de l'import est le dump pris après l'arrêt, restauré dans une base à part et lu en lecture seule.
+- **FUS-MIG5 (révisée 11/11/2026, ADR-10) :** Le retour arrière est possible jusqu'à la décision « go » de la bascule : rallumer api-bref (rien n'y a été modifié) ; les entreprises importées sont supprimées (24.9).
+- **FUS-MIG6 (révisée 11/11/2026, ADR-10) :** Les mutations locales Bref non synchronisées avant l'arrêt sont le risque résiduel de la bascule (pas de pré-migrateur OTA) : la communication (24.13) demande d'ouvrir l'app connectée avant l'heure d'arrêt, et le runbook prévoit une fenêtre d'annonce ; le risque est accepté par l'owner produit.
 - **FUS-MIG7 :** Aucune opération Keevo locale n'est perdue : l'app Flutter ne propose la mise à jour que file vide et sans quarantaine.
 - **FUS-MIG8 :** Abonnements en vigueur, crédits, packs SMS et compteurs du mois sont reportés à l'identique ; la règle `SUBSCRIPTION_IN_FORCE` à la date de migration fait foi, jamais `user.plan` ⚠️§7.10.
-- **FUS-MIG9 :** Les liens publics Bref, les webhooks RevenueCat/MyCoolPay/Meta et les comptes WhatsApp Business restent fonctionnels avant, pendant et après la migration de chaque owner.
-- **FUS-MIG10 :** Chaque vague produit un rapport archivé (owners, compteurs, sommes, anomalies, durée) consultable dans le dashboard.
+- **FUS-MIG9 (révisée 11/11/2026, ADR-10) :** Les liens publics Bref restent fonctionnels après la bascule (redirection vers Keevo, 24.10) ; les webhooks RevenueCat/MyCoolPay/Meta et les comptes WhatsApp Business sont reconfigurés vers Keevo pendant la coupure (action utilisateur du runbook 24.13, pas de routeur à double livraison).
+- **FUS-MIG10 :** La bascule (et chaque répétition) produit un rapport archivé (owners, compteurs, sommes, anomalies, durée) consultable dans le dashboard. *(11/11/2026, ADR-10 : « vague » remplacé par « bascule ».)*
 
 ### Exigences non fonctionnelles (`FUS-NFR`)
 
@@ -158,10 +159,10 @@ Les epics 16 et 17 restent liés à la fusion :
 - **FUS-NFR4 :** Données locales de l'app chiffrées (SQLCipher), clés en stockage sécurisé ; secrets serveur externalisés et fail-fast (10-3) ; tokens WABA chiffrés au repos.
 - **FUS-NFR5 :** L'app RN a une couverture de tests au moins équivalente à la spécification Flutter sur la couche données (mergers, politique de rejet, gate, calculs de montants) et des parcours Maestro hors ligne.
 - **FUS-NFR6 :** Contrats JSON partagés (`keevo/contracts/`) vérifiés à la fois par le backend et l'app (routes de modules, payloads de sync, datasets d'export).
-- **FUS-NFR7 :** Gel d'un owner < 15 min de bout en bout (gel → activation) pour un owner moyen ; aucune indisponibilité globale planifiée.
+- **FUS-NFR7 (révisée 11/11/2026, ADR-10) :** Une seule coupure planifiée de Bref, le jour de la bascule ; sa durée (arrêt → dump → import → réconciliation → activation) est mesurée par la répétition générale (24.12) et annoncée par le runbook (24.13).
 - **FUS-NFR8 (révisée 03/11, ADR-01) :** Montants dans la devise de la boutique, avec l'arrondi que Bref applique pour ce pays (entiers pour XAF et XOF ; règle Bref reprise telle quelle pour la RDC) ; calcul des totaux identique dans l'app et le serveur (même jeu de cas de test partagé). Keevo V1 reste en XAF entiers.
 - **FUS-NFR9 (révisée 03/11, ADR-01) :** Journées métier au fuseau du pays de la boutique (Africa/Douala par défaut ; Dakar, Kinshasa, Lubumbashi… selon le pays) ; dates civiles importées telles quelles. Le fuseau aujourd'hui figé dans le code (`KeevoZones.WAT`, exports, planificateurs) devient une donnée par boutique.
-- **FUS-NFR10 :** Observabilité de la migration : métriques par vague (durée, échecs, écarts), logs corrélés `tenantId`/`migrationBatchId`.
+- **FUS-NFR10 :** Observabilité de la migration : métriques par bascule et par owner (durée, échecs, écarts), logs corrélés `tenantId`/`migrationBatchId`.
 - **FUS-NFR11 (03/11/2026) :** Chaque implémentation applique le design pattern adapté à la situation et une complexité algorithmique optimale (pas de N+1, SQL ensembliste, pagination keyset, index adaptés, traitements par lots) ; vérifié dans chaque spec et à chaque revue, une violation est un constat bloquant.
 
 ### Exigences UX (`FUS-UX`)
@@ -204,8 +205,8 @@ Les epics 16 et 17 restent liés à la fusion :
 | FUS-FR40 | **19** (19.7) / **21** (21.10) | offre commerciale entièrement configurable (ADR-05) |
 | FUS-FR33–FR36 | **22** | app RN (identité unique Bref Point), offline, modules |
 | FUS-FR37 | **23** | mode legacy |
-| FUS-MIG1–MIG5, MIG8–MIG10 | **24** | outil de migration et vagues |
-| FUS-MIG6 | **24** (pré-migrateur OTA) | |
+| FUS-MIG1–MIG5, MIG8–MIG10 | **24** | outil de migration et bascule unique (ADR-10) |
+| FUS-MIG6 | **24** (24.13, communication avant l'arrêt) | risque résiduel accepté (ADR-10) |
 | FUS-MIG7 | **22** (dernière release Flutter) | |
 | FUS-NFR1 | **transverse**, contrôlé à chaque story 19–21 | |
 | FUS-NFR2, NFR4 | **transverse** (19–21, 24) | voir leur énoncé |
@@ -344,10 +345,10 @@ So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
 **Exigences :** FUS-FR9 (écrans), FR17–FR22 (écrans), FR25–FR29 (écrans), FR36, FR37, FUS-UX2, UX4, UX5.
 **Dépend de :** 22 (fondations), 20, 21.
 
-### Epic 24 : Migration Bref par vagues (P1c + P4)
-**Valeur :** chaque owner Bref et ses données arrivent dans Keevo, vérifiés au franc près, avec retour arrière possible jusqu'à l'activation.
+### Epic 24 : Migration Bref par bascule unique (P1c + P4)
+**Valeur :** le jour du go-live, tous les owners Bref et leurs données arrivent dans Keevo en une seule commande, vérifiés au franc près ; retour arrière = rallumer Bref, jusqu'à la décision « go » (ADR-10, 11/11/2026).
 **Exigences :** FUS-MIG1–MIG6, MIG8–MIG10, FUS-NFR7, NFR10.
-**Dépend de :** 19, 20, 21 (cibles d'import) ; 23 (app à proposer aux migrés) avant la première vague.
+**Dépend de :** 19, 20, 21 (cibles d'import) ; 23 (app RN publiée le jour de la bascule, 23.12).
 
 ### Epic 25 : Convergence et décommissionnement (P5)
 **Valeur :** une app, un backend, une facture d'hébergement ; plus de code transitoire.
@@ -356,17 +357,17 @@ So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
 ### Ordonnancement
 
 ```
-Epic 16 (socle, branche) ─────┐   GL = 19–21 + app RN à parité (22.1–22.13, 23.1–23.11) + outil 24.1–24.10/24.12 ──► 17.9 + 16.7 GO-LIVE ──► 22.14–22.16, 23.12, 24.11, vagues 24.13–24.16
-Epic 18 (P0) ─────────────────┼──► Epic 19 (P1a) ──► Epic 20 + 21 (P1b) ──► Epic 24.1–24.10 (outil, dry-run)
+Epic 16 (socle, branche) ─────┐   GL = 19–21 + app RN à parité (22.1–22.13, 23.1–23.11) + outil 24.2–24.10/24.12/24.13 ──► 17.9 + 16.7 GO-LIVE = BASCULE (24.9, 23.12) ──► 22.14–22.16
+Epic 18 (P0) ─────────────────┼──► Epic 19 (P1a) ──► Epic 20 + 21 (P1b) ──► Epic 24.2–24.10 (outil) ──► 24.12 (répétition) ──► 24.13 (runbook)
                               │          │                                          │
                               │          └─(+4 sem)──► Epic 22 (P2, app RN Keevo) ──┤
                               │                              │                      │
-                              │                              └──► Epic 23 (P3) ─────┴──► Epic 24.11–24.16 (vagues, P4)
+                              │                              └──► Epic 23 (P3) ─────┴──► bascule unique (P4, jour du GL)
                               │                                                                   │
                               └───────────────────────────────────────────────────────────────────┴──► Epic 25 (P5)
 ```
 
-**Point de non-retour** : story 24.15 (première vague pilote activée). Avant, toute la fusion peut être suspendue sans impact utilisateur.
+**Point de non-retour** (révisé le 11/11/2026, ADR-10) : la décision « go » de la bascule (24.9), quand l'app React Native pointe sur Keevo et que les owners importés recommencent à écrire. Avant, rallumer Bref annule tout sans perte (rien n'y est modifié) ; après, rallumer Bref perdrait les écritures faites sur Keevo, donc tout incident se corrige sur Keevo.
 
 ---
 
@@ -425,7 +426,7 @@ So that **ce que Keevo reproduit et ce que l'importeur lit restent alignés avec
 **Then** le commit de référence de `main` (ce qui tourne en prod) de chaque dépôt est noté avec sa date (aucun tag ni règle imposés aux dépôts Bref), et le journal est ouvert dans `research/bref-evolutions/journal-evolutions-bref.md` avec son script de contrôle `check-bref.sh`
 
 **Given** un merge sur `main` d'un dépôt Bref (déployé en prod) depuis le dernier commit journalisé
-**When** la revue est faite (**au début de chaque session de travail sur la fusion** — décision du 03/11/2026 —, et au moins à chaque début de story des epics 20, 21, 23 et 24 et avant chaque vague de migration)
+**When** la revue est faite (**au début de chaque session de travail sur la fusion** — décision du 03/11/2026 —, et au moins à chaque début de story des epics 20, 21, 23 et 24 et juste avant la bascule — ADR-10)
 **Then** chaque commit est classé dans le journal : *sans impact* (texte, style, correctif local), *règle métier* (calcul, statut, quota, plan, TVA, numérotation), *schéma* (table, colonne, type, contrainte), *API/app* (contrat, écran, parcours)
 
 **Given** un commit classé *règle métier* ou *API/app*
@@ -437,8 +438,8 @@ So that **ce que Keevo reproduit et ce que l'importeur lit restent alignés avec
 **Then** l'importeur (Epic 24), le kit de mesures 18.1 (`research/fusion-mesures/`, gardes « objet absent ») et la réconciliation sont mis à jour ou une story Epic 24 est ouverte
 
 **Implementation Notes:**
-- Le gel **par owner** pendant sa migration (24.1, 423 `ACCOUNT_MIGRATING`, < 15 min, FUS-NFR7) n'est pas concerné : il ne touche que l'owner en cours de migration.
-- La seule demande faite à l'équipe Bref reste l'ajout des endpoints de l'Epic 24 (statut de migration, gel d'un owner, export, pré-migrateur) ; elle ne limite pas leurs autres correctifs.
+- *(11/11/2026, ADR-10)* Plus de gel par owner : Bref est arrêté une seule fois, le jour de la bascule (24.9). Le journal est revu une dernière fois juste avant la bascule (schéma du dump = schéma lu par l'outil).
+- *(11/11/2026, ADR-10)* Aucune évolution d'api-bref n'est plus demandée à l'équipe Bref (24.1 et 24.11 retirées).
 
 ---
 
@@ -1133,9 +1134,9 @@ So that **mon abonnement s'active sans attendre le support (FUS-FR9)**.
 **When** un paiement est confirmé (livraison multiple possible)
 **Then** le traitement est idempotent, `tenant_payments` est écrit, le profil est appliqué par `ModuleLifecycleService` (bundle activé, `expires_at` prolongé), `tenant_plan_events` est tracé, et l'owner est notifié
 
-**Given** un webhook pour un owner encore sur api-bref (pendant P4)
-**When** Keevo le reçoit via le routeur (24.10)
-**Then** il est ignoré sans erreur (owner inconnu)
+**Given** un webhook pour un owner inconnu de Keevo
+**When** Keevo le reçoit
+**Then** il est ignoré sans erreur (owner inconnu) — *11/11/2026, ADR-10 : plus de routeur à double livraison ; le webhook MyCoolPay est repointé vers Keevo pendant la bascule (runbook 24.13).*
 
 **Éléments routés vers 21.1 (story 21.10, 2026-11-09) :**
 - [x] [Deferred-from: 21.10, 2026-11-09] (fait en 21-1, 2026-11-09) Prix figé à l'initiation : appeler le port `subscription.api.OfferPricing.quote(tenant, plan, cycle, promoCode)` à l'initiation du paiement et enregistrer le prix remisé obtenu (montant de base, remise appliquée, montant dû) avec la demande ; la confirmation (webhook) applique ce prix enregistré, jamais le prix du moment — critère « un paiement déjà initié garde le prix affiché » de 21.10. Un devis à 0 FCFA (remise de 100 % ou montant ≥ prix) est une offre gratuite : l'activer sans passer par MyCoolPay.
@@ -1156,7 +1157,7 @@ So that **mon abonnement Apple actuel continue après la migration (FUS-FR9, FUS
 
 **Given** l'`app_user_id` RevenueCat d'un owner migré
 **When** il était l'id utilisateur Bref
-**Then** il reste valide car les UUID utilisateur sont conservés (FUS-MIG2) — vérifié en sandbox avant la vague Apple
+**Then** il reste valide car les UUID utilisateur sont conservés (FUS-MIG2) — vérifié en sandbox avant la bascule (ADR-10)
 
 **Éléments routés vers 21.2 (story 21.10, 2026-11-09) :**
 - [x] [Deferred-from: 21.10, 2026-11-09] (fait en 21-2, 2026-11-09 : produits App Store dans le catalogue, prix Apple saisi ou constaté sur un achat RevenueCat, écart avec la grille dans `GET /api/v1/admin/offers` → `storeProducts`) Écart de prix App Store : les prix Apple se règlent dans App Store Connect ; lire les produits StoreKit (RevenueCat) et afficher au super-admin, dans le catalogue d'offres (`GET /api/v1/admin/offers`), l'écart entre le prix Apple et la grille configurable par plan et cycle.
@@ -1201,7 +1202,7 @@ So that **je retrouve l'assistant de Bref, avec des réponses justes qui respect
 
 **Given** un corpus de parité (≥ 30 questions réelles tirées des sujets Bref et des conversations migrées, avec réponses attendues calculées sur des données de test)
 **When** il est rejoué contre l'assistant Keevo
-**Then** toutes les réponses chiffrées sont exactes ; le corpus tourne en test (fournisseur simulé pour les appels d'outils attendus) et sert de critère d'acceptation de la vague 24.x
+**Then** toutes les réponses chiffrées sont exactes ; le corpus tourne en test (fournisseur simulé pour les appels d'outils attendus) et sert de critère d'acceptation de la bascule (24.12)
 
 **Given** un employé (périmètre 16-13), un module désactivé ou un autre tenant
 **When** il pose une question qui toucherait ces données
@@ -1337,7 +1338,7 @@ So that **un même code produise l'app unifiée Bref Point (FUS-FR33)**.
 
 **Given** `keevo/mobile` (pnpm workspaces : `apps/merchant`, `packages/{core,data,ui,i18n,…}`)
 **When** `eas build --profile production` est lancé
-**Then** un binaire `com.brefpoint.app` (nom, icônes et thème Bref Point) est produit ; un canal EAS Update distinct reste réservé à l'ancienne app Bref (pré-migrateur 24.11)
+**Then** un binaire `com.brefpoint.app` (nom, icônes et thème Bref Point) est produit ; un canal EAS Update distinct reste réservé à l'ancienne app Bref *(11/11/2026, ADR-10 : plus de pré-migrateur OTA ; le canal sert seulement, après la bascule, à demander la mise à jour dans l'ancienne app si besoin)*
 
 **Given** la CI
 **When** une PR est ouverte
@@ -1742,6 +1743,8 @@ So that **chaque type de commerce a l'accueil qui lui convient (FUS-FR17)**.
 
 ### Story 23.11 : Routage double backend et mode legacy (ADR-09)
 
+> **11/11/2026 (ADR-10, bascule unique) :** `api-bref /v1/auth/me/migration` (24.1) n'existe plus et il n'y a plus d'owner « pas encore migré » après la bascule. À revoir dans la spec de 23.11 : l'app publiée le jour de la bascule pointe sur Keevo seul ; le routage double et le mode legacy ne servent que si l'app est publiée avant la bascule (sinon la story se réduit à l'écran « Votre application a été mise à jour »).
+
 As a **owner Bref pas encore migré qui a reçu la mise à jour**,
 I want **comprendre ce qui se passe et consulter mes factures**,
 So that **la mise à jour ne me bloque pas (FUS-FR37, FUS-UX4)**.
@@ -1769,38 +1772,20 @@ So that **les owners migrés la reçoivent comme une mise à jour**.
 **Acceptance Criteria:**
 
 **Given** l'ADR-09 (publication précoce, mode legacy)
-**When** la build `production` est publiée (Play et App Store) dès le début des vagues
-**Then** elle passe la revue Apple (achats intégrés RevenueCat inchangés, connexion Apple présente), la version minimale de l'ancienne app n'est pas encore relevée, et le canal EAS Update de l'ancienne app reste dédié au pré-migrateur (24.11)
+**When** la build `production` est publiée (Play et App Store) le jour de la bascule (ADR-10, 11/11/2026 ; précédemment « dès le début des vagues »)
+**Then** elle passe la revue Apple (achats intégrés RevenueCat inchangés, connexion Apple présente), la version minimale de l'ancienne app n'est pas encore relevée, et le canal EAS Update de l'ancienne app reste disponible (le pré-migrateur 24.11 est retiré, ADR-10)
 
 ---
 
-## Epic 24 : Migration Bref par vagues (P1c + P4)
+## Epic 24 : Migration Bref par bascule unique (P1c + P4)
 
-> Stories 24.1 à 24.10 = **outil** (P1c, en recouvrement de P1b, validé par dry-run). Stories 24.11 à 24.16 = **exécution** (P4). Ordre d'import et contrôles : §10 de l'analyse. Évolutions demandées à api-bref par la fusion : 24.1 et 24.11 ; les autres correctifs Bref continuent et sont suivis par 18.3.
+> **Décision du 11/11/2026 (owner produit, ADR-10, Annexe D) — bascule unique (big bang) au lieu des vagues.** Le jour de la mise en ligne (avec la nouvelle app React Native) : on arrête Bref, on fait un dump de sa base, on le restaure dans une base à part (lecture seule pour l'outil), **une seule commande importe tous les owners** (source `DATABASE` de 24.2) avec réconciliation au franc près et rapport, puis l'app RN pointe sur Keevo. En cas de problème avant la décision « go », on rallume Bref : rien n'y a été modifié.
+>
+> Stories 24.2 à 24.10 = **outil** (P1c, en recouvrement de P1b). 24.12 = **répétition générale** sur une copie de la prod Bref (mesure de la durée de coupure) ; 24.13 = **runbook** et communication. La bascule elle-même est l'exécution de 24.9 le jour du go-live. **Retirées le 11/11/2026** (clés gardées dans `sprint-status.yaml`) : 24.1 (gel et export côté api-bref), 24.11 (pré-migrateur OTA), 24.14, 24.15, 24.16 (vagues). Aucune évolution d'api-bref n'est demandée par la fusion ; les correctifs Bref continuent et sont suivis par 18.3. Ordre d'import et contrôles : §10 de l'analyse.
 
-### Story 24.1 : api-bref — statut de migration, gel et export d'un owner
+### Story 24.1 : api-bref — statut de migration, gel et export d'un owner *(retirée le 11/11/2026)*
 
-As a **outil de migration**,
-I want **geler un owner, exporter toutes ses données et publier son statut**,
-So that **l'import part d'un instantané figé et l'app sait où en est l'owner (FUS-MIG4)**.
-
-**Acceptance Criteria:**
-
-**Given** la colonne `user.migration_status ∈ {none, scheduled, frozen, migrated}` (+ `scheduled_at`, `migrated_at`)
-**When** l'owner est `frozen`
-**Then** toute écriture de l'owner et de ses membres (HTTP, mutations rejouées) renvoie 423 `ACCOUNT_MIGRATING` via un guard global, les lectures restent autorisées, et `unfreeze` rétablit l'état précédent
-
-**Given** `GET /v1/admin/migration/owners/:id/export` (superadmin, streaming JSON, checksum)
-**When** il est appelé sur un owner gelé
-**Then** il sérialise user, shops, membres, customers, products, invoices (+items, +payments), expenses, subscriptions, plan payment requests, usage counters, account credit, Apple transactions, WhatsApp (compte, modèles, campagnes, messages), conversations IA, notifications ; il refuse un owner non gelé
-
-**Given** `GET /v1/auth/me` et `GET /v1/auth/me/migration`
-**When** l'app les appelle
-**Then** ils exposent `{status, scheduledAt, redirectBundle, minVersion}`
-
-**Given** un owner `migrated`
-**When** il tente de se connecter sur api-bref
-**Then** la connexion est refusée avec `ACCOUNT_MIGRATED` et le lien store
+> **Retirée (ADR-10, bascule unique).** Plus de gel par owner (Bref est arrêté entier pendant la coupure), plus d'export par owner (l'outil lit le dump restauré, source `DATABASE` de 24.2), plus de statut de migration dans api-bref ni de refus de connexion `ACCOUNT_MIGRATED` (après la bascule, api-bref reste arrêté). La source `EXPORT` (contrat `keevo/contracts/bref-export.json`) reste utilisable pour les tests et pour importer un owner isolé, sans producteur côté api-bref. Aucun élément n'était routé vers cette story.
 
 ### Story 24.2 : Module `migration` — lots, correspondances, identité, boutiques, membres
 
@@ -1932,136 +1917,127 @@ So that **aucun owner n'est activé avec des données fausses (FUS-MIG3)**.
 **Given** les contrôles du §10.3 (compteurs par table après fusions expliquées, Σ ventes non annulées par boutique et par mois, Σ encaissé, Σ dépenses, impayés, échantillon de 20 documents champ à champ, abonnement/crédit, 5 liens publics)
 **When** la réconciliation s'exécute
 **Then** elle produit un rapport JSON + page dashboard ; tout écart hors tolérance met l'owner en état `RECONCILIATION_FAILED` et empêche l'activation
+*(11/11/2026, ADR-10 : l'activation est globale (24.9) ; un owner en écart non documenté par la répétition 24.12 bloque la décision « go ».)*
 
-### Story 24.9 : Pilotage des vagues dans le dashboard et rollback
+### Story 24.9 : Commande de bascule — import de tous les owners, réconciliation, activation globale, rapport
+
+> **Réécrite le 11/11/2026 (ADR-10).** Précédemment « Pilotage des vagues dans le dashboard et rollback ».
 
 As a **super-admin**,
-I want **planifier, exécuter, suivre et annuler une vague**,
-So that **la migration est maîtrisée et observable (FUS-MIG5, MIG10, FUS-NFR10)**.
+I want **importer en une commande tous les owners d'une base Bref restaurée, vérifier, puis activer tout le monde ou tout annuler**,
+So that **la bascule se fait en une coupure, est observable et réversible jusqu'à la décision « go » (FUS-MIG1, MIG3, MIG5, MIG10, FUS-NFR10)**.
 
 **Acceptance Criteria:**
 
-**Given** une vague (liste d'owners signée)
-**When** elle est lancée
-**Then** chaque owner passe par planifié → gelé → exporté → importé → réconcilié → activé, avec durée par étape, métriques et logs corrélés `migrationBatchId`
+**Given** une base Bref restaurée depuis le dump pris après l'arrêt de Bref (source `DATABASE`, utilisateur en lecture seule)
+**When** le super-admin lance la commande de bascule
+**Then** tous les owners de la base sont listés (keyset, aucun chargement complet en mémoire), chacun est importé par le pipeline de 24.2–24.7 dans son propre lot (une erreur sur un owner n'arrête pas les autres), puis réconcilié (24.8) ; la commande est relançable : un owner déjà importé est sans effet ou complété (FUS-MIG1)
 
-**Given** un owner non encore activé
-**When** le super-admin demande un rollback
-**Then** `TenantDeletionService.deleteNow` supprime le tenant importé (schéma, memberships, comptes créés pour l'occasion uniquement, pas les comptes liés), `migration_records` est purgé pour cet owner, et api-bref est dégelé
+**Given** la fin de la commande
+**When** le rapport est produit
+**Then** il donne, sans donnée technique visible (pas d'UUID ni de code brut), le nombre d'owners importés, réconciliés, en écart et bloqués avec leur motif en français, les compteurs et sommes par table, les anomalies, et la durée par étape et totale ; il est archivé et consultable dans le dashboard (FUS-MIG10), avec métriques et logs corrélés `migrationBatchId` (FUS-NFR10)
 
-**Given** l'activation
+**Given** tous les owners réconciliés sans écart ou avec un écart documenté et décidé lors de la répétition générale (24.12)
+**When** le super-admin confirme l'activation globale (décision « go »)
+**Then** toutes les entreprises importées passent ACTIVE et leur trace de suspension est effacée en une opération ensembliste ; sinon l'activation est refusée avec la liste des owners en cause (FUS-MIG3)
+
+**Given** une bascule non encore confirmée
+**When** le super-admin demande le retour arrière
+**Then** toutes les entreprises importées sont supprimées (`TenantDeletionService.deleteNow`), avec les seuls comptes dont un `migration_records` (cible `users`) prouve la création par l'import, puis leurs `migration_records` et `migration_batches` ; le runbook (24.13) rallume Bref, qui n'a pas été modifié (FUS-MIG5)
+
+**Given** l'activation globale
 **When** elle est confirmée
-**Then** api-bref passe l'owner `migrated`, le tenant passe ACTIVE, et un WhatsApp/SMS de confirmation avec le lien store est envoyé
+**Then** aucun message n'est envoyé un par un par l'outil : l'annonce « Bref Point est à jour » part par la campagne plateforme (21.6) selon le runbook
 
 **Éléments routés depuis 24.2 (2026-11-11) :**
-- [ ] [Deferred-from: 24.2, 2026-11-11] Activation et retour arrière d'une entreprise importée [keevo/backend/src/main/java/com/keevo/migration/application/step/ProfileStep.java `SUSPENSION_REASON`, V81] — 24.2 crée l'entreprise `SUSPENDED` (motif « Migration Bref en cours — activation en attente », sans événement ni message) : l'activation la passe `ACTIVE` et efface la trace de suspension ; le retour arrière supprime l'entreprise (`TenantDeletionService.deleteNow`), les seuls comptes dont un `migration_records` (cible `users`) prouve la création par l'import, puis les `migration_records` et `migration_batches` de l'owner (pas de cascade : les records référencent le lot qui les a créés).
-- [ ] [Deferred-from: 24.2, 2026-11-11] Pilotage des lots [keevo/backend/src/main/java/com/keevo/migration/adapter/in/rest/AdminBrefMigrationController.java] — 24.2 expose seulement l'import d'un owner et la lecture d'un lot ; 24.9 ajoute la liste des lots (keyset sur `idx_migration_batches_started`), le téléchargement de l'export api-bref (24.1) vers `keevo.migration.bref.export-dir` avec son SHA-256 (en-tête `X-Bref-Export-Sha256`), et l'enchaînement gel → export → import → réconciliation → activation.
+- [ ] [Deferred-from: 24.2, 2026-11-11] Activation et retour arrière d'une entreprise importée [keevo/backend/src/main/java/com/keevo/migration/application/step/ProfileStep.java `SUSPENSION_REASON`, V81] — 24.2 crée l'entreprise `SUSPENDED` (motif « Migration Bref en cours — activation en attente », sans événement ni message) : l'activation la passe `ACTIVE` et efface la trace de suspension ; le retour arrière supprime l'entreprise (`TenantDeletionService.deleteNow`), les seuls comptes dont un `migration_records` (cible `users`) prouve la création par l'import, puis les `migration_records` et `migration_batches` de l'owner (pas de cascade : les records référencent le lot qui les a créés). *(11/11/2026 : appliqué à toutes les entreprises de la bascule à la fois, ADR-10.)*
+- [ ] [Deferred-from: 24.2, 2026-11-11] Pilotage des lots [keevo/backend/src/main/java/com/keevo/migration/adapter/in/rest/AdminBrefMigrationController.java] — 24.2 expose seulement l'import d'un owner et la lecture d'un lot ; 24.9 ajoute la liste des lots (keyset sur `idx_migration_batches_started`) et la commande de bascule qui enchaîne import → réconciliation → activation globale pour tous les owners de la base restaurée. *(11/11/2026, ADR-10 : le téléchargement de l'export api-bref (24.1) et son en-tête `X-Bref-Export-Sha256` sont abandonnés avec 24.1 ; la source de la bascule est la base restaurée.)*
 
-### Story 24.10 : Continuité externe — liens publics et webhooks
+### Story 24.10 : Redirection des anciens liens publics Bref vers Keevo
+
+> **Réécrite le 11/11/2026 (ADR-10).** Précédemment « Continuité externe — liens publics et webhooks ». Plus de routeur de webhooks à double livraison : après la bascule, RevenueCat, MyCoolPay et Meta (webhook WhatsApp) sont reconfigurés vers Keevo pendant la coupure — **action utilisateur inscrite au runbook 24.13**.
 
 As a **client final / owner**,
-I want **que mes liens, paiements et messages WhatsApp continuent de fonctionner pendant la migration**,
-So that **rien ne casse côté extérieur (FUS-MIG9)**.
+I want **que les liens de factures et devis Bref déjà envoyés continuent de s'ouvrir après la bascule**,
+So that **rien ne casse côté extérieur (FUS-MIG9, FUS-FR23)**.
 
 **Acceptance Criteria:**
 
-**Given** un lien public Bref d'un owner migré
-**When** il est ouvert
-**Then** api-bref (ou le reverse proxy) répond 302 vers la page publique Keevo qui résout `legacy_public_token` ; les liens des non-migrés sont inchangés
+**Given** un lien public Bref (domaine et chemins de l'ancienne API, `publicToken`)
+**When** il est ouvert après la bascule (api-bref arrêté)
+**Then** le reverse proxy du domaine Bref répond 301/302 vers la page publique Keevo, qui résout `legacy_public_token` (24.4) et affiche le document ; un jeton inconnu donne la page « lien introuvable » de Keevo, sans détail technique
 
-**Given** le routeur de webhooks (RevenueCat, MyCoolPay, Meta) devant les deux backends
-**When** un événement arrive
-**Then** il est livré aux deux, chacun ignore les owners qu'il ne connaît pas, et aucun événement n'est perdu si l'un des deux est indisponible (file de relivraison)
+**Given** la liste des chemins publics de l'ancienne API (factures, devis, reçus, PDF)
+**When** la redirection est configurée
+**Then** chaque chemin est couvert par un test (au moins 5 liens réels de la répétition 24.12 : 302 → 200), et la configuration du proxy est versionnée avec le runbook
 
-### Story 24.11 : Pré-migrateur OTA dans l'app Bref actuelle
+### Story 24.11 : Pré-migrateur OTA dans l'app Bref actuelle *(retirée le 11/11/2026)*
 
-As a **owner Bref**,
-I want **être prévenu et que mon appareil soit prêt avant ma migration**,
-So that **mes ventes en attente ne se perdent pas (FUS-MIG6, R8)**.
+> **Retirée (ADR-10, bascule unique).** Plus de gel par owner à préparer ni de comptage de mutations en attente. Le risque résiduel des mutations locales non synchronisées avant l'arrêt (FUS-MIG6, R8) est traité par la communication et la fenêtre d'annonce du runbook (24.13). Aucun élément n'était routé vers cette story.
 
-**Acceptance Criteria:**
+### Story 24.12 : Répétition générale sur une copie de la prod Bref (durée de coupure)
 
-**Given** une mise à jour EAS Update sur le canal `production` de l'app Bref actuelle
-**When** elle est appliquée
-**Then** l'app affiche la bannière de migration (date si planifiée), force `syncAll()` puis `resumePausedMutations()`, signale au serveur le nombre de mutations en attente, et liste les lignes locales sans équivalent serveur
-
-**Given** un owner planifié avec des mutations en attente sur un appareil
-**When** le gel est demandé (24.9)
-**Then** le gel est refusé pour cet owner et le motif est visible dans le dashboard et dans l'app
-
-**Given** un owner `migrated`
-**When** il ouvre l'ancienne app
-**Then** il voit « Votre compte a été migré, mettez à jour l'application » avec le lien store
-
-### Story 24.12 : Dry-run complet sur copie de production
+> **Réécrite le 11/11/2026 (ADR-10).** Précédemment « Dry-run complet sur copie de production ».
 
 As a **responsable de la fusion**,
-I want **importer 100 % des owners d'une copie de prod Bref sur staging**,
-So that **les vagues réelles ne découvrent aucun cas nouveau**.
+I want **jouer la bascule entière sur une copie de la prod Bref et chronométrer la coupure**,
+So that **le jour J ne découvre aucun cas nouveau et la durée annoncée est fiable**.
 
 **Acceptance Criteria:**
 
-**Given** une copie anonymisée ou protégée de la base api-bref et le staging Keevo
-**When** tous les owners sont importés et réconciliés
-**Then** 100 % sont réconciliés sans écart ou ont un cas documenté (et une décision), la durée moyenne par owner est < 60 s, le temps total d'une vague de 100 owners est mesuré, et le rapport est archivé dans `research/fusion-mesures/`
+**Given** un dump de la prod Bref (protégé, jamais versionné) restauré dans une base à part, et le staging Keevo
+**When** la commande de bascule (24.9) est jouée en suivant le runbook (24.13) pas à pas
+**Then** 100 % des owners sont réconciliés sans écart ou ont un cas documenté (et une décision), et chaque étape est chronométrée : arrêt de Bref, dump, transfert, restauration, import, réconciliation, activation, reconfiguration des webhooks, redirection des liens ; la durée totale de coupure et la durée moyenne par owner sont consignées dans un rapport archivé dans `research/fusion-mesures/` (sans donnée personnelle)
 
-**Given** un deuxième dry-run une semaine plus tard
-**When** il est relancé sur une copie fraîche
-**Then** les résultats sont identiques (idempotence et stabilité)
+**Given** le retour arrière (24.9)
+**When** il est joué à la fin de la répétition
+**Then** le staging revient à son état initial (aucune entreprise importée, aucun compte créé par l'import) et sa durée est mesurée
 
-### Story 24.13 : Runbook et communication
+**Given** une deuxième répétition sur un dump frais
+**When** elle est relancée
+**Then** les résultats sont identiques (idempotence et stabilité) et la durée de coupure est confirmée
+
+### Story 24.13 : Runbook de la bascule et communication
+
+> **Réécrite le 11/11/2026 (ADR-10).** Précédemment « Runbook et communication » (par vague).
 
 As a **exploitant / support**,
-I want **un runbook de vague et des messages prêts**,
-So that **chaque vague se déroule pareil et les owners savent quoi faire**.
+I want **un runbook de la bascule et des messages prêts**,
+So that **la coupure se déroule comme répétée et les owners savent quoi faire**.
 
 **Acceptance Criteria:**
 
-**Given** le runbook (J-3 notification, J0 gel/import/réconciliation/activation, J+1 vérification, critères d'arrêt, rollback, contacts)
-**When** il est relu sur le dry-run
-**Then** chaque étape est exécutable telle qu'écrite ; les messages WhatsApp/SMS/email (annonce, rappel, confirmation, incident) existent en fr et en
+**Given** le runbook (J-7 et J-1 annonce de l'heure d'arrêt et consigne « ouvrez l'app connectée avant l'arrêt pour envoyer vos ventes en attente » ; J0 arrêt de Bref, dump, restauration, commande de bascule, réconciliation, décision go / no-go avec critères écrits, activation globale, publication de l'app RN 23.12 ; J+1 et J+7 vérifications ; retour arrière = rallumer Bref ; contacts)
+**When** il est relu sur la répétition générale (24.12)
+**Then** chaque étape est exécutable telle qu'écrite et chronométrée
 
-### Story 24.14 : Vagues pilotes
+**Given** les intégrations externes
+**When** la bascule est confirmée
+**Then** le runbook liste les **actions utilisateur** : webhooks RevenueCat, MyCoolPay et Meta (WhatsApp Cloud) repointés vers Keevo, configuration du proxy de redirection des liens publics (24.10), vérification d'un événement de test de chaque fournisseur ; et leur retour en arrière si on rallume Bref
 
-As a **responsable de la fusion**,
-I want **migrer 3 à 5 owners volontaires et les accompagner**,
-So that **le procédé est validé sur de vrais commerçants avant d'élargir**.
+**Given** les messages WhatsApp/SMS/email (annonce, rappel, « c'est fait », incident)
+**When** ils sont préparés
+**Then** ils existent en fr et en et partent par les campagnes plateforme (21.6)
 
-**Acceptance Criteria:**
+### Story 24.14 : Vagues pilotes *(retirée le 11/11/2026)*
 
-**Given** 3 à 5 owners volontaires (mix free/payant, Android/iOS si possible)
-**When** ils sont migrés
-**Then** chacun est contacté après sa première connexion, ses retours sont consignés, aucun écart de données n'est constaté à J+7, et la décision « go » pour les vagues suivantes est écrite
+> **Retirée (ADR-10, bascule unique).** La validation sur données réelles passe par la répétition générale (24.12) et les tests utilisateurs (22.18). Aucun élément n'était routé vers cette story.
 
-### Story 24.15 : Vagues de masse (2 à 6)
+### Story 24.15 : Vagues de masse (2 à 6) *(retirée le 11/11/2026)*
 
-As a **responsable de la fusion**,
-I want **migrer les owners par groupes de risque croissant**,
-So that **les incidents arrivent quand ils coûtent le moins**.
+> **Retirée (ADR-10, bascule unique).** Les collisions d'identité (ancienne vague 6) sont traitées par 24.7 avant la bascule : chaque cas est résolu ou décidé lors de la répétition 24.12. Les abonnements Apple (ancienne vague 5) sont vérifiés en sandbox par 21.2 avant le go-live. Aucun élément n'était routé vers cette story.
 
-**Acceptance Criteria:**
+### Story 24.16 : Retardataires et gel global *(retirée le 11/11/2026)*
 
-**Given** l'ordre (2) free inactifs > 60 j, (3) free actifs, (4) payants Mobile Money, (5) payants Apple — après validation sandbox de 21.2 —, (6) collisions (24.7)
-**When** chaque vague est exécutée
-**Then** son rapport est archivé, le taux d'échec de réconciliation est < 1 % (les échecs repassent individuellement), et aucune vague ne démarre tant que la précédente a un incident ouvert de sévérité haute
-
-### Story 24.16 : Retardataires et gel global
-
-As a **responsable de la fusion**,
-I want **traiter les owners qui ne se sont jamais reconnectés**,
-So that **api-bref peut être arrêté (R7)**.
-
-**Acceptance Criteria:**
-
-**Given** les owners restants après la vague 6
-**When** la date de gel global annoncée arrive
-**Then** ils sont migrés sans interaction (mêmes contrôles), reçoivent un message avec le lien store, et l'ancienne app affiche l'écran « compte migré » ; à la fin, api-bref ne compte plus aucun owner `none`/`scheduled`
+> **Retirée (ADR-10, bascule unique).** Il n'y a plus de retardataires : tous les owners sont importés le jour de la bascule. L'ancienne app reçoit au besoin un message « mettez à jour l'application » (versions minimales 19.10). Aucun élément n'était routé vers cette story.
 
 ---
 
 ## Epic 25 : Convergence et décommissionnement (P5)
 
 ### Story 25.1 : api-bref en lecture seule puis arrêt
+
+> **11/11/2026 (ADR-10) :** api-bref est arrêté dès la bascule (24.9) ; cette story ne fait plus que l'arrêt définitif (sauvegarde finale, page de migration, redirections permanentes) après le jalon G5.
 
 As a **exploitant**,
 I want **arrêter api-bref proprement**,
@@ -2074,6 +2050,8 @@ So that **on ne maintient plus deux backends**.
 **Then** une sauvegarde finale chiffrée est archivée (durée de conservation légale décidée), `api.brefpoint.app` renvoie une page de migration (410/301), et les redirections de liens publics sont servies par le reverse proxy de façon permanente
 
 ### Story 25.2 : Webhooks et intégrations sur Keevo seul
+
+> **11/11/2026 (ADR-10) :** sans objet — il n'y a plus de routeur transitoire ; les webhooks sont repointés vers Keevo pendant la bascule (runbook 24.13). À clore sans travail au moment de l'epic 25.
 
 As a **exploitant**,
 I want **pointer RevenueCat, MyCoolPay et Meta directement sur Keevo**,
@@ -2119,7 +2097,7 @@ So that **la documentation reflète le système réel**.
 
 **Acceptance Criteria:**
 
-**Given** les rapports de vagues et les incidents
+**Given** le rapport de bascule et les incidents
 **When** `bmad-retrospective` est exécuté sur les epics 18–25
 **Then** `architecture.md`, le PRD et les contrats sont à jour, et les écarts restants sont versés au backlog
 
@@ -2131,28 +2109,29 @@ So that **la documentation reflète le système réel**.
 |---|---|---|---|
 | **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus (la refonte n'a plus à être en prod : décision du 03/11/2026) — **ouvert le 03/11/2026** (ADR-01 à 09 ; mesures `research/fusion-mesures/rapport-mesures-2026-11-03-fusion.md`, source Bref retenue par l'utilisateur) | on ne démarre pas P1 |
 | **G1** fin P1b | après 20.12, 20.13 et l'epic 21 | **toutes** les fonctionnalités Bref répliquées dans l'API Keevo (parcours Bref vert, API super-admin héritée), suite Flutter verte, charge 19.11 tenue | corriger avant P3 / avant l'outil |
-| **GL** go-live de la refonte | après G1, 22.13, 23.11 et 24.12 | tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et dry-run 100 % réconcilié sur copie de prod (24.1–24.10, 24.12) ; puis 17.9 (régression multi-surface : parcours Keevo et Bref, app Flutter V1 et app RN) | **pas de mise en production de la refonte** (16.7) |
+| **GL** go-live de la refonte | après G1, 22.13, 23.11 et 24.12 | tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et répétition générale 100 % réconciliée sur copie de prod (24.2–24.10, 24.12), runbook 24.13 relu ; puis 17.9 (régression multi-surface : parcours Keevo et Bref, app Flutter V1 et app RN) | **pas de mise en production de la refonte** (16.7) |
 | **G2** fin bêta P2 | 22.15 palier 10 % | zéro perte de donnée, crash-free ≥ 99,5 %, quarantaine < 0,5 % des opérations | rester à 10 %, corriger |
-| **G3** avant vagues | après 24.12 et 23.12 | dry-run 100 % réconcilié, app Bref unifiée publiée, runbook relu | pas de vague |
-| **G4** après pilotes | 24.14 | aucun écart à J+7, retours pilotes traités | pas de vague de masse |
-| **G5** avant arrêt api-bref | 25.1 | zéro owner actif, 4 semaines sans écriture | prolonger la lecture seule |
+| **G3** décision « go » de la bascule (ADR-10) | jour J, après la commande 24.9 | tous les owners réconciliés (ou écart décidé en 24.12), critères du runbook 24.13 remplis, app RN prête à publier (23.12) | rallumer Bref, supprimer les entreprises importées (24.9) |
+| **G4** J+7 après la bascule | 24.13 (vérification J+7) | aucun écart de données signalé, webhooks et liens vérifiés | corriger sur Keevo (Bref n'est plus rallumable sans perte) |
+| **G5** avant arrêt définitif d'api-bref | 25.1 | 4 semaines après la bascule sans incident (ADR-10 : api-bref est déjà arrêté depuis la bascule) | garder le dump et le serveur Bref en réserve |
 
 ## Risques suivis (renvoi vers les stories)
 
 | Risque (§11) | Stories qui le traitent |
 |---|---|
 | R1 volume de tenants | 18.1, 19.11 |
-| R2 collisions d'identité | 18.1, 19.6, 24.7, vague 6 de 24.15 |
+| R2 collisions d'identité | 18.1, 19.6, 24.7 (cas résolus avant la bascule, répétition 24.12) |
 | R3 factures incohérentes | 18.1 (Q7, Q13), 24.4, 24.8 |
 | R4 reporting multi-source | 20.9, 20.12 |
 | R5 qualité de l'app RN | 22.4–22.7, 22.13, G2 |
-| R6 abonnements Apple | 21.2, 24.10, vague 5 |
-| R7 retardataires | 19.10, 24.11, 24.16 |
-| R8 mutations locales Bref | 24.11 |
+| R6 abonnements Apple | 21.2 (sandbox avant le go-live), 24.5, runbook 24.13 (webhook RevenueCat repointé) |
+| R7 retardataires | sans objet depuis la bascule unique (ADR-10) ; 19.10 (versions minimales) pour l'ancienne app |
+| R8 mutations locales Bref | 24.13 (annonce et consigne avant l'arrêt) — risque résiduel accepté (ADR-10) |
 | R9 crédits et packs | 21.3, 24.5, 24.8 |
 | R10 secrets | 19.9, 21.5, 24.6 |
 | R11 identité de l'app Keevo | 18.4 |
 | R12 charge solo | ordonnancement, jalons G0–G5 ; 18.3 (suivi des évolutions Bref, sans gel) |
+| R13 coupure unique (ADR-10) | 24.12 (durée mesurée), 24.13 (go / no-go, retour arrière = rallumer Bref) |
 
 ## Annexe C — Décisions du gate P0 (story 18.2, session du 03/11/2026)
 
@@ -2176,6 +2155,18 @@ So that **la documentation reflète le système réel**.
 - ADR-08 : 20.6 (dérivation depuis un document) cherche le client par téléphone **dans l'établissement courant**.
 
 
+## Annexe D — ADR-10 : bascule unique au lieu des vagues (11/11/2026)
+
+> Décision de l'owner produit du 11/11/2026, prise après la livraison de 24.2 (source `DATABASE` disponible).
+
+| | |
+|---|---|
+| **Contexte** | Le plan initial (D6, §9 de l'analyse) migrait les owners Bref un par un, par vagues, avec gel par owner dans api-bref (24.1), pré-migrateur OTA dans l'ancienne app (24.11), routeur de webhooks à double livraison (24.10) et trois stories d'exécution (24.14–24.16). Les mesures 18.1 montrent une base Bref de petite taille ; 24.2 sait lire directement une base Bref restaurée. |
+| **Décision** | **Bascule unique (big bang)** le jour de la mise en ligne, avec la nouvelle app React Native : arrêt de Bref → dump de sa base → restauration dans une base à part (lecture seule pour l'outil) → **une seule commande importe tous les owners** (source `DATABASE`) avec réconciliation au franc près et rapport → décision « go » → activation globale, app RN pointée sur Keevo. En cas de problème avant le « go » : on rallume Bref (rien n'y est modifié) et on supprime les entreprises importées. |
+| **Conséquences** | 24.1, 24.11, 24.14, 24.15, 24.16 **retirées** (clés gardées dans `sprint-status.yaml`, statut `backlog` + commentaire daté, aucun élément routé à re-router). 24.9 → commande de bascule ; 24.10 → redirection des anciens liens publics (plus de routeur de webhooks : RevenueCat, MyCoolPay et Meta sont reconfigurés vers Keevo, action utilisateur du runbook) ; 24.12 → répétition générale avec mesure de la durée de coupure ; 24.13 → runbook de la bascule et communication. 24.2–24.8 gardées. Révisées : D6, FUS-MIG1, MIG3–MIG6, MIG9, MIG10, FUS-NFR7, NFR10, jalons GL/G3/G4/G5, point de non-retour, risques R2, R6–R8 (+ R13), notes sur 18.3, 21.1, 22.1, 23.11, 23.12. Aucune évolution d'api-bref n'est plus demandée. |
+| **Risques acceptés** | Une coupure globale de Bref (durée mesurée en 24.12, annoncée en 24.13) ; les mutations locales non synchronisées avant l'arrêt (consigne de synchronisation dans l'annonce) ; après la décision « go », rallumer Bref perdrait les écritures faites sur Keevo. |
+| **Recommandation précédente** | Migration par vagues (analyse §9, D6) — abandonnée. |
+
 ## Annexe A — Bloc de suivi dans `sprint-status.yaml`
 
 > **Ajouté au `sprint-status.yaml` le 2026-11-01** (entre l'epic 17 et la piste V1). Ce bloc reste ici comme référence ; la source de vérité des statuts est `sprint-status.yaml`. Ne pas créer de fichier de story 19+ avant le gate G0.
@@ -2183,7 +2174,7 @@ So that **la documentation reflète le système réel**.
 ```yaml
   # ─────────────────────────────────────────────────────────
   # FUSION KEEVO × BREF POINT — epics-fusion-keevo-bref.md
-  # Ordre (03/11/2026) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.11 → 24.1–24.10, 24.12) = GL → go-live refonte (17-9, 16-7) → stores, OTA, vagues (22.14–22.16, 23.12, 24.11, 24.13–24.16) → 25
+  # Ordre (03/11/2026, révisé 11/11 ADR-10) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.11 → 24.2–24.10, 24.12, 24.13) = GL → go-live refonte (17-9, 16-7) = bascule unique Bref (24.9, 23.12) → 22.14–22.16 → 25
   # ─────────────────────────────────────────────────────────
   epic-18: backlog  # P0 Cadrage
   18-1-mesures-bases-bref-keevo: backlog
@@ -2269,8 +2260,8 @@ So that **la documentation reflète le système réel**.
   23-12-publication-identite-bref: backlog
   epic-23-retrospective: optional
 
-  epic-24: backlog  # P1c outil + P4 vagues
-  24-1-api-bref-statut-gel-export: backlog
+  epic-24: backlog  # P1c outil + P4 bascule unique (ADR-10, 11/11/2026)
+  24-1-api-bref-statut-gel-export: backlog  # 2026-11-11 retirée : bascule unique
   24-2-migration-identite-boutiques-membres: backlog
   24-3-import-produits-clients: backlog
   24-4-import-documents-paiements-depenses: backlog
@@ -2278,14 +2269,14 @@ So that **la documentation reflète le système réel**.
   24-6-import-annexes-index-portail: backlog
   24-7-bridge-identite-collisions: backlog
   24-8-reconciliation-bloquante: backlog
-  24-9-pilotage-vagues-rollback: backlog
-  24-10-liens-publics-webhooks: backlog
-  24-11-pre-migrateur-ota: backlog
-  24-12-dry-run-copie-prod: backlog
-  24-13-runbook-communication: backlog
-  24-14-vagues-pilotes: backlog
-  24-15-vagues-de-masse: backlog
-  24-16-retardataires-gel-global: backlog
+  24-9-pilotage-vagues-rollback: backlog  # 2026-11-11 réécrite : commande de bascule (tous les owners, réconciliation, activation globale, rapport)
+  24-10-liens-publics-webhooks: backlog  # 2026-11-11 réécrite : redirection des anciens liens publics Bref
+  24-11-pre-migrateur-ota: backlog  # 2026-11-11 retirée : bascule unique
+  24-12-dry-run-copie-prod: backlog  # 2026-11-11 réécrite : répétition générale, durée de coupure
+  24-13-runbook-communication: backlog  # 2026-11-11 réécrite : runbook de la bascule
+  24-14-vagues-pilotes: backlog  # 2026-11-11 retirée : bascule unique
+  24-15-vagues-de-masse: backlog  # 2026-11-11 retirée : bascule unique
+  24-16-retardataires-gel-global: backlog  # 2026-11-11 retirée : bascule unique
   epic-24-retrospective: optional
 
   epic-25: backlog  # P5 Convergence

@@ -239,6 +239,8 @@ Format : identifiant, exigence (même sens que les epics), puis contexte / lien 
 
 ## 7. Exigences de migration
 
+> **Révision du 11/11/2026 (ADR-10, `epics-fusion-keevo-bref.md` Annexe D) : bascule unique au lieu des vagues.** Le jour du go-live (avec l'app React Native) : arrêt de Bref, dump restauré à part, une commande importe tous les owners avec réconciliation et rapport, puis activation globale ; retour arrière = rallumer Bref jusqu'à la décision « go ». Les mentions de vagues, de gel par owner (FUS-MIG4), de pré-migrateur OTA (24.11), de routeur de webhooks et des stories 24.1, 24.14–24.16 ci-dessous sont remplacées par cette décision ; les exigences révisées font foi dans le document d'epics.
+
 Principe (D6) : double piste. **Piste Keevo** : aucune donnée à migrer, seulement un changement d'app (APK → Bref Point). **Piste Bref** : un owner à la fois, gel → export → import idempotent → réconciliation bloquante → activation ; api-bref sert les non-migrés. Ordre des vagues : pilotes volontaires (3–5), free inactifs > 60 j, free actifs, payants Mobile Money, payants Apple (après validation sandbox), collisions d'identité, retardataires (gel global).
 
 - **FUS-MIG1** — Un owner Bref est migré seul, de façon idempotente : rejouer son import est sans effet ou complète ce qui manque.
