@@ -20,7 +20,8 @@ import java.util.UUID;
  * indexed access: the hash lookup on {@code uq_mcp_access_tokens_hash} (joined to {@code tenants} by primary key for the
  * schema), the owner's list / count on {@code idx_mcp_access_tokens_owner}, the purge on
  * {@code idx_mcp_access_tokens_expires_at}. The company is resolved from its schema name in the statement (unique index
- * on {@code tenants.schema_name}).
+ * on {@code tenants.schema_name}). Exception: the nightly {@link #purgeDead()} scans the whole (small: ≤ 10 live tokens
+ * per owner and company) table with one probe per row on the memberships' unique {@code (user_id, tenant_id)} index.
  */
 @Repository
 public class JdbcMcpAccessTokenRepository implements McpAccessTokenRepository {
@@ -55,7 +56,8 @@ public class JdbcMcpAccessTokenRepository implements McpAccessTokenRepository {
 
     @Override
     public List<McpAccessToken> list(String schema, UUID userId) {
-        // tokens cut by the owner's tokens_valid_after are dead: left out (deleted by the next creation)
+        // tokens cut by the owner's tokens_valid_after are dead: left out (deleted by the next creation or the nightly
+        // purgeDead)
         return jdbc.query("SELECT " + COLUMNS + " FROM public.mcp_access_tokens k "
                         + "JOIN public.tenants t ON t.id = k.tenant_id "
                         + "LEFT JOIN public.user_tenant_memberships m ON m.tenant_id = t.id AND m.user_id = k.user_id "
@@ -120,6 +122,15 @@ public class JdbcMcpAccessTokenRepository implements McpAccessTokenRepository {
     @Override
     public int purgeExpiredBefore(Instant cutoff) {
         return jdbc.update("DELETE FROM public.mcp_access_tokens WHERE expires_at < ?", Timestamp.from(cutoff));
+    }
+
+    @Override
+    public int purgeDead() {
+        // anti-join: one probe per token on the unique (user_id, tenant_id) index of the memberships
+        return jdbc.update("DELETE FROM public.mcp_access_tokens k WHERE NOT EXISTS (SELECT 1 FROM "
+                + "public.user_tenant_memberships m WHERE m.user_id = k.user_id AND m.tenant_id = k.tenant_id "
+                + "AND m.role = 'OWNER' AND m.is_active "
+                + "AND (m.tokens_valid_after IS NULL OR k.created_at >= m.tokens_valid_after))");
     }
 
     private static McpAccessToken token(ResultSet rs) throws SQLException {

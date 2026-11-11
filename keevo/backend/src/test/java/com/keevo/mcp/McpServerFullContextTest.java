@@ -3,6 +3,8 @@ package com.keevo.mcp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.application.service.TenantFactory;
+import com.keevo.identity.employee.domain.port.in.RemoveEmployeeUseCase;
+import com.keevo.mcp.token.domain.model.McpTokenSecrets;
 import com.keevo.mcp.token.application.service.McpToolLabels;
 import com.keevo.mcp.token.application.service.McpTokenPurgeJob;
 import com.keevo.shared.ai.AiToolDescriptor;
@@ -68,6 +70,7 @@ class McpServerFullContextTest extends FullContextIntegrationTest {
     @Autowired AccessStateService accessStates;
     @Autowired AiToolRegistry registry;
     @Autowired McpTokenPurgeJob purgeJob;
+    @Autowired RemoveEmployeeUseCase removeEmployee;
 
     record Member(UUID user, String schema, String jwt) {
     }
@@ -189,6 +192,13 @@ class McpServerFullContextTest extends FullContextIntegrationTest {
         return jdbc.queryForList("SELECT c.tool || ':' || c.outcome FROM public.ai_tool_calls c JOIN public.tenants t "
                 + "ON t.id = c.tenant_id WHERE t.schema_name = ? AND c.channel = 'MCP' ORDER BY c.called_at, c.id",
                 String.class, tenant);
+    }
+
+    /** Runs the nightly purge now: its ShedLock keeps the lock one minute at least (DB time in UTC), released first. */
+    private void purgeNow() {
+        jdbc.update("UPDATE public.shedlock SET lock_until = now() - interval '1 day' WHERE name = "
+                + "'mcpTokenPurgeJob.purge'");
+        purgeJob.purge();
     }
 
     private void disableModule(String tenant) {
@@ -423,6 +433,8 @@ class McpServerFullContextTest extends FullContextIntegrationTest {
                 owner.user());
         accessStates.invalidateUser(owner.user());
         assertThat(body(mcp(token, "ping", null), 401).path("domainCode").asText()).isEqualTo("MCP_TOKEN_INVALID");
+        // the owner signs in again (a session opened before the cutoff is revoked too: no second-boundary flake)
+        owner = new Member(owner.user(), schema, TestAccess.token(jdbc, jwtTokenProvider, owner.user(), schema, "OWNER"));
         // the cut token no longer looks active nor uses the cap: removed when the owner lists
         assertThat(body(rest(owner, HttpMethod.GET, MCP + "/tokens", null), 200).path("data")).isEmpty();
         // a token created after the cutoff works
@@ -631,9 +643,146 @@ class McpServerFullContextTest extends FullContextIntegrationTest {
                 + "interval '33 days' WHERE id = ?", ids.get(0));
         jdbc.update("UPDATE public.mcp_access_tokens SET created_at = now() - interval '20 days', expires_at = now() - "
                 + "interval '13 days' WHERE id = ?", ids.get(1));
-        purgeJob.purge();
+        purgeNow();
         assertThat(jdbc.queryForList("SELECT id FROM public.mcp_access_tokens WHERE tenant_id = (SELECT id FROM "
                 + "public.tenants WHERE schema_name = ?)", UUID.class, schema))
                 .containsExactlyInAnyOrder(ids.get(1), ids.get(2));
+    }
+
+    // ── co-owners (reprise 2026-11-11) ───────────────────────────────────────────────────────────────────
+
+    private List<String> tokenIdsOf(Member m) {
+        return jdbc.queryForList("SELECT id::text FROM public.mcp_access_tokens WHERE user_id = ? AND tenant_id = "
+                + "(SELECT id FROM public.tenants WHERE schema_name = ?)", String.class, m.user(), m.schema());
+    }
+
+    @Test
+    @DisplayName("co-owners: each owner manages their own accesses only; the co-owner's MCP calls are served, audited "
+            + "with their id and the token, counted on the company; the cap is per person")
+    void coOwners() throws Exception {
+        Member coOwner = owner(schema);
+        JsonNode mine = createToken(owner, List.of("list_stores"), null);
+        String ownerToken = mine.path("token").asText();
+        String ownerTokenId = mine.path("accessToken").path("id").asText();
+        JsonNode theirs = createToken(coOwner, List.of("list_stores", "revenue_summary"), 30);
+        String coToken = theirs.path("token").asText();
+        String coTokenId = theirs.path("accessToken").path("id").asText();
+
+        // each one lists their own accesses only
+        JsonNode ownerList = body(rest(owner, HttpMethod.GET, MCP + "/tokens", null), 200).path("data");
+        assertThat(ownerList.findValuesAsText("id")).containsExactly(ownerTokenId);
+        JsonNode coList = body(rest(coOwner, HttpMethod.GET, MCP + "/tokens", null), 200).path("data");
+        assertThat(coList.findValuesAsText("id")).containsExactly(coTokenId);
+
+        // nobody revokes another owner's access (answer of an unknown id), which keeps working
+        assertThat(body(rest(coOwner, HttpMethod.DELETE, MCP + "/tokens/" + ownerTokenId, null), 404)
+                .path("domainCode").asText()).isEqualTo("MCP_TOKEN_NOT_FOUND");
+        assertThat(body(rest(owner, HttpMethod.DELETE, MCP + "/tokens/" + coTokenId, null), 404)
+                .path("domainCode").asText()).isEqualTo("MCP_TOKEN_NOT_FOUND");
+        body(mcp(ownerToken, "ping", null), 200);
+
+        // the co-owner's client: its scope, served, audited with the co-owner and the token, one company credit
+        JsonNode listed = body(mcp(coToken, "tools/list", null), 200).path("result").path("tools");
+        assertThat(listed.findValuesAsText("name")).containsExactlyInAnyOrder("list_stores", "revenue_summary");
+        long before = aiUsedToday(schema);
+        assertThat(call(coToken, "list_stores", Map.of()).path("isError").asBoolean()).isFalse();
+        assertThat(aiUsedToday(schema)).isEqualTo(before + 1);
+        Map<String, Object> audit = jdbc.queryForMap("SELECT c.actor_id::text AS actor, c.access_token_id::text AS "
+                + "token FROM public.ai_tool_calls c JOIN public.tenants t ON t.id = c.tenant_id WHERE t.schema_name = ? "
+                + "AND c.channel = 'MCP' AND c.access_token_id = ?::uuid AND c.tool = 'list_stores'", schema, coTokenId);
+        assertThat(audit).containsEntry("actor", coOwner.user().toString()).containsEntry("token", coTokenId);
+        assertThat(jdbc.queryForObject("SELECT user_id::text FROM \"" + schema + "\".audit_log WHERE action = "
+                + "'MCP_TOKEN_CREATED' AND entity_id = ?::uuid", String.class, coTokenId))
+                .isEqualTo(coOwner.user().toString());
+
+        // the cap of 10 live accesses is per person: the owner full, the co-owner still creates
+        for (int i = 0; i < 9; i++) {
+            createToken(owner, List.of("list_stores"), null);
+        }
+        body(rest(owner, HttpMethod.POST, MCP + "/tokens", Map.of("name", "x", "tools", List.of("list_stores"))), 409);
+        createToken(coOwner, List.of("list_stores"), null);
+
+        // the co-owner revokes their own access: refused at once, the owner's untouched
+        body(rest(coOwner, HttpMethod.DELETE, MCP + "/tokens/" + coTokenId, null), 204);
+        assertThat(body(mcp(coToken, "ping", null), 401).path("domainCode").asText()).isEqualTo("MCP_TOKEN_INVALID");
+        body(mcp(ownerToken, "ping", null), 200);
+    }
+
+    @Test
+    @DisplayName("co-owner leaving: demoted → their accesses refused at once; the nightly purge deletes them and keeps "
+            + "the owner's; the removal leaves none")
+    void coOwnerLeaves() throws Exception {
+        Member coOwner = owner(schema);
+        UUID store = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores ORDER BY created_at LIMIT 1",
+                UUID.class);
+        jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
+                + "password_change_required) VALUES (?, ?, 'Awa', 'Ngono', false)", coOwner.user(), store);
+        UUID coOwnerEmployee = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".employees WHERE user_id = ?",
+                UUID.class, coOwner.user());
+        String ownerToken = createToken(owner, List.of("list_stores"), null).path("token").asText();
+        String coToken = createToken(coOwner, List.of("list_stores"), null).path("token").asText();
+        createToken(coOwner, List.of("list_stores"), 7);
+        body(mcp(coToken, "ping", null), 200);
+
+        // the owner demotes the co-owner (real flow: revocation cutoff + role) → refused at once
+        body(rest(owner, HttpMethod.PATCH, "/api/v1/employees/" + coOwnerEmployee + "/role",
+                Map.of("role", "MANAGER")), 200);
+        assertThat(body(mcp(coToken, "ping", null), 401).path("domainCode").asText()).isEqualTo("MCP_TOKEN_INVALID");
+        body(mcp(ownerToken, "ping", null), 200);
+        assertThat(tokenIdsOf(coOwner)).hasSize(2);
+
+        // the nightly purge deletes the dead accesses, keeps the owner's live one
+        purgeNow();
+        assertThat(tokenIdsOf(coOwner)).isEmpty();
+        assertThat(tokenIdsOf(owner)).hasSize(1);
+        body(mcp(ownerToken, "ping", null), 200);
+
+        // a row left behind (purge not run yet) disappears with the removal of the former co-owner
+        jdbc.update("INSERT INTO public.mcp_access_tokens (id, tenant_id, user_id, name, token_hash, hint, tools, "
+                + "created_at, expires_at) SELECT gen_random_uuid(), t.id, ?, 'Reste', ?, 'abcd', ARRAY['list_stores'], "
+                + "now(), now() + interval '7 days' FROM public.tenants t WHERE t.schema_name = ?", coOwner.user(),
+                McpTokenSecrets.hash(McpTokenSecrets.generate()), schema);
+        TenantContext.setCurrentTenant(schema);
+        try {
+            removeEmployee.execute(owner.user(), coOwnerEmployee);
+        } finally {
+            TenantContext.clear();
+        }
+        assertThat(tokenIdsOf(coOwner)).isEmpty();
+        assertThat(tokenIdsOf(owner)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("nightly purge: a deactivated co-owner's accesses and the accesses cut by a revocation are deleted, "
+            + "live ones kept")
+    void purgeDeadTokens() throws Exception {
+        Member coOwner = owner(schema);
+        createToken(coOwner, List.of("list_stores"), null);
+        String cut = createToken(owner, List.of("list_stores"), null).path("accessToken").path("id").asText();
+        jdbc.update("UPDATE public.user_tenant_memberships SET is_active = false WHERE user_id = ?", coOwner.user());
+        purgeNow();
+        assertThat(tokenIdsOf(coOwner)).isEmpty();
+        assertThat(tokenIdsOf(owner)).containsExactly(cut);
+
+        // a role change alone (no cutoff moved, e.g. a membership upsert): the former owner's access is deleted too
+        Member formerOwner = owner(schema);
+        createToken(formerOwner, List.of("list_stores"), null);
+        jdbc.update("UPDATE public.user_tenant_memberships SET role = 'MANAGER' WHERE user_id = ? AND tenant_id = "
+                + "(SELECT id FROM public.tenants WHERE schema_name = ?)", formerOwner.user(), schema);
+        purgeNow();
+        assertThat(tokenIdsOf(formerOwner)).isEmpty();
+        assertThat(tokenIdsOf(owner)).containsExactly(cut);
+
+        // the owner's access created before a revocation cutoff (the owner's own session stays valid: cutoff past)
+        jdbc.update("UPDATE public.mcp_access_tokens SET created_at = now() - interval '2 hours' WHERE id = ?::uuid",
+                cut);
+        jdbc.update("UPDATE public.user_tenant_memberships SET tokens_valid_after = now() - interval '1 hour' WHERE "
+                + "user_id = ?", owner.user());
+        accessStates.invalidateUser(owner.user());
+        purgeNow();
+        assertThat(tokenIdsOf(owner)).isEmpty();
+        String fresh = createToken(owner, List.of("list_stores"), null).path("accessToken").path("id").asText();
+        purgeNow();
+        assertThat(tokenIdsOf(owner)).containsExactly(fresh);
     }
 }

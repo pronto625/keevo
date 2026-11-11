@@ -47,4 +47,13 @@ public interface McpAccessTokenRepository {
 
     /** Deletes the tokens expired before {@code cutoff}; returns how many. */
     int purgeExpiredBefore(Instant cutoff);
+
+    /**
+     * 21.9 reprise 2026-11-11 (co-owners) — deletes the tokens of a holder who is no longer an owner: no longer has an
+     * active {@code OWNER} membership in the token's company (demoted or deactivated co-owner, membership removed), or
+     * a revocation cutoff ({@code tokens_valid_after}, only ever moved forward) came after the token's creation.
+     * A deleted company's tokens are not its concern (refused by the filter, removed with the company). Returns how
+     * many.
+     */
+    int purgeDead();
 }

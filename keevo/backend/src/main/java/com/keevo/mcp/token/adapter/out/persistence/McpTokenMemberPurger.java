@@ -9,9 +9,12 @@ import java.util.UUID;
 
 /**
  * Story 16.6 (RGPD, reprise 2026-11-10) — a member removed from a company loses the MCP personal access tokens they
- * hold for it (token name, user id). Tokens are created by owners and an owner cannot be removed, so this only matters
- * for a former owner whose role changed before the removal; one set-based delete on
- * {@code idx_mcp_access_tokens_owner (tenant_id, user_id, …)}.
+ * hold for it (token name, user id); one set-based delete on {@code idx_mcp_access_tokens_owner (tenant_id, user_id, …)}.
+ *
+ * <p>21.9 reprise 2026-11-11 — every owner of a company, co-owners included, holds tokens. An owner cannot be removed
+ * (20.13), even deactivated: a leaving co-owner is demoted first, which already kills the tokens
+ * ({@code tokens_valid_after}); the removal then deletes whatever {@code McpTokenPurgeJob} has not swept yet. A
+ * co-owner only deactivated (never removed) loses the rows through that nightly purge.
  */
 @Component
 public class McpTokenMemberPurger implements MemberDataPurger {

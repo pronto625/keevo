@@ -30,7 +30,9 @@ import java.util.UUID;
 
 /**
  * Story 21.9 — « Accès IA externe »: the owner's personal access tokens of the MCP server ({@code POST /api/v1/mcp}).
- * Owner only. Module {@code mcp-access}: the tool list (READ) and the creation (WRITE); the token list and the
+ * Owner only — every OWNER of the company, co-owners included (21.9 reprise 2026-11-11), each managing their own
+ * tokens only: another owner's token is never listed and its revocation answers 404 like an unknown id. Module
+ * {@code mcp-access}: the tool list (READ) and the creation (WRITE); the token list and the
  * revocation stay open to the owner whatever the plan. The clear token is returned once, by the creation; the list
  * never carries it.
  */

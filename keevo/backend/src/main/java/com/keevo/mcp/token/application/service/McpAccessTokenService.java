@@ -28,6 +28,9 @@ import java.util.stream.Collectors;
 /**
  * Story 21.9 — the owner's personal access tokens of the MCP server: create (shown once), list, revoke.
  *
+ * <p>Reprise 2026-11-11 — « owner » is any OWNER membership of the company (co-owners included, 19.6): every method is
+ * keyed by (company, person), so a co-owner never sees nor revokes another owner's token, and the cap is per person.
+ *
  * <p>A token never grants more than its owner: its tools are chosen among the tools the owner's session may call now
  * ({@link AiToolRegistry#allowedTools()}), and every MCP request intersects them again with the owner's live rights.
  * Bounds: {@value #MAX_TOKENS} tokens per owner and company, name 1–{@value #MAX_NAME} characters, 1–{@value #MAX_TOOLS}
