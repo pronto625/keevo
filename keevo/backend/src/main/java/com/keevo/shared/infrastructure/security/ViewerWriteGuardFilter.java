@@ -29,7 +29,7 @@ import java.util.Set;
  * here and refused operation by operation ({@code REJECTED/FORBIDDEN}) by the push service.
  *
  * <p>Registered in {@link SecurityConfig} right after {@link JwtAuthFilter} (not a bean: never a second servlet
- * filter). Cost O(1) per request: a method check, then — for a VIEWER write only — a match against a constant list of 18.
+ * filter). Cost O(1) per request: a method check, then — for a VIEWER write only — a match against a constant list of 21.
  */
 public class ViewerWriteGuardFilter extends OncePerRequestFilter {
 
@@ -50,6 +50,10 @@ public class ViewerWriteGuardFilter extends OncePerRequestFilter {
             new AllowedWrite("POST", "/api/v1/auth/change-password"),
             new AllowedWrite("DELETE", "/api/v1/auth/sessions"),
             new AllowedWrite("DELETE", "/api/v1/auth/sessions/{sessionId}"),
+            // Story 19.3b — the viewer's own Google / Apple links
+            new AllowedWrite("POST", "/api/v1/auth/social/accounts/google"),
+            new AllowedWrite("POST", "/api/v1/auth/social/accounts/apple"),
+            new AllowedWrite("DELETE", "/api/v1/auth/social/accounts/{provider}"),
             new AllowedWrite("POST", "/api/v1/devices/token"),
             new AllowedWrite("DELETE", "/api/v1/devices/token"),
             new AllowedWrite("POST", "/api/v1/web-push/subscribe"),

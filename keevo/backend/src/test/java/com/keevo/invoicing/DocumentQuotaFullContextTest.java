@@ -395,7 +395,8 @@ class DocumentQuotaFullContextTest extends FullContextIntegrationTest {
                     + "/" + (q.path("remaining").isNull() ? "-" : q.path("remaining").asText()));
         }
         assertThat(rows).containsExactly("DOCUMENTS/MONTH/-/1/-", "SMS/MONTH/80/0/80", "EMAILS/MONTH/-/0/-",
-                "AI_CREDITS/MONTH/-/0/-", "AI_CREDITS/DAY/50/0/50");
+                "AI_CREDITS/MONTH/-/0/-", "AI_CREDITS/DAY/50/0/50",
+                "WHATSAPP_MESSAGES/MONTH/-/0/-");
         assertThat(me.path("quotas").get(0).path("resetAt").asText()).isNotBlank();
         assertThat(me.path("quotas").get(4).path("metricLabel").asText()).isEqualTo("Crédits IA");
         assertThat(me.path("quotas").get(4).path("periodLabel").asText()).isEqualTo("par jour");

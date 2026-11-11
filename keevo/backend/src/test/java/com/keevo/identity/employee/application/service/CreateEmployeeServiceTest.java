@@ -186,7 +186,7 @@ class CreateEmployeeServiceTest {
     void managerAndViewer_countInTheCeiling(String role) {
         Subscription freeSub = mock(Subscription.class);
         when(freeSub.getPlanType()).thenReturn(PlanType.FREE);
-        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
+        org.mockito.Mockito.lenient().when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(1, 0));
