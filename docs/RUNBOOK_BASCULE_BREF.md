@@ -5,10 +5,14 @@
 > J0 pas à pas (§6), owner en écart (§7), retour arrière (§8), contrôles J+1 (§9) et J+7 (§10), messages fr / en (§11),
 > contacts (§12), actions utilisateur (§13), fiche de chronométrage (§14). Story **24.13**.
 >
-> **Durées.** Les durées données ici sont des **estimations** tirées des mesures de 24.9 (§3.4 : ≈ 6,8 s par owner au
-> parallélisme 4, poste de développement). La durée de coupure **annoncée** se fixe seulement après la répétition
-> générale **24.12** sur une copie de la prod Bref (qui attend un dump de prod fourni par l'utilisateur) : tant que la
-> fiche §14 n'est pas remplie par 24.12, ce runbook n'est **pas validé pour la production**.
+> **Durées.** Mesurées par la répétition générale **24.12** (11/11/2026) sur la copie de la prod Bref fournie par
+> l'utilisateur (dump du 03/11 : **1 owner**, 1 boutique, 19 documents), runbook J0 joué tel qu'écrit deux fois (« go »,
+> puis retour arrière) et une fois de plus après le retour arrière, plus une montée en charge synthétique (202 owners) :
+> fiche §14 remplie, §0.2 et §3.4 à jour. Les étapes faites à la main (arrêt d'api-bref, `scp`, webhooks, proxy,
+> stores, campagnes) restent des estimations : elles n'existent pas sur le poste de répétition — l'annonce repose donc
+> sur ≈ 50 s de machine mesurées et ≈ 40 min de gestes estimés. Le runbook est **exécutable tel qu'écrit** pour toutes
+> les étapes base / API / backend ; restent à faire avant J0 les actions utilisateur du §13 (webhooks, Apple, stores,
+> modèles Meta) et, si Bref a changé (§4.4), un nouveau passage §6.2–6.10 sur un dump récent.
 >
 > **Rien n'est appliqué automatiquement.** Chaque étape marquée **[UTILISATEUR]** se fait à la main, sur un serveur ou
 > dans le tableau de bord d'un fournisseur. Aucun message ne part tout seul : chaque campagne est créée en brouillon,
@@ -40,23 +44,36 @@
 | J+1 | Contrôles du lendemain | équipe | 9 |
 | J+7 | Jalon G4, nettoyage (copie, dumps, rôle, clés temporaires) | équipe, utilisateur | 10 |
 
-### 0.2 Durée de coupure (estimation à confirmer par 24.12)
+### 0.2 Durée de coupure (mesurée par 24.12)
 
-`N` = nombre d'owners Bref (compté par 24.12 : `SELECT count(*) FROM "user" WHERE role = 'owner'` sur la copie).
+`N` = nombre d'owners Bref (`SELECT count(*) FROM "user" WHERE role = 'owner'` sur la copie) : **N = 1** sur la copie
+de prod du 03/11 (1 boutique, 19 documents, 3 membres). Mesures machine = poste de répétition (base et backend sur la
+même machine) ; « à prévoir » = durée à compter le jour J, gestes humains compris.
 
-| Étape J0 | Estimation | Source |
+| Étape J0 | Mesuré (24.12, copie de prod) | À prévoir le jour J |
 |---|---|---|
-| Arrêt d'api-bref (6.1) | 1 min | — |
-| Dump (6.2) | 2–10 min | base « de petite taille » (mesures 18.1) ; mesuré par 24.12 |
-| Transfert vers le serveur Keevo (6.3) | 1–5 min | dépend de la taille du dump |
-| Restauration + index + `ANALYZE` (6.4–6.5) | 5–15 min | mesuré par 24.12 |
-| Rôle, réglage et redémarrage du backend (6.6–6.7) | 5–10 min | redémarrage ≈ 1–2 min |
-| Commande de bascule (6.8) | `N × 6,8 s ÷ 4` + owner le plus lourd (≤ 30 s) : 200 owners ≈ 6 min, 1 000 ≈ 29 min | 24.9 §3.4 |
-| Lecture du rapport, cas, décision (6.10–6.13) | 15–45 min | — |
-| « go » (6.14) | < 1 min (5 ms mesurés) | 24.9 |
-| Redirection des liens + contrôles (6.15) | 10–15 min | 24.10 |
-| **Total jusqu'au « go »** | ≈ **1 h 30 + durée de la commande** | à confirmer |
-| Retour arrière complet (§8) | ≈ 0,2 s par owner + 15 min (webhooks, proxy, Bref rallumé) | 24.9 (34 s pour 202 owners) |
+| Arrêt d'api-bref (6.1) | — (pas d'api-bref sur le poste) | 1 min |
+| Dump (6.2) | 0,2 s (96 Ko, `-Fc -Z 6`) | 1 min (commande tapée) |
+| Transfert vers le serveur Keevo (6.3) | < 0,1 s (copie locale + `sha256sum -c`) | 1 min (`scp` de 96 Ko) |
+| Restauration + index + `ANALYZE` (6.4–6.5) | 1,8–2,4 s | 2 min |
+| Rôle, réglage et redémarrage du backend (6.6–6.7) | 0,2 s + 33 s (démarrage du backend) | 3 min |
+| Commande de bascule (6.8) | 5 s côté serveur (owner réel : 4,8–4,9 s), 10 s au suivi toutes les 10 s | 1 min ; au-delà : `N × 3 s` (§3.4) |
+| Webhooks repointés + tests (6.9, en parallèle de 6.8) | — (action fournisseurs) | **15 min : chemin critique** |
+| Lecture du rapport, cas, décision (6.10–6.13) | 0,1 s (lecture automatisée) ; rien à traiter | 15 min |
+| « go » (6.14) | 0,08 s | 1 min |
+| **Total jusqu'au « go »** | **≈ 50 s de machine** | **≈ 40 min** (6.1 → 6.14) |
+| Redirection des liens + contrôles (6.15, après le « go ») | 0,2 s (aucun lien public dans la copie, §1.5) | 10 min |
+| Publication de l'app (6.16) | — | 5 min + propagation des stores (minutes à heures) |
+| Retour arrière complet (§8) | 0,2 s côté serveur (10 s au suivi) ; 202 owners : 32,6 s | 15 min (webhooks, proxy, Bref rallumé) |
+
+**Durée de coupure annoncée** : règle ci-dessous 2 × 40 min + 15 min = 1 h 35, arrondie à 2 h, plus 1 h pour la
+propagation de l'app dans les stores (6.16), qui ne dépend pas de nous : annoncer un **retour au plus tard 3 h après
+l'arrêt** (`<DATE_RETOUR>` = arrêt + 3 h). **Heure limite de décision** = retour − (retour arrière 15 min + 30 min) =
+**arrêt + 2 h 15** ; un retour arrière lancé à cette heure finit avant `<DATE_RETOUR>`.
+
+Pendant la commande de bascule, les créations et suppressions d'entreprise de Keevo (inscriptions, suppressions
+programmées) attendent leur tour derrière le verrou des DDL (§3.1 point 4) : quelques secondes avec la prod Bref
+(1 owner), jusqu'à la durée de la commande dans le pire cas.
 
 Règle de fenêtre : **fenêtre annoncée ≥ 2 × (total estimé jusqu'au « go ») + durée du retour arrière**, de nuit ou au
 moment le plus creux mesuré par 24.12. Exemple de forme (pas une date) : arrêt `<JOUR> à <HEURE_ARRET>`, retour au plus
@@ -113,8 +130,9 @@ jamais à un message envoyé à un owner.
   il n'est pas redirigé.
 - Ni l'app Bref (`bref` `develop`) ni les messages d'api-bref (facture WhatsApp/e-mail : PDF joint +
   `https://brefpoint.app/download`) n'écrivent ce lien : il a pu être partagé par le tableau de bord web Bref
-  (`admin.brefpoint.app`, dépôt non présent ici) ou copié à la main. Le volume réel est donc probablement faible ;
-  la répétition 24.12 le mesure (`SELECT count(*) FROM public.invoice_legacy_links` côté Keevo).
+  (`admin.brefpoint.app`, dépôt non présent ici) ou copié à la main. Mesuré par la répétition 24.12 : **aucun** lien
+  dans la copie de prod du 03/11 (`invoice."publicToken"` vide sur les 19 documents, alors que `publicTokenExpiresAt`
+  est rempli) → `public.invoice_legacy_links` vide après l'import.
 
 ### 1.2 Ce que fait Keevo (code livré par 24.10)
 
@@ -174,6 +192,10 @@ Garder **302** jusqu'à la story 25.1 (retrait définitif d'api-bref) : un 301 e
 et continuerait d'envoyer vers Keevo après un retour arrière.
 
 ### 1.5 [UTILISATEUR] Contrôles (5 liens réels, comme la réconciliation 24.8)
+
+Si la première requête ne rend **aucun jeton** (cas de la copie de prod du 03/11, §1.1), la boucle ne fait rien : seuls
+les deux derniers contrôles (jeton inconnu → 404, sous-chemin `count` non redirigé) s'appliquent ; la chaîne 302 → 200
+reste prouvée par les tests de 24.10.
 
 ```bash
 # Sur la base Keevo (lecture seule) : 5 jetons importés encore valides, d'entreprises actives
@@ -274,11 +296,16 @@ par fournisseur.
 3. Créer un rôle en lecture seule (`GRANT SELECT` sur le schéma `public`, `default_transaction_read_only = on`, §6.6) et
    le donner au backend (§6.7) : `KEEVO_MIGRATION_BREF_JDBC_URL`, `…_USERNAME`, `…_PASSWORD` (optionnel :
    `keevo.migration.bref.jdbc.pool-size`, 8 par défaut — jamais en dessous du parallélisme choisi).
-4. Parallélisme : chaque owner en cours tient une connexion de la base Keevo ; garder au moins 2 connexions libres
-   (`spring.datasource.hikari.maximum-pool-size` ≥ parallélisme + 2 ; 10 par défaut → parallélisme 4 conseillé).
-   Au parallélisme 4, des créations d'entreprises simultanées ont rencontré des interblocages PostgreSQL dans les
-   scripts de modules (repris automatiquement par l'étape « modules » de 24.6, réconciliation restée verte) : 24.12
-   mesure 4 puis 8 sur la copie de prod avant de fixer la valeur.
+4. Parallélisme : **4** (fixé par 24.12), avec `SPRING_DATASOURCE_HIKARI_MAXIMUMPOOLSIZE=12` (§6.7). Depuis 24.12 les
+   créations de schémas d'entreprise passent l'une après l'autre (verrou unique des DDL, `TenantDdlLock` : il supprime
+   les interblocages PostgreSQL vus en 24.9) ; chaque owner en attente de ce verrou tient **2** connexions de la base
+   Keevo. Mesuré : au parallélisme 8 avec 12 connexions, la réserve s'épuise (« Connection is not available ») et
+   14 owners sur 202 finissent « Import en échec » (repris par une relance), pour une commande 2 fois plus longue ; le
+   parallélisme 8 n'apporte rien puisque la création des schémas est sérielle. **L'API refuse désormais plus de 4**
+   (422 « Le nombre de comptes importés en même temps va de 1 à 4 »). Règle : `maximum-pool-size` ≥ 2 × parallélisme
+   + 4. Connexions totales mesurées au parallélisme 4 : ≤ 21 vers la base Keevo (réserve principale 12 + réserve des
+   scripts de modules, `keevo.tenant-schema.upgrade-parallelism` + 1 = 5, + divers) et ≤ 4 du rôle en lecture seule :
+   vérifier `SHOW max_connections` (100 par défaut) moins les autres clients du serveur.
 
 ### 3.2 Lancer, suivre, décider (API super-admin, écran « Bascule » du tableau de bord)
 
@@ -337,9 +364,30 @@ fait » créées en brouillon par lots de 10 puis supprimées, aucun envoi.
 
 Lecture : le coût est surtout **fixe par owner** (création de l'entreprise et de son schéma, provisionnement des
 modules : ≈ 6,5 s), le volume de documents ajoute ≈ 1 s par 1 000 documents ; la réconciliation pèse ≈ 1 % (≈ 90 ms
-par owner). Extrapolation à vérifier par 24.12 : durée ≈ owners × 6,8 s ÷ parallélisme + owner le plus lourd, soit
-pour 1 000 owners ≈ 29 min au parallélisme 4 (≈ 15–20 min au parallélisme 8 si la base de prod le supporte). 24.12
-mesure sur la copie de prod (nombre réel d'owners, parallélisme 4 puis 8) et fixe la fenêtre de coupure annoncée.
+par owner). Ces chiffres de 24.9 sont **avant** le verrou des DDL de 24.12 (30 provisionnements de modules y avaient
+échoué sur interblocage, puis été repris).
+
+**Mesures de 24.12 (11/11/2026, même poste).** Copie de prod du 03/11 (1 owner) : commande 5,0 s côté serveur (owner
+4,8–4,9 s, réconciliation 0,1 s), trois exécutions identiques (rapports égaux hors durées) ; retour arrière 0,19 s ;
+état de Keevo identique à l'état initial (seuls changent les connexions du super-admin et l'historique des bascules).
+Montée en charge (copie de prod + `bref-synthetic-load.sql`, 202 owners, 25 006 documents), verrou des DDL en place :
+
+| Essai | Parallélisme / connexions Keevo | Durée de la commande | Moyenne / owner | p95 | Owner le plus lourd | Échecs | Interblocages PostgreSQL |
+|---|---|---|---|---|---|---|---|
+| 3 | 4 / 12 | 600,1 s | 11,8 s | 16,5 s | 29,7 s (20 000 documents) | 0 | 0 |
+| 4 | 8 / 12 | 1 234,2 s | 48,7 s | 125,7 s | 335,6 s | 14 (réserve de connexions épuisée) ; relance 45,8 s → 1 restant | 0 |
+
+Retour arrière des 202 owners (essai 4) : 32,6 s, plus aucun schéma ni compte importé.
+
+Lecture : la création des schémas d'entreprise est désormais sérielle (≈ 3 s de travail verrouillé par owner sur ce
+poste) : le débit plafonne à ≈ 0,34 owner/s quel que soit le parallélisme, et le temps par owner croît avec le nombre
+d'entreprises déjà créées (≈ 9,5 s pour les 40 premiers, ≈ 13 s au-delà de 80 : les scripts socles relisent le
+catalogue de toute la base, coût qui croît avec le nombre de schémas). Extrapolation : ≈ `N × 3 s` pour de petits `N`
+(+ owner le plus lourd), soit **1 owner ≈ 5 s** (la prod Bref du 03/11), 200 owners ≈ 10 min ; au-delà la croissance
+n'est pas linéaire (1 000 owners : **au moins** 1 h, à mesurer avant de l'annoncer). Sans objet pour la prod Bref
+actuelle.
+Le plus gros owner reste très loin des 30 min de reprise d'un coordinateur (et le coordinateur bat toutes les minutes
+pendant qu'il attend ses owners : un owner long ne le fait jamais passer pour arrêté).
 
 ## 4. Préparation (J-10 → J-7)
 
@@ -382,9 +430,11 @@ L'identifiant Apple d'un owner (`sub`) repris par 24.7 n'est valable que pour **
 
 ### 4.4 Répétition générale (24.12) terminée
 
-24.12 joue ce runbook sur une copie de la prod Bref (dump fourni par l'utilisateur) et remplit la fiche §14 : durée de
-chaque étape, durée totale, parallélisme retenu (4 ou 8), owners en écart ou bloqués avec leur cause. Sans cette fiche,
-**pas de date annoncée**. À partir d'elle, fixer :
+**Fait le 11/11/2026** (fiche §14 remplie : parallélisme 4, aucun owner en écart ni bloqué, coupure ≈ 40 min jusqu'au
+« go », retour au plus tard 3 h après l'arrêt, §0.2). Le responsable de la bascule fait rejouer §6.2–6.10 sur un dump
+récent avant d'annoncer la date si Bref compte plus de 10 owners, plus de 1 000 documents, ou un changement de schéma
+relevé par le journal 18.3 depuis le 03/11. À partir de la fiche,
+fixer :
 
 - `<DATE_ARRET>` (jour et heure de l'arrêt) et `<DATE_RETOUR>` (heure limite de retour, §0.2) ;
 - l'heure limite de décision ;
@@ -510,7 +560,14 @@ docker exec keevo_postgres psql -U "$POSTGRES_USER" -d bref_bascule -Atc \
 ```
 
 Attendu : `pg_restore` sans erreur (un avertissement sur une extension déjà présente est sans effet) ; `N` cohérent avec
-la répétition.
+la répétition (N = 1 sur la copie du 03/11). Mesuré par 24.12 : 1,4–2,0 s pour la copie de prod ; 16 s pour supprimer
+puis recréer une copie gonflée de 202 owners (le `DROP DATABASE` d'une copie précédente compte).
+
+Dump fourni en **SQL texte** (`.sql` ou `.sql.gz`, comme celui du 03/11) au lieu du format `-Fc` du §6.2 : `pg_restore`
+le refuse ; le restaurer avec `gunzip -c <dump>.sql.gz | docker exec -i keevo_postgres psql -U "$POSTGRES_USER" -d
+bref_bascule -q`. Un dump de pg_dump 16.10 ou plus commence par `\restrict` : il faut un `psql` 16.10 ou plus (celui du
+conteneur `postgres:16` à jour convient). Les 35 erreurs `role "postgres" does not exist` (changements de
+propriétaire) sont sans effet ; le format `-Fc` du §6.2 avec `--no-owner` les évite.
 
 ### 6.5 Index d'aide sur la copie
 
@@ -562,10 +619,11 @@ cd ~/keevo && docker compose -f docker-compose.prod.yml up -d backend
 docker logs --tail 50 keevo_backend | grep -E "Started|ERROR"     # attendu : « Started … » sans ERROR
 ```
 
-`POOLSIZE` ≥ parallélisme ; `MAXIMUMPOOLSIZE` ≥ parallélisme + 2 (valeurs pour le parallélisme 4 ou 8 retenu par 24.12).
+`POOLSIZE` ≥ parallélisme ; `MAXIMUMPOOLSIZE` ≥ 2 × parallélisme + 4 (valeurs pour le parallélisme 4 retenu par 24.12 :
+8 et 12, mesurés sans échec ; au parallélisme 8 avec 12 connexions, 14 owners sur 202 ont échoué, §3.4).
 Les logos de boutique sont rapatriés depuis Cloudinary (`LOGO_FETCHENABLED`).
 
-### 6.8 Commande de bascule (`N × 6,8 s ÷ parallélisme` + ≤ 30 s)
+### 6.8 Commande de bascule (`N × 3 s` + owner le plus lourd ; 1 owner : 5 s)
 
 ```bash
 # (poste)
@@ -612,6 +670,12 @@ Le rapport donne : owners par statut et par motif, comptes et sommes Bref / Keev
 dépenses), anomalies Bref conservées et notées, index de la copie, durées. Au-delà de 100 lignes, page suivante avec
 `&after=<position de la dernière ligne>` (2e colonne). Durée : 5–10 min de lecture ; attendu : la liste des owners à
 traiter (souvent vide) et des sommes Bref = Keevo.
+
+« Montant encaissé » additionne les acomptes et les échéances payées de **tous** les documents, annulés compris (règle
+24.8, la même des deux côtés) : il peut dépasser « Ventes non annulées » sans être un écart. C'est le cas sur la copie de
+prod du 03/11 (deux ventes annulées y portent des encaissements). Seule la colonne « écart » compte. Anomalies attendues sur cette copie (aucune ne bloque) :
+« Compteur de consommation d'une période passée : non repris » × 4, « Logo non rapatrié » × 1 (téléchargement désactivé
+en répétition ; `LOGO_FETCHENABLED=true` le jour J).
 
 ### 6.11 Owner « Import bloqué » (cas d'identité non résolu) — 10–30 min par owner
 
@@ -1008,7 +1072,7 @@ variables : `<INFO>`, `<NUMERO_SUPPORT>`).
 
 | # | Action | Quand | Section | Retour arrière |
 |---|---|---|---|---|
-| 1 | Fournir un dump de la prod Bref pour la répétition 24.12 (protégé, jamais versionné) | dès que possible | 4.4 | — |
+| 1 | ~~Fournir un dump de la prod Bref pour la répétition 24.12~~ — fait (dump du 03/11, décision du 11/11/2026) ; fournir un dump récent si Bref a beaucoup changé avant J0 | avant J-7 si besoin | 4.4 | — |
 | 2 | Soumettre les 8 modèles WhatsApp de la bascule à Meta | J-10 | 4.1 | — |
 | 3 | Vérifier l'équipe Apple (Team ID) et le bundle de Bref Point ; `APPLE_BUNDLE_IDS`, `GOOGLE_CLIENT_IDS` | J-10 | 4.2 | — |
 | 4 | Soumettre l'app React Native en publication manuelle ; la publier après le « go » | J-7 / J0 | 4.3, 6.16 | ne pas publier si « no-go » |
@@ -1020,24 +1084,31 @@ variables : `<INFO>`, `<NUMERO_SUPPORT>`).
 
 ## 14. Fiche de chronométrage et de décision (remplie par 24.12, puis le jour J)
 
-| Étape | Répétition 1 (24.12) | Répétition 2 (24.12) | J0 |
+| Étape | Répétition 1 (24.12, 11/11) | Répétition 2 (24.12, 11/11) | J0 |
 |---|---|---|---|
-| Owners `N` / parallélisme retenu | | | |
-| 6.1 arrêt | | | |
-| 6.2 dump (taille) | | | |
-| 6.3 transfert | | | |
-| 6.4–6.5 restauration + index | | | |
-| 6.6–6.7 rôle + backend | | | |
-| 6.8 commande (moyenne / owner, owner le plus lourd) | | | |
-| 6.9 webhooks + tests | | | |
-| 6.10–6.13 rapport, cas, décision | | | |
-| 6.14 « go » | | | |
-| 6.15 liens | | | |
-| **Durée totale de coupure** | | | |
-| 8.1 retour arrière complet | | | |
-| Owners en écart / bloqués (causes, décision) | | | |
-| Équipe Apple identique (oui / non) | | | |
+| Owners `N` / parallélisme retenu | 1 / 4 | 1 / 4 | |
+| 6.1 arrêt | — (pas d'api-bref en répétition ; prévoir 1 min) | — | |
+| 6.2 dump (taille) | 0,16 s (95 815 octets) | 0,16 s (95 815 octets) | |
+| 6.3 transfert | 0,01 s (copie locale + contrôle `sha256sum`) | 0,01 s | |
+| 6.4–6.5 restauration + index | 1,39 s + 0,33 s (index 11 / 11) | 1,85 s + 0,40 s | |
+| 6.6–6.7 rôle + backend | 0,19 s + 33,4 s | 0,20 s + 32,7 s | |
+| 6.8 commande (moyenne / owner, owner le plus lourd) | 10,2 s au suivi ; 5,0 s serveur ; owner 4,9 s | 10,2 s au suivi ; 4,9 s serveur ; owner 4,8 s | |
+| 6.9 webhooks + tests | — (action fournisseurs ; prévoir 15 min) | — | |
+| 6.10–6.13 rapport, cas, décision | 0,1 s ; aucun owner à traiter ; critères 1–4 et 7 vrais (5 webhooks, 6 stores : hors répétition, à cocher à J0) | 0,1 s ; rapport identique à la répétition 1 (hors durées) | |
+| 6.14 « go » | 0,08 s, « Activée », 1 owner « Activé » | — (retour arrière à la place) | |
+| 6.15 liens | 0 lien public dans la copie ; jeton inconnu → 404 « Lien introuvable » | — | |
+| **Durée totale de coupure** | ≈ 50 s de machine ; **≈ 40 min** à prévoir avec les gestes humains (§0.2) | — | |
+| 8.1 retour arrière complet | — | 10,1 s au suivi (0,19 s serveur) ; état de Keevo = état initial | |
+| Owners en écart / bloqués (causes, décision) | aucun (1 / 1 réconcilié ; sommes Bref = Keevo ; « encaissé > ventes » expliqué §6.10) | aucun | |
+| Équipe Apple identique (oui / non) | à vérifier par l'utilisateur (§4.2) | — | |
 | Critères 6.13 cochés (1–7) et signature du responsable | — | — | |
 
-**Statut : en attente de 24.12** (dump de prod à fournir par l'utilisateur). Les colonnes « Répétition » sont remplies
-par 24.12 ; la durée annoncée aux owners est la plus longue mesurée, arrondie à l'heure supérieure, plus la marge du §0.2.
+Contrôles de plus : chiffre d'affaires mensuel du tableau de bord Keevo de l'owner importé = règle de Bref (octobre
+957 777 F, novembre 920 F) ; troisième exécution sur la même copie après le retour arrière → même rapport ; listes
+super-admin parcourues jusqu'au bout avec `after=` (owners par 100 et 50, lots par 50, bascules par 1 : chaque ligne une
+fois, dans l'ordre). Rapport archivé : `_bmad-output/planning-artifacts/research/fusion-mesures/rapport-repetition-bascule-2026-11-11.md`.
+
+**Statut : rempli par 24.12 le 11/11/2026.** La colonne J0 est remplie le jour J ; la durée annoncée aux owners est la
+plus longue mesurée (ici : gestes humains), arrondie à l'heure supérieure, plus la marge du §0.2 (2 h d'arrêt, retour au
+plus tard 3 h après l'arrêt).
+

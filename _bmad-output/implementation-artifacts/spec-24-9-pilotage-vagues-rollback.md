@@ -264,7 +264,7 @@ Lancer une bascule sur la base Bref restaurée, la suivre, lire son rapport arch
 
 ### À utiliser
 
-- `POST /api/v1/admin/migration/cutovers` `{"source":"DATABASE","parallelism":4}` → 202 `data` = bascule. 422 `VALIDATION_FAILED` « La bascule lit une base Bref restaurée… » ou « Le nombre de comptes importés en même temps va de 1 à 8 » ; 409 `INVALID_STATE` « Une bascule est déjà ouverte… » ; 503 `MIGRATION_SOURCE_UNAVAILABLE`.
+- `POST /api/v1/admin/migration/cutovers` `{"source":"DATABASE","parallelism":4}` → 202 `data` = bascule. 422 `VALIDATION_FAILED` « La bascule lit une base Bref restaurée… » ou « Le nombre de comptes importés en même temps va de 1 à 4 » (24.12 : 4 au plus, 8 jusqu’au 11/11) ; 409 `INVALID_STATE` « Une bascule est déjà ouverte… » ; 503 `MIGRATION_SOURCE_UNAVAILABLE`.
 - `GET /api/v1/admin/migration/cutovers?after=<id>&limit=20` → liste, plus récente d'abord.
 - `GET /api/v1/admin/migration/cutovers/{id}` → `status` + `statusLabel` (`RUNNING`, `READY`, `FAILED`, `ACTIVATED`, `ROLLING_BACK`, `ROLLED_BACK`), `errorLabel`, `progress[]` (`status`, `label`, `count`), `acceptedOwners[]` (`ownerId` = poignée, `reason`, `acceptedAt`), `report` : `ownersTotal`, `owners[]`, `reasons[]`, `tables[]` et `sums[]` (`label`, `expected` = Bref, `actual` = Keevo, `difference`), `anomalies[]`, `durations` (ms), `sourceIndexes` (`present`/`expected`), `acceptedOwners`. 404 `MIGRATION_CUTOVER_NOT_FOUND` « Bascule introuvable ».
 - `GET …/cutovers/{id}/owners?status=GAP&after=<position>&limit=100` → `label` (« Compte n »), `companyName`, `status`/`statusLabel`, `reason`, `importMs`, `reconcileMs`, dates ; `brefOwnerId`, `batchId` = poignées (le lot ouvre le rapport de réconciliation 24.8).

@@ -95,6 +95,7 @@ est à partager par un autre canal que ce dépôt si l'on veut le conserver, ou 
 | `validation/fixture-bref-synthetique.sql` | — | fixture **synthétique** (numéros et identités inventés) pour un Postgres jetable uniquement |
 | `validation/validate-local.sh` | — | validation rejouable : Postgres jetable, schéma via `typeorm schema:sync`, fixture, run, assertions de la matrice, passe « schéma main », garde-fou, entrées invalides |
 | `rapport-mesures-2026-11-02-preparatoire.md` | — | rapport préparatoire commité : faits dépôts, validation locale (données de dev / synthétiques), checklist ouverte, commande de production |
+| `rapport-repetition-bascule-2026-11-11.md` | 24.12 | répétition générale de la bascule sur la copie de prod Bref du 03/11 : chronométrage J0, durée de coupure, réconciliation (agrégats), retour arrière, montée en charge 4 / 8, correctif des interblocages |
 
 Le contrôle d'écriture (`grep -rniE '^\s*(insert|update|delete|create|alter|drop|truncate)\b' bref keevo`) porte sur
 `bref/` et `keevo/` seulement : `validation/` contient volontairement des `INSERT`/`DROP` destinés au Postgres jetable
