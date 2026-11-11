@@ -64,6 +64,7 @@ class SchedulerLockCoverageTest {
             Map.entry(AccountDeletionScheduler.class, Duration.ofDays(1)),
             Map.entry(SalesTrendDetectionScheduler.class, Duration.ofHours(1)),
             Map.entry(AuthTokenCleanupJob.class, Duration.ofDays(1)),
+            Map.entry(com.keevo.identity.auth.application.service.AppleTokenRevocationJob.class, Duration.ofMinutes(10)), // 19.3b
             Map.entry(SubscriptionExpiryScheduler.class, Duration.ofDays(1)),
             Map.entry(WeeklyReportScheduler.class, Duration.ofHours(1)),
             Map.entry(ReportDeliveryRetryService.class, Duration.ofMinutes(20)),

@@ -31,8 +31,8 @@ public class AppleTokenRevocationJob {
 
     private static final Logger log = LoggerFactory.getLogger(AppleTokenRevocationJob.class);
 
-    /** 50 × (5 s connect + 10 s read) is at most about 12 min, well under the 30 min lock. */
-    static final int BATCH = 50;
+    /** 30 × (5 s connect + 10 s read) is at most 7.5 min, under the 9 min lock and the 10 min period. */
+    static final int BATCH = 30;
     static final int MAX_ATTEMPTS = 20;
 
     private final AppleRevocationQueue queue;
@@ -46,7 +46,7 @@ public class AppleTokenRevocationJob {
     }
 
     @Scheduled(cron = "0 */10 * * * *")
-    @SchedulerLock(name = "appleTokenRevocationJob.run", lockAtMostFor = "PT30M", lockAtLeastFor = "PT1M")
+    @SchedulerLock(name = "appleTokenRevocationJob.run", lockAtMostFor = "PT9M", lockAtLeastFor = "PT1M")
     public void run() {
         if (!appleTokenClient.enabled() || !cipher.isAvailable()) {
             return;
