@@ -124,6 +124,50 @@ public class InvoicePaymentUseCase {
         return new Result(reread(invoiceId), true);
     }
 
+    /** The changes of an instalment not paid yet: a {@code null} field is left as it is ({@code note} blank clears it). */
+    public record InstalmentChange(Long amount, LocalDate dueDate, String note) {
+    }
+
+    /** French refusal of a change to an instalment already paid. */
+    static final String INSTALMENT_PAID = "Cette échéance est déjà payée : elle ne peut plus être modifiée";
+
+    /**
+     * Changes the amount, due date or note of the unpaid instalment {@code paymentId} (DRAFT or ISSUED invoice). Paid
+     * → 409 {@code INVOICE_INVALID_TRANSITION}; unknown on this invoice → 404; the new amount above what remains due
+     * → 409 {@code OVERPAYMENT}; a due date already passed → 422. Same values → the invoice, nothing written.
+     */
+    @Transactional
+    public Result updateInstalment(UUID invoiceId, UUID paymentId, InstalmentChange change, UUID actorId,
+                                   String tenantId) {
+        Invoice invoice = invoices.findByIdForUpdate(invoiceId).orElseThrow(InvoiceQueryUseCase::notFound);
+        invoice.assertSchedulable();
+        List<InvoicePayment> rows = new ArrayList<>(payments.findByInvoice(invoiceId));
+        InvoicePayment row = rows.stream().filter(p -> paymentId.equals(p.id())).findFirst()
+                .orElseThrow(() -> DomainException.userFacing(ErrorCode.INVOICE_NOT_FOUND,
+                        "Échéance introuvable sur cette facture"));
+        if (row.isPaid()) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, INSTALMENT_PAID,
+                    Map.of("status", "payée"));
+        }
+        long amount = change.amount() != null ? change.amount() : row.amount();
+        LocalDate dueDate = change.dueDate() != null ? change.dueDate() : row.dueDate();
+        String note = change.note() != null ? InvoicePayment.clean(change.note()) : row.note();
+        if (amount == row.amount() && java.util.Objects.equals(dueDate, row.dueDate())
+                && java.util.Objects.equals(note, row.note())) {
+            return new Result(invoice, false);
+        }
+        Instant now = clock.instant();
+        if (!java.util.Objects.equals(dueDate, row.dueDate())) {
+            PaymentStateCalculator.assertDueDateNotPast(dueDate, LocalDate.ofInstant(now, KeevoZones.WAT));
+        }
+        List<InvoicePayment> others = rows.stream().filter(p -> !paymentId.equals(p.id())).toList();
+        long due = amountDue(invoice);
+        PaymentStateCalculator.assertWithinDue(due, others, amount);
+        payments.updateScheduled(paymentId, amount, dueDate, note, now);
+        recompute(invoice, payments.findByInvoice(invoiceId), due, now, actorId, tenantId);
+        return new Result(reread(invoiceId), true);
+    }
+
     /**
      * Settles the instalment {@code paymentId} of an ISSUED invoice on {@code paidOn} (today by default); already paid
      * → the invoice unchanged ({@code created} false). Unknown on this invoice → 404 {@code INVOICE_NOT_FOUND}.

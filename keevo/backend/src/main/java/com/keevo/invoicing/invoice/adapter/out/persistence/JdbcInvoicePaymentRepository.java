@@ -99,6 +99,13 @@ public class JdbcInvoicePaymentRepository implements InvoicePaymentRepository {
     }
 
     @Override
+    public void updateScheduled(UUID id, long amount, java.time.LocalDate dueDate, String note, Instant now) {
+        jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.PAYMENTS)
+                + " SET amount = ?, due_date = ?, note = ?, updated_at = ? WHERE id = ? AND paid_at IS NULL",
+                amount, dueDate == null ? null : java.sql.Date.valueOf(dueDate), note, ts(now), id);
+    }
+
+    @Override
     public void delete(UUID id) {
         jdbc.update("DELETE FROM " + InvoicingTables.qualified(InvoicingTables.PAYMENTS)
                 + " WHERE id = ? AND paid_at IS NULL", id);

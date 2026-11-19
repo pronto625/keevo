@@ -127,6 +127,7 @@ public class ManageDraftInvoiceUseCase {
             }
         }
         assertDueDateNotPast(content);
+        assertIssueDateAllowed(content);
         UUID storeId = stores.forNewDocument(content.storeId(), tenantId); // Story 20.14 — before anything is written
         ClientInfo client = clients.resolve(content.client(), tenantId);
         Instant now = now();
@@ -168,6 +169,7 @@ public class ManageDraftInvoiceUseCase {
         assertSameKind(current, content.kind());
         assertFresh(current, content.expectedUpdatedAt());
         assertDueDateNotPast(content);
+        assertIssueDateAllowed(content);
         ClientInfo client = clients.resolve(content.client(), tenantId, current.client().clientId());
         Invoice updated = valid(() -> current.withDraftContent(client, content.lines(), content.terms(),
                 currentSettings(), now()));
@@ -201,6 +203,12 @@ public class ManageDraftInvoiceUseCase {
             throw new DomainException(ErrorCode.VALIDATION_ERROR, "Due date in the past",
                     Map.of("reason", "La date d'échéance ne peut pas être passée"));
         }
+    }
+
+    /** The requested issue date, when given, is today or earlier in the current year (checked again at issue). */
+    private void assertIssueDateAllowed(DraftContent content) {
+        content.terms().issueDateOr(java.time.LocalDate.ofInstant(clock.instant(),
+                com.keevo.shared.domain.time.KeevoZones.WAT));
     }
 
     @Transactional

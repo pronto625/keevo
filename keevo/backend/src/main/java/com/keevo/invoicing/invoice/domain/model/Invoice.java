@@ -272,7 +272,7 @@ public record Invoice(
                                    UUID store) {
         assertConvertible();
         List<LineInput> inputs = lines.stream().map(LineInput::of).toList();
-        return draft(invoiceId, client, inputs, terms, settings, actorId, now).as(InvoiceKind.INVOICE, id)
+        return draft(invoiceId, client, inputs, terms.withoutIssueDate(), settings, actorId, now).as(InvoiceKind.INVOICE, id)
                 .inStore(store);
     }
 

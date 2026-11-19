@@ -187,6 +187,9 @@ public interface InvoiceRepository {
      */
     long nextNumber(int year);
 
+    /** The issue date of the latest issued invoice ({@code number} given); empty when none was ever issued. */
+    java.util.Optional<java.time.LocalDate> latestIssueDate();
+
     record Page(List<Invoice> items, long totalElements) {
     }
 

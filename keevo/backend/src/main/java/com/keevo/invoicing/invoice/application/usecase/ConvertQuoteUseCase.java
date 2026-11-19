@@ -52,6 +52,9 @@ public class ConvertQuoteUseCase {
     private final Clock clock;
     private final com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations;
     private final DocumentStoreResolver stores;
+    private final com.keevo.crm.api.ClientCommandPort crmClients;
+    private final com.keevo.shared.module.CapabilityRegistry capabilities;
+    private final com.keevo.shared.module.EntitlementService entitlements;
 
     /**
      * Story 20.7 — {@code presentations}: the new invoice takes the quote's layout and signatures ({@code null} in
@@ -61,6 +64,20 @@ public class ConvertQuoteUseCase {
                                InvoiceLifecycleUseCase lifecycle, ApplicationEventPublisher events, Clock clock,
                                com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations,
                                DocumentStoreResolver stores) {
+        this(invoices, settings, lifecycle, events, clock, presentations, stores, null, null, null);
+    }
+
+    /** {@code crmClients}: where the marketing consent given at the conversion is recorded ({@code null}: nowhere). */
+    @org.springframework.beans.factory.annotation.Autowired
+    public ConvertQuoteUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
+                               InvoiceLifecycleUseCase lifecycle, ApplicationEventPublisher events, Clock clock,
+                               com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations,
+                               DocumentStoreResolver stores, com.keevo.crm.api.ClientCommandPort crmClients,
+                               com.keevo.shared.module.CapabilityRegistry capabilities,
+                               com.keevo.shared.module.EntitlementService entitlements) {
+        this.crmClients = crmClients;
+        this.capabilities = capabilities;
+        this.entitlements = entitlements;
         this.presentations = presentations;
         this.invoices = invoices;
         this.settings = settings;
@@ -136,6 +153,37 @@ public class ConvertQuoteUseCase {
         events.publishEvent(new QuoteConvertedEvent(quote.id(), quote.quoteReference(), issued.id(), issued.number(),
                 issued.client().name(), issued.totals().totalTtc(), actorId, tenantId, now));
         return new Conversion(issued, converted, true);
+    }
+
+    /**
+     * The client agreed to marketing messages when accepting the quote: recorded on the invoice's CRM client (the
+     * crm audits it), found or created from the invoice's client when the document is not linked to one yet. Run
+     * after the conversion is committed: a refusal never undoes it, and a client already consenting is left as it
+     * is. Does nothing when the crm is unavailable or the client has no usable phone.
+     */
+    @Transactional
+    public void recordMarketingConsent(Invoice invoice, UUID actorId, String tenantId) {
+        if (crmClients == null) {
+            return;
+        }
+        try {
+            UUID clientId = invoice.client().clientId();
+            if (clientId == null && capabilities != null && invoice.client().phone() != null
+                    && entitlements.state(tenantId, "crm") == com.keevo.shared.module.ModuleState.ENABLED) {
+                var c = invoice.client();
+                clientId = capabilities.find(com.keevo.crm.api.ClientLookupPort.class, tenantId)
+                        .flatMap(crm -> crm.findOrCreateForDocument(tenantId,
+                                new com.keevo.crm.api.DocumentClientInput(c.name(), c.phone(), c.email(), c.rccm(),
+                                        c.niu(), c.address(), invoice.storeId()), actorId))
+                        .orElse(null);
+            }
+            if (clientId != null) {
+                crmClients.setMarketingConsent(tenantId, clientId, true, actorId);
+            }
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(ConvertQuoteUseCase.class)
+                    .warn("Marketing consent not recorded: {}", e.getMessage());
+        }
     }
 
     private static final String ID_TAKEN = "Cet identifiant de facture est déjà utilisé par un autre document";

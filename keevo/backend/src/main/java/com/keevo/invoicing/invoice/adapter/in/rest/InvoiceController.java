@@ -14,6 +14,7 @@ import org.springframework.http.HttpHeaders;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.AddInvoicePaymentRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.SettleInvoicePaymentRequestDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.UpdateInvoicePaymentRequestDto;
 import com.keevo.invoicing.invoice.application.usecase.InvoicePaymentUseCase;
 import com.keevo.invoicing.invoice.domain.model.PaymentState;
 import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
@@ -312,6 +313,24 @@ public class InvoiceController {
     }
 
     /**
+     * PUT /api/v1/invoices/{id}/payments/{paymentId} {@code {amount?, dueDate?, note?}} — changes an instalment not paid
+     * yet (DRAFT or ISSUED invoice); an absent field is left as it is. Already paid → 409; above what remains due →
+     * 409 {@code OVERPAYMENT}; due date passed → 422. 200 with the invoice.
+     */
+    @RequiresPermission(InvoicingModule.INVOICE_SEND)
+    @RequiresEntitlement(InvoicingModule.ID)
+    @PutMapping("/{id}/payments/{paymentId}")
+    public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> updatePayment(
+            @PathVariable UUID id, @PathVariable UUID paymentId,
+            @Valid @RequestBody UpdateInvoicePaymentRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
+        InvoicePaymentUseCase.Result result = payments.updateInstalment(id, paymentId,
+                new InvoicePaymentUseCase.InstalmentChange(request.amount(), request.dueDate(), request.note()),
+                CurrentActor.actorId(), TenantContext.getCurrentTenant());
+        return ResponseEntity.ok(ApiResponseWrapper.ok(dto(result.invoice())));
+    }
+
+    /**
      * POST /api/v1/invoices/{id}/payments/{paymentId}/settle {@code {paidAt?, method?}} — Story 20.4: the scheduled
      * instalment is paid ({@code paidAt} = the day, today by default; same date rules as {@code /pay}); already paid →
      * 200 unchanged.
@@ -330,7 +349,7 @@ public class InvoiceController {
     }
 
     /**
-     * POST /api/v1/invoices/{quoteId}/convert {@code {invoiceId?, expectedUpdatedAt?}} — Story 20.3: the DRAFT quote becomes a new issued
+     * POST /api/v1/invoices/{quoteId}/convert {@code {invoiceId?, expectedUpdatedAt?, marketingConsent?}} — Story 20.3: the DRAFT quote becomes a new issued
      * invoice (DOCUMENTS quota, next {@code FAC-} number, issue date today); 201 with the invoice. Already converted →
      * 200 with the same invoice (idempotent). Same rights as the issue.
      */
@@ -343,6 +362,10 @@ public class InvoiceController {
         ConvertQuoteUseCase.Conversion conversion = conversions.convert(id,
                 request == null ? null : request.invoiceId(), request == null ? null : request.expectedUpdatedAt(),
                 CurrentActor.actorId(), TenantContext.getCurrentTenant());
+        if (request != null && Boolean.TRUE.equals(request.marketingConsent())) {
+            conversions.recordMarketingConsent(conversion.invoice(), CurrentActor.actorId(),
+                    TenantContext.getCurrentTenant());
+        }
         return ResponseEntity.status(conversion.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(ApiResponseWrapper.ok(dto(conversion.invoice())));
     }

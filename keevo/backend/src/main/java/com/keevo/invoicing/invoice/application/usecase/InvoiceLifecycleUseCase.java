@@ -20,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -110,7 +113,14 @@ public class InvoiceLifecycleUseCase {
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
         locked.assertIssuable(seller); // throws the precise error before any number is allocated
-        locked.terms().assertDueDateFrom(today); // Story 20.5 — a due date never precedes the issue date
+        // the day the seller asked the invoice to be dated (today by default), never before the latest issued one
+        LocalDate issueDay = locked.terms().issueDateOr(today);
+        invoices.latestIssueDate().filter(issueDay::isBefore).ifPresent(latest -> {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Issue date before the latest invoice",
+                    Map.of("reason", "La date d'émission ne peut pas précéder celle de la dernière facture émise ("
+                            + latest + ")"));
+        });
+        locked.terms().assertDueDateFrom(issueDay); // Story 20.5 — a due date never precedes the issue date
         if (counted) { // 19.8: before numbering, same transaction — a refusal keeps the draft and the sequence
             quotas.assertAndIncrementForSchema(tenantId, UsageMetric.DOCUMENTS, 1);
         }
@@ -118,7 +128,7 @@ public class InvoiceLifecycleUseCase {
         // bridge) records its client and products in the CRM / catalogue when the tenant wants it; same transaction
         Invoice draft = counted ? derivation.derive(locked, found, seller, actorId, tenantId, now) : locked;
         Invoice issued = ManageDraftInvoiceUseCase.valid(() -> draft.issue(
-                number(today.getYear(), invoices.nextNumber(today.getYear())), today, seller, now))
+                number(issueDay.getYear(), invoices.nextNumber(issueDay.getYear())), issueDay, seller, now))
                 .withSellerIdentity(nameFromDisplay, hasLogo);
         invoices.issue(issued);
         // Story 21.7 — the client portal finds the invoice by its client's phone: indexed in this transaction

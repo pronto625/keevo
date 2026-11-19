@@ -122,7 +122,9 @@ public record InvoiceResponseDto(
         String lastSendStatusLabel,
         String lastSendStatusChannel,
         String lastSendErrorCode,
-        String lastSendError) {
+        String lastSendError,
+        String notes,
+        LocalDate requestedIssueDate) {
 
     /** Story 20.4 — a payment received ({@code paidAt}) or an instalment ({@code dueDate}, unpaid while no paidAt). */
     public record Payment(UUID id, long amount, LocalDate dueDate, Instant paidAt, String method, String note,
@@ -212,7 +214,8 @@ public record InvoiceResponseDto(
                 d.lastSendStatusChannel() == null ? null : d.lastSendStatusChannel().name(),
                 d.lastSendErrorCode(),
                 d.lastSendErrorCode() == null ? null
-                        : com.keevo.shared.infrastructure.web.ErrorMessages.of(d.lastSendErrorCode(), "Envoi impossible"));
+                        : com.keevo.shared.infrastructure.web.ErrorMessages.of(d.lastSendErrorCode(), "Envoi impossible"),
+                i.terms().notes(), i.terms().issueDate());
     }
 
     private static Line line(InvoiceLine l) {

@@ -40,6 +40,10 @@ import java.util.UUID;
  * rate), {@code vatExempt} (no VAT on the document, « Exonéré de TVA »), {@code dueDate} (never before the issue date
  * once issued). A {@code PUT} replaces the whole content: absent fields are reset (no discount, no delivery…).
  *
+ * <p>Additive: {@code notes} (free text ≤ 2000, kept with the document) and {@code issueDate} (the day the invoice is
+ * to be dated, honoured at issue: today by default, never in the future, same year, not before the latest issued
+ * invoice; ignored for a quote).
+ *
  * <p>Story 20.14 (additive): {@code storeId} = the store the document is made in, creation only (ignored by
  * {@code PUT}): a store member's own store (another one → 403), an owner's active store (unknown or inactive → 400);
  * absent = the member's store, or the owner's oldest active store.
@@ -67,7 +71,18 @@ public record InvoiceRequestDto(
         BigDecimal vatRate,
         Boolean vatExempt,
         LocalDate dueDate,
-        UUID storeId) {
+        UUID storeId,
+        @Size(max = InvoiceTerms.NOTES_MAX, message = "Les notes ne doivent pas dépasser 2000 caractères")
+        String notes,
+        LocalDate issueDate) {
+
+    /** A Story 20.14 body: no notes, no requested issue date. */
+    public InvoiceRequestDto(UUID id, InvoiceClientDto client, List<InvoiceLineRequestDto> lines, String kind,
+                             Instant expectedUpdatedAt, Long discountAmount, Long deliveryFee, BigDecimal vatRate,
+                             Boolean vatExempt, LocalDate dueDate, UUID storeId) {
+        this(id, client, lines, kind, expectedUpdatedAt, discountAmount, deliveryFee, vatRate, vatExempt, dueDate,
+                storeId, null, null);
+    }
 
     /** A Story 20.5 body: no store requested. */
     public InvoiceRequestDto(UUID id, InvoiceClientDto client, List<InvoiceLineRequestDto> lines, String kind,
@@ -99,7 +114,8 @@ public record InvoiceRequestDto(
         // one rule with @Pattern: absent, or INVOICE / QUOTE in any case (nothing else, no padding)
         InvoiceKind documentKind = kind == null ? null : InvoiceKind.valueOf(kind.toUpperCase(Locale.ROOT));
         InvoiceTerms terms = new InvoiceTerms(discountAmount == null ? 0 : discountAmount,
-                deliveryFee == null ? 0 : deliveryFee, vatRate, Boolean.TRUE.equals(vatExempt), dueDate);
+                deliveryFee == null ? 0 : deliveryFee, vatRate, Boolean.TRUE.equals(vatExempt), dueDate, notes,
+                documentKind == InvoiceKind.QUOTE ? null : issueDate);
         return new DraftContent(info, inputs, documentKind, expectedUpdatedAt, terms, storeId);
     }
 }

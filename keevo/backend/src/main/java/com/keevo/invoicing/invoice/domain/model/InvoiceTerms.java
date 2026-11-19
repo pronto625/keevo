@@ -18,14 +18,25 @@ import java.util.Map;
  *   <li>{@code vatRate} — the rate requested for this document (percent, 0–100, 2 decimals); {@code null} = the
  *       seller's rate;</li>
  *   <li>{@code vatExempt} — no VAT on the whole document (mention « Exonéré de TVA »);</li>
- *   <li>{@code dueDate} — when the client must have paid; never before the issue date once issued.</li>
+ *   <li>{@code dueDate} — when the client must have paid; never before the issue date once issued;</li>
+ *   <li>{@code notes} — free text printed nowhere by the server but kept with the document (≤ 2000), editable while
+ *       the document is a draft, frozen at issue like the rest;</li>
+ *   <li>{@code issueDate} — the day the seller wants the invoice dated, honoured at issue (never in the future, never
+ *       before the latest issued invoice, same year); {@code null} = the day of the issue. Meaningless for a quote.</li>
  * </ul>
  * {@link #NONE} = every document before 20.5 (and every V1 body): no discount, no delivery, the seller's rate.
  */
 public record InvoiceTerms(long discount, long deliveryFee, BigDecimal vatRate, boolean vatExempt,
-                           LocalDate dueDate) {
+                           LocalDate dueDate, String notes, LocalDate issueDate) {
 
     public static final InvoiceTerms NONE = new InvoiceTerms(0, 0, null, false, null);
+
+    public static final int NOTES_MAX = 2000;
+
+    /** Before notes and requested issue date: neither. */
+    public InvoiceTerms(long discount, long deliveryFee, BigDecimal vatRate, boolean vatExempt, LocalDate dueDate) {
+        this(discount, deliveryFee, vatRate, vatExempt, dueDate, null, null);
+    }
 
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
@@ -42,6 +53,32 @@ public record InvoiceTerms(long discount, long deliveryFee, BigDecimal vatRate, 
             }
             vatRate = vatRate.setScale(2, RoundingMode.UNNECESSARY);
         }
+        notes = notes == null || notes.isBlank() ? null : notes.strip();
+        if (notes != null && notes.length() > NOTES_MAX) {
+            throw invalid("Les notes ne doivent pas dépasser " + NOTES_MAX + " caractères");
+        }
+    }
+
+    /** The same terms without the requested issue date (a quote converted into an invoice is dated by its issue). */
+    public InvoiceTerms withoutIssueDate() {
+        return new InvoiceTerms(discount, deliveryFee, vatRate, vatExempt, dueDate, notes, null);
+    }
+
+    /**
+     * The date an invoice is issued on: the requested one, else {@code today}. Refused ({@code VALIDATION_ERROR}) when
+     * in the future or in another year than {@code today} (the number sequence is per year).
+     */
+    public LocalDate issueDateOr(LocalDate today) {
+        if (issueDate == null) {
+            return today;
+        }
+        if (issueDate.isAfter(today)) {
+            throw invalid("La date d'émission ne peut pas être dans le futur");
+        }
+        if (issueDate.getYear() != today.getYear()) {
+            throw invalid("La date d'émission doit être dans l'année en cours");
+        }
+        return issueDate;
     }
 
     /** A discount or a delivery fee: the document totals differ from the sums of its lines. */

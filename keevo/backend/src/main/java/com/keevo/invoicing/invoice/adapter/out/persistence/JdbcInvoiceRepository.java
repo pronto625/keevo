@@ -47,6 +47,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             // Story 20.5 (V11)
             + "discount_amount, delivery_fee, subtotal, vat_rate_override, vat_exempt, due_date, client_rccm, "
             + "client_email, client_contact_name, client_website, "
+            // V20 — notes and requested issue date
+            + "notes, requested_issue_date, "
             // Story 20.14 (V16) — written at creation only, never updated
             + "store_id";
     /** Placeholders of {@link #COLUMNS} in an INSERT. */
@@ -191,7 +193,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 c.clientId(), c.name(), c.niu(), c.address(), c.phone(), draft.vatRegistered(), draft.vatRate(),
                 draft.pricesIncludeVat(), draft.vatMention(), t.totalHt(), t.totalVat(), t.totalTtc(),
                 ts(draft.updatedAt()), t.discount(), t.delivery(), t.subtotal(), terms.vatRate(), terms.vatExempt(),
-                date(terms.dueDate()), c.rccm(), c.email(), c.contactName(), c.website(), draft.id()), "draft update");
+                date(terms.dueDate()), c.rccm(), c.email(), c.contactName(), c.website(), terms.notes(),
+                date(terms.issueDate()), draft.id()), "draft update");
         replaceLines(draft);
     }
 
@@ -267,7 +270,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     /** Story 20.5 — the document terms and copied client fields written by a draft edit (V11 columns). */
     private static final String TERMS_SET = "discount_amount = ?, delivery_fee = ?, subtotal = ?, "
             + "vat_rate_override = ?, vat_exempt = ?, due_date = ?, client_rccm = ?, client_email = ?, "
-            + "client_contact_name = ?, client_website = ?";
+            + "client_contact_name = ?, client_website = ?, notes = ?, requested_issue_date = ?";
 
     /** Only for a DRAFT edit or the issue itself: an issued invoice's lines are never rewritten. */
     private void replaceLines(Invoice invoice) {
@@ -422,6 +425,15 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
+    public Optional<java.time.LocalDate> latestIssueDate() {
+        List<Date> latest = jdbc.query("SELECT max(issue_date) FROM "
+                + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                + " WHERE number IS NOT NULL AND kind = 'INVOICE'", (rs, i) -> rs.getDate(1));
+        return latest.isEmpty() || latest.get(0) == null ? Optional.empty()
+                : Optional.of(latest.get(0).toLocalDate());
+    }
+
+    @Override
     public long nextNumber(int year) {
         String table = InvoicingTables.qualified(InvoicingTables.COUNTERS);
         Long next = jdbc.queryForObject("INSERT INTO " + table + " AS c (year, last_number) VALUES (?, 1) "
@@ -555,6 +567,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 i.sourceQuoteId(),
                 i.totals().discount(), i.totals().delivery(), i.totals().subtotal(), i.terms().vatRate(),
                 i.terms().vatExempt(), date(i.terms().dueDate()), c.rccm(), c.email(), c.contactName(), c.website(),
+                i.terms().notes(), date(i.terms().issueDate()),
                 i.storeId()};
     }
 
@@ -605,8 +618,10 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         long storedSubtotal = rs.getLong("subtotal");
         long subtotal = rs.wasNull() ? (pricesIncludeVat ? totalTtc : totalHt) : storedSubtotal;
         Date due = rs.getDate("due_date");
+        Date requested = rs.getDate("requested_issue_date");
         InvoiceTerms terms = new InvoiceTerms(discount, deliveryFee, rs.getBigDecimal("vat_rate_override"),
-                rs.getBoolean("vat_exempt"), due == null ? null : due.toLocalDate());
+                rs.getBoolean("vat_exempt"), due == null ? null : due.toLocalDate(), rs.getString("notes"),
+                requested == null ? null : requested.toLocalDate());
         Invoice invoice = new Invoice(id, rs.getString("number"), status,
                 issueDate == null ? null : issueDate.toLocalDate(),
                 new ClientInfo(rs.getObject("client_id", UUID.class), rs.getString("client_name"),

@@ -50,6 +50,9 @@ public interface InvoicePaymentRepository {
     /** Story 20.4 — an unpaid instalment reduced to {@code amount} (> 0) by a credit note. */
     void updateAmount(UUID id, long amount, Instant now);
 
+    /** An unpaid instalment changed by its owner (status-guarded: a paid row is never rewritten). */
+    void updateScheduled(UUID id, long amount, LocalDate dueDate, String note, Instant now);
+
     /** Story 20.4 — an unpaid instalment removed by a credit note. */
     void delete(UUID id);
 
