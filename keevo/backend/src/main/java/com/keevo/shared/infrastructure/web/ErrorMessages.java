@@ -186,6 +186,8 @@ public final class ErrorMessages {
             Map.entry("PAYMENT_PROVIDER_ERROR",      "Le paiement n'a pas pu démarrer. Vérifiez le numéro et réessayez."),
             Map.entry("EXPENSE_NOT_FOUND",           "Dépense introuvable"),
             Map.entry("AI_QUESTION_IN_PROGRESS",     "Une question est déjà en cours. Attendez la réponse avant d'en poser une autre."),
+            Map.entry("UPLOAD_UNAVAILABLE",          "L'envoi d'images n'est pas disponible pour le moment."),
+            Map.entry("UPLOAD_FAILED",               "L'image n'a pas pu être envoyée. Réessayez dans un instant."),
             Map.entry("AI_UNAVAILABLE",              "Les questions libres ne sont pas encore disponibles. Utilisez les sujets proposés."),
             Map.entry("AI_PROVIDER_ERROR",           "L'assistant ne répond pas pour le moment. Réessayez dans un instant."),
             Map.entry("AI_ANSWER_FAILED",            "L'assistant n'a pas pu préparer la réponse. Réessayez ou reformulez la question."),

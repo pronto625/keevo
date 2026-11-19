@@ -396,6 +396,7 @@ public class GlobalExceptionHandler {
                  "SMS_UNAVAILABLE",       // Story 20.8
                  "EMAIL_UNAVAILABLE",
                  "PAYMENT_UNAVAILABLE",     // 21.1 — no Mobile Money gateway configured
+                 "UPLOAD_UNAVAILABLE",      // file storage not configured
                  "AI_UNAVAILABLE",          // 21.4 — no model provider configured
                  "AI_ANSWER_FAILED",        // 21.4 — tool failure or answer limits: nothing counted
                  "WHATSAPP_CLOUD_UNAVAILABLE", // 21.5 — no Meta app configured
@@ -450,6 +451,7 @@ public class GlobalExceptionHandler {
                  "EMAIL_DELIVERY_FAILED",
                  "PAYMENT_PROVIDER_ERROR",
                  "AI_PROVIDER_ERROR",
+                 "UPLOAD_FAILED",
                  "WHATSAPP_CLOUD_META_ERROR" -> HttpStatus.BAD_GATEWAY;  // upstream provider failure (WhatsApp, SMS, email, Mobile Money)
             case "INVOICE_SEND_UNCERTAIN" -> HttpStatus.CONFLICT;  // 20.8 — maybe delivered: never retried automatically
             default -> HttpStatus.INTERNAL_SERVER_ERROR;

@@ -235,6 +235,8 @@ public enum ErrorCode {
     PAYMENT_UNAVAILABLE,        // HTTP 503 — no Mobile Money gateway configured: nothing stored
     PAYMENT_PROVIDER_ERROR,     // HTTP 502 — the provider refused or failed to start the payment: the request is FAILED
     // ── Notification inbox (Story 19.9) ───────────────────────────────────
+    UPLOAD_UNAVAILABLE,         // HTTP 503 — file storage (Cloudinary) not configured: nothing stored
+    UPLOAD_FAILED,              // HTTP 502 — the file storage refused or could not be reached: nothing stored
     NOTIFICATION_NOT_FOUND,     // HTTP 404 — notification unknown or of another user
     // ── AI assistant (Story 21.4) ─────────────────────────────────────────
     AI_QUESTION_IN_PROGRESS,    // HTTP 429 — a free-text question of this user is already being answered (one at a time per user, 21.4.2)

@@ -343,6 +343,13 @@ keevo:
       vapid-public-key: ${VAPID_PUBLIC_KEY:}
       vapid-private-key: ${VAPID_PRIVATE_KEY:}
       subject: ${VAPID_SUBJECT:mailto:admin@brefpoint.app}
+  # Envoi de fichiers : images de l'app (logo, produit, en-tête WhatsApp) déposées chez Cloudinary, comme api-bref.
+  # Sans les trois valeurs, POST /api/v1/uploads répond 503 UPLOAD_UNAVAILABLE.
+  uploads:
+    cloudinary:
+      cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+      api-key: ${CLOUDINARY_API_KEY:}
+      api-secret: ${CLOUDINARY_API_SECRET:}
   # Story 21.4 — model of the AI assistant (module ai-assistant). provider: disabled (default: free-text questions
   # answer 503, guided topics and conversations work) | fake (scripted, dev/test profiles only) | anthropic (Claude,
   # official SDK, 21.4.2) | openai | gemini | ollama (OpenAI-compatible chat completions, like Bref's AI_PROVIDER).
