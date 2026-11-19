@@ -296,6 +296,26 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     @Override
     public Page list(Filter criteria, int page, int size) {
         String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
+        Where w = where(criteria);
+        String where = w.sql();
+        List<Object> filter = w.args();
+        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, filter.toArray());
+        List<Object> args = new ArrayList<>(filter);
+        args.add(size);
+        args.add((long) page * size);
+        List<Row> rows = jdbc.query("SELECT " + SELECT_COLUMNS + " FROM " + table + where
+                + " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", (rs, n) -> row(rs), args.toArray());
+        Map<UUID, List<InvoiceLine>> lines = rows.isEmpty() ? Map.of() : lines(rows.stream().map(Row::id).toList());
+        List<Invoice> items = rows.stream().map(r -> r.with(lines.getOrDefault(r.id(), List.of()))).toList();
+        return new Page(items, total == null ? 0 : total);
+    }
+
+    /** A WHERE clause with its arguments, in placeholder order. */
+    private record Where(String sql, List<Object> args) {
+    }
+
+    /** The conditions of {@code criteria} (shared by the list and the statistics); deleted drafts are always out. */
+    private Where where(Filter criteria) {
         List<String> conditions = new ArrayList<>();
         List<Object> filter = new ArrayList<>();
         if (criteria.kind() != null) {
@@ -357,16 +377,45 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             filter.add(criteria.storeId());
         }
         conditions.add("deleted_at IS NULL");
-        String where = " WHERE " + String.join(" AND ", conditions);
-        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, filter.toArray());
-        List<Object> args = new ArrayList<>(filter);
-        args.add(size);
-        args.add((long) page * size);
-        List<Row> rows = jdbc.query("SELECT " + SELECT_COLUMNS + " FROM " + table + where
-                + " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", (rs, n) -> row(rs), args.toArray());
-        Map<UUID, List<InvoiceLine>> lines = rows.isEmpty() ? Map.of() : lines(rows.stream().map(Row::id).toList());
-        List<Invoice> items = rows.stream().map(r -> r.with(lines.getOrDefault(r.id(), List.of()))).toList();
-        return new Page(items, total == null ? 0 : total);
+        return new Where(" WHERE " + String.join(" AND ", conditions), filter);
+    }
+
+    @Override
+    public Stats stats(Filter criteria, UUID sellerId) {
+        String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
+        Where w = where(criteria);
+        String extra = " AND status <> 'DRAFT' AND superseded_at IS NULL" + (sellerId == null ? "" : " AND created_by = ?");
+        List<Object> args = new ArrayList<>(w.args());
+        if (sellerId != null) {
+            args.add(sellerId);
+        }
+        // one bucket per collection state; a cancelled invoice is its own bucket
+        List<Bucket> buckets = jdbc.query("SELECT CASE WHEN status = 'CANCELLED' THEN 'CANCELLED' ELSE "
+                + PAYMENT_STATE + " END AS state, COUNT(*) AS n, COALESCE(SUM(total_ttc), 0) AS amount FROM " + table
+                + w.sql() + extra + " GROUP BY 1", (rs, i) -> new Bucket(rs.getString("state"), rs.getLong("n"),
+                rs.getLong("amount")), args.toArray());
+        Long customers = jdbc.queryForObject("SELECT COUNT(DISTINCT COALESCE(NULLIF(client_phone, ''), "
+                + "NULLIF(lower(client_name), ''))) FROM " + table + w.sql() + extra
+                + " AND status <> 'CANCELLED'", Long.class, args.toArray());
+        return new Stats(customers == null ? 0 : customers, buckets);
+    }
+
+    @Override
+    public List<TopProduct> topProducts(Filter criteria, int limit) {
+        String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
+        String items = InvoicingTables.qualified(InvoicingTables.ITEMS);
+        Where w = where(criteria);
+        List<Object> args = new ArrayList<>(w.args());
+        args.add(limit);
+        // issued or paid invoices only (never a draft, a cancelled or a superseded one), lines grouped by catalogue
+        // product, else by reference, else by designation
+        return jdbc.query("SELECT COALESCE(NULLIF(MAX(it.reference), ''), '') AS reference, MAX(it.description) AS name, "
+                + "SUM(it.quantity) AS quantity, SUM(it.total_ttc) AS revenue FROM " + items + " it JOIN " + table
+                + " i ON i.id = it.invoice_id WHERE i.id IN (SELECT id FROM " + table + w.sql()
+                + " AND status IN ('ISSUED', 'PAID') AND superseded_at IS NULL) GROUP BY COALESCE(CAST(it.product_id AS text), "
+                + "NULLIF(it.reference, ''), lower(it.description)) ORDER BY revenue DESC, name LIMIT ?",
+                (rs, i) -> new TopProduct(rs.getString("reference"), rs.getString("name"),
+                        rs.getBigDecimal("quantity"), rs.getLong("revenue")), args.toArray());
     }
 
     @Override

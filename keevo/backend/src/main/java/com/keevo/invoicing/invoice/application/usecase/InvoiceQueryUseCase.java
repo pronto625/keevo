@@ -117,6 +117,18 @@ public class InvoiceQueryUseCase {
         return invoices.list(filter, page, size);
     }
 
+    /** Figures over the invoices matching {@code filter} (see {@link InvoiceRepository#stats}). */
+    @Transactional(readOnly = true)
+    public InvoiceRepository.Stats stats(InvoiceRepository.Filter filter, java.util.UUID sellerId) {
+        return invoices.stats(filter, sellerId);
+    }
+
+    /** The best-selling products over the invoices matching {@code filter}. */
+    @Transactional(readOnly = true)
+    public java.util.List<InvoiceRepository.TopProduct> topProducts(InvoiceRepository.Filter filter, int limit) {
+        return invoices.topProducts(filter, limit);
+    }
+
     /**
      * Story 21.8 — what was collected on documents from {@code from} to {@code to} (days inclusive, by payment date
      * in the business time zone), within {@code scope} and the owner's {@code storeId} filter.

@@ -202,6 +202,81 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponseWrapper.paginated(items, page, size, result.totalElements(), totalPages));
     }
 
+    /** Figures of the invoices: per collection state, in whole XAF francs (TTC); distinct clients of non-cancelled ones. */
+    public record StatsDto(long count, long totalAmount, long totalPaid, long totalPending, long totalOverdue,
+                           long averageAmount, long uniqueCustomers,
+                           java.util.Map<String, StateStats> byState) {
+    }
+
+    public record StateStats(long count, long amount) {
+    }
+
+    /** A best-selling product: its reference (may be empty), designation, quantity sold and amount (TTC). */
+    public record TopProductDto(String reference, String name, java.math.BigDecimal quantity, long revenue) {
+    }
+
+    /**
+     * GET /api/v1/invoices/stats?from=&to=&storeId=&sellerId= — figures of the issued invoices (cancelled ones counted
+     * apart): {@code count}, {@code totalAmount} (without the cancelled), {@code totalPaid}, {@code totalPending}
+     * (unpaid + partial), {@code totalOverdue}, {@code averageAmount}, {@code uniqueCustomers}, {@code byState}
+     * (UNPAID, PARTIAL, PAID, OVERDUE, CANCELLED). Same scope rules as the list.
+     */
+    @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
+    @GetMapping("/stats")
+    public ResponseEntity<ApiResponseWrapper<StatsDto>> stats(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) UUID storeId,
+            @RequestParam(required = false) UUID sellerId) {
+        assertRange(from, to);
+        InvoiceRepository.Stats stats = queries.stats(statsFilter(from, to, storeId), sellerId);
+        java.util.Map<String, StateStats> byState = new java.util.LinkedHashMap<>();
+        for (String state : List.of("UNPAID", "PARTIAL", "PAID", "OVERDUE", "CANCELLED")) {
+            byState.put(state, new StateStats(0, 0));
+        }
+        stats.buckets().forEach(b -> byState.put(b.state(), new StateStats(b.count(), b.amount())));
+        long count = 0;
+        long amount = 0;
+        for (var e : byState.entrySet()) {
+            if (!"CANCELLED".equals(e.getKey())) {
+                count += e.getValue().count();
+                amount += e.getValue().amount();
+            }
+        }
+        long pending = byState.get("UNPAID").amount() + byState.get("PARTIAL").amount();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(new StatsDto(count, amount, byState.get("PAID").amount(),
+                pending, byState.get("OVERDUE").amount(), count == 0 ? 0 : Math.round((double) amount / count),
+                stats.uniqueClients(), byState)));
+    }
+
+    /** GET /api/v1/invoices/top-products?from=&to=&storeId=&limit=5 (1–50) — what sold most on issued or paid invoices. */
+    @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
+    @GetMapping("/top-products")
+    public ResponseEntity<ApiResponseWrapper<List<TopProductDto>>> topProducts(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) UUID storeId,
+            @RequestParam(defaultValue = "5") int limit) {
+        assertRange(from, to);
+        if (limit < 1 || limit > 50) {
+            throw new InvalidRequestParameterException("limit", "limit must be between 1 and 50");
+        }
+        return ResponseEntity.ok(ApiResponseWrapper.ok(queries.topProducts(statsFilter(from, to, storeId), limit)
+                .stream().map(p -> new TopProductDto(p.reference(), p.name(), p.quantity(), p.revenue())).toList()));
+    }
+
+    private InvoiceRepository.Filter statsFilter(LocalDate from, LocalDate to, UUID storeId) {
+        return new InvoiceRepository.Filter(null, null, null, from, to, InvoiceKind.INVOICE, null,
+                access.forList(storeId), storeId);
+    }
+
+    private static void assertRange(LocalDate from, LocalDate to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new InvalidRequestParameterException("from", "from must not be after to",
+                    "La date de début doit précéder la date de fin");
+        }
+    }
+
     /**
      * GET /api/v1/invoices/clients?search=&limit=20 — Story 14.3: the CRM clients for the invoice client picker
      * (non-archived, sorted by name, at most {@code limit}, clamped to 1–50). {@code crmAvailable=false} and no client

@@ -106,6 +106,24 @@ public interface InvoiceRepository {
     /** Newest first, every criterion of {@code filter} applied. */
     Page list(Filter filter, int page, int size);
 
+    /** Invoices of one collection state: {@code state} UNPAID, PARTIAL, PAID, OVERDUE or CANCELLED. */
+    record Bucket(String state, long count, long amount) {
+    }
+
+    /** Figures over {@code filter}: per state, and the distinct clients (by phone, else name) of non-cancelled ones. */
+    record Stats(long uniqueClients, List<Bucket> buckets) {
+    }
+
+    /** What sold most: lines grouped by product, with the quantity and the amount (TTC). */
+    record TopProduct(String reference, String name, java.math.BigDecimal quantity, long revenue) {
+    }
+
+    /** Statistics of the invoices matching {@code filter}, drafts and superseded ones excluded; {@code sellerId}: one author only. */
+    Stats stats(Filter filter, UUID sellerId);
+
+    /** The {@code limit} best-selling products of the issued or paid invoices matching {@code filter}. */
+    List<TopProduct> topProducts(Filter filter, int limit);
+
     /**
      * Story 21.8 — the unpaid call list: every active issued invoice not yet paid (stored or legacy collection state
      * UNPAID, PARTIAL or OVERDUE) within {@code scope} (20.14) and the owner's {@code storeId} filter, grouped by client
