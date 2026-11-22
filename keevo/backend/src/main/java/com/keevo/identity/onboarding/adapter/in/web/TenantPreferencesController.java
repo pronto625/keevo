@@ -11,6 +11,7 @@ import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityU
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateSaleFlowUseCase;
+import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -74,7 +75,14 @@ public class TenantPreferencesController {
     @GetMapping("/preferences")
     public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> getPreferences() {
         String schema = TenantContext.requireCurrent();
-        return tenantPreferencesRepository.findByCurrentTenant()
+        // An organisation created through the app's sign-up flow (organisation, then first store) never goes through
+        // the sector onboarding, so it has no preferences row yet: create it with the defaults on first read, so the
+        // alert / report / sale-flow settings can be shown and saved.
+        var stored = tenantPreferencesRepository.findByCurrentTenant()
+            .or(() -> java.util.Optional.of(tenantPreferencesRepository.save(
+                TenantPreferences.withDefaults(java.util.UUID.randomUUID(), null, "20:00:00", true,
+                        java.time.Instant.now()))));
+        return stored
             .map(prefs -> {
                 var effective = effectivePreferences.effective(schema, prefs);
                 TenantPreferencesResponseDto dto = TenantPreferencesResponseDto.effective(prefs, effective.view(),
