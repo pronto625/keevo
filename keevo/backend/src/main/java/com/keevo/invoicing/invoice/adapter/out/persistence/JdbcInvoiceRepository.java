@@ -397,7 +397,12 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         Long customers = jdbc.queryForObject("SELECT COUNT(DISTINCT COALESCE(NULLIF(client_phone, ''), "
                 + "NULLIF(lower(client_name), ''))) FROM " + table + w.sql() + extra
                 + " AND status <> 'CANCELLED'", Long.class, args.toArray());
-        return new Stats(customers == null ? 0 : customers, buckets);
+        // money already received on invoices that are not fully paid yet (deposit, paid instalments)
+        String payments = InvoicingTables.qualified(InvoicingTables.PAYMENTS);
+        Long received = jdbc.queryForObject("SELECT COALESCE(SUM(p.amount), 0) FROM " + payments + " p WHERE p.paid_at IS NOT NULL "
+                + "AND p.invoice_id IN (SELECT id FROM " + table + w.sql() + extra + " AND status <> 'CANCELLED' AND "
+                + PAYMENT_STATE + " <> 'PAID')", Long.class, args.toArray());
+        return new Stats(customers == null ? 0 : customers, buckets, received == null ? 0 : received);
     }
 
     @Override

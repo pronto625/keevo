@@ -110,8 +110,11 @@ public interface InvoiceRepository {
     record Bucket(String state, long count, long amount) {
     }
 
-    /** Figures over {@code filter}: per state, and the distinct clients (by phone, else name) of non-cancelled ones. */
-    record Stats(long uniqueClients, List<Bucket> buckets) {
+    /**
+     * Figures over {@code filter}: per state, the distinct clients (by phone, else name) of non-cancelled ones, and
+     * {@code receivedOnOpen} — what was already received (deposit, paid instalments) on invoices not fully paid.
+     */
+    record Stats(long uniqueClients, List<Bucket> buckets, long receivedOnOpen) {
     }
 
     /** What sold most: lines grouped by product, with the quantity and the amount (TTC). */

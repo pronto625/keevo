@@ -217,8 +217,8 @@ public class InvoiceController {
 
     /**
      * GET /api/v1/invoices/stats?from=&to=&storeId=&sellerId= — figures of the issued invoices (cancelled ones counted
-     * apart): {@code count}, {@code totalAmount} (without the cancelled), {@code totalPaid}, {@code totalPending}
-     * (unpaid + partial), {@code totalOverdue}, {@code averageAmount}, {@code uniqueCustomers}, {@code byState}
+     * apart): {@code count}, {@code totalAmount} (without the cancelled), {@code totalPaid} (cash received: paid invoices + deposits and
+     * paid instalments of the others), {@code totalPending} (unpaid + partial), {@code totalOverdue}, {@code averageAmount}, {@code uniqueCustomers}, {@code byState}
      * (UNPAID, PARTIAL, PAID, OVERDUE, CANCELLED). Same scope rules as the list.
      */
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
@@ -244,7 +244,7 @@ public class InvoiceController {
             }
         }
         long pending = byState.get("UNPAID").amount() + byState.get("PARTIAL").amount();
-        return ResponseEntity.ok(ApiResponseWrapper.ok(new StatsDto(count, amount, byState.get("PAID").amount(),
+        return ResponseEntity.ok(ApiResponseWrapper.ok(new StatsDto(count, amount, byState.get("PAID").amount() + stats.receivedOnOpen(),
                 pending, byState.get("OVERDUE").amount(), count == 0 ? 0 : Math.round((double) amount / count),
                 stats.uniqueClients(), byState)));
     }
