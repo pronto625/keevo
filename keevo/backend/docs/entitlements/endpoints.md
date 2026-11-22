@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 421 — gated: 171, exempt: 250.
+Handlers: 428 — gated: 174, exempt: 254.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -14,6 +14,9 @@ Handlers: 421 — gated: 171, exempt: 250.
 | DELETE | `/api/v1/account/company/logo` | — | — | — | core — identité de l'entreprise | CompanyController#deleteLogo |
 | GET | `/api/v1/account/company/logo` | — | — | — | core — identité de l'entreprise | CompanyController#logo |
 | PUT | `/api/v1/account/company/logo` | — | — | — | core — identité de l'entreprise | CompanyController#uploadLogo |
+| GET | `/api/v1/account/company/profile` | — | — | — | core — identité de l'entreprise | CompanyController#getProfile |
+| PATCH | `/api/v1/account/company/profile` | — | — | — | core — identité de l'entreprise | CompanyController#updateProfile |
+| POST | `/api/v1/account/company/setup/complete` | — | — | — | core — identité de l'entreprise | CompanyController#completeSetup |
 | POST | `/api/v1/account/delete` | — | — | — | core: compte | AccountController#requestDeletion |
 | POST | `/api/v1/account/delete/cancel` | — | — | — | core: compte | AccountController#cancelDeletion |
 | GET | `/api/v1/account/invitations` | — | — | — | core: invitations d'un compte existant | InvitationController#pending |
@@ -273,6 +276,8 @@ Handlers: 421 — gated: 171, exempt: 250.
 | GET | `/api/v1/invoices/clients` | `invoicing` | READ | `INVOICE_CREATE` |  | InvoiceController#clientSuggestions |
 | GET | `/api/v1/invoices/public/{token}` | — | — | — | ancien lien public Bref d'une facture importée (lien déjà partagé au client) | InvoiceLegacyLinkController#legacy |
 | GET | `/api/v1/invoices/shared` | — | — | — | lien signé envoyé au client (facture déjà contrôlée à l'envoi) | InvoiceSharedLinkController#shared |
+| GET | `/api/v1/invoices/stats` | `invoicing` | READ | — |  | InvoiceController#stats |
+| GET | `/api/v1/invoices/top-products` | `invoicing` | READ | — |  | InvoiceController#topProducts |
 | DELETE | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#delete |
 | GET | `/api/v1/invoices/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#get |
 | PUT | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#update |
@@ -283,6 +288,7 @@ Handlers: 421 — gated: 171, exempt: 250.
 | PUT | `/api/v1/invoices/{id}/layout` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoicePresentationController#layout |
 | POST | `/api/v1/invoices/{id}/pay` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#pay |
 | POST | `/api/v1/invoices/{id}/payments` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#addPayment |
+| PUT | `/api/v1/invoices/{id}/payments/{paymentId}` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#updatePayment |
 | POST | `/api/v1/invoices/{id}/payments/{paymentId}/settle` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#settlePayment |
 | GET | `/api/v1/invoices/{id}/pdf` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#pdf |
 | POST | `/api/v1/invoices/{id}/public-link` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoicePresentationController#publicLink |
@@ -402,6 +408,7 @@ Handlers: 421 — gated: 171, exempt: 250.
 | GET | `/api/v1/tenants/me/extensions/{pointId}` | — | — | — | points d'extension du commerçant | TenantExtensionsController#extensions |
 | GET | `/api/v1/tenants/me/modules` | — | — | — | liste des modules du commerçant | TenantModulesController#modules |
 | PUT | `/api/v1/tenants/me/modules/{moduleId}/activation` | — | — | — | core: Mes modules | TenantModulesController#setActivation |
+| POST | `/api/v1/uploads` | — | — | — | core: envoi de fichiers | UploadController#upload |
 | DELETE | `/api/v1/web-push/subscribe` | — | — | — | notifications du navigateur — compte | WebPushController#unsubscribe |
 | POST | `/api/v1/web-push/subscribe` | — | — | — | notifications du navigateur — compte | WebPushController#subscribe |
 | GET | `/api/v1/web-push/vapid-public-key` | — | — | — | notifications du navigateur — compte | WebPushController#vapidPublicKey |

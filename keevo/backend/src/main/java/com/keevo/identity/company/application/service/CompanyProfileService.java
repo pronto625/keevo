@@ -1,8 +1,11 @@
 package com.keevo.identity.company.application.service;
 
+import com.keevo.identity.company.domain.model.CompanyCategory;
 import com.keevo.identity.company.domain.port.out.CompanyLogoNormalizer;
 import com.keevo.identity.company.domain.port.out.CompanyLogoStorage;
 import com.keevo.identity.company.domain.port.out.CompanyProfileRepository;
+import com.keevo.identity.company.domain.port.out.CompanyProfileRepository.CompanyDetails;
+import com.keevo.identity.company.domain.port.out.CompanyProfileRepository.DetailsPatch;
 import com.keevo.identity.company.domain.port.out.CompanyProfileRepository.TenantIdentity;
 import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.domain.exception.DomainException;
@@ -139,6 +142,135 @@ public class CompanyProfileService implements CompanyIdentity {
             t = updated;
         }
         return profile(t, logos.exists(tenantSchema));
+    }
+
+    // ── full profile (owner-edited identity + setup mark) ────────────────────────────────────────────────
+
+    /**
+     * The whole identity of the organisation: designation, description, activity category, address, phone, e-mail,
+     * NIU, RCCM, country, whether a logo exists and whether the owner finished the sign-up steps.
+     * Every field but {@code country} may be null; NIU and RCCM are never mandatory.
+     */
+    public record FullProfile(String designation, String displayName, String description, String category,
+                              String address, String phone, String email, String niu, String rccm, String country,
+                              boolean hasLogo, boolean setupCompleted) {
+    }
+
+    @Transactional(readOnly = true)
+    public FullProfile getFullProfile(String tenantSchema) {
+        TenantIdentity t = tenant(tenantSchema);
+        return full(t, details(tenantSchema), logos.exists(tenantSchema));
+    }
+
+    /**
+     * Partial update: a {@code null} field is left unchanged, a blank one is cleared (the {@code country} never).
+     * Owner only (checked by the controller). A bad value → {@code VALIDATION_ERROR} and nothing is written.
+     */
+    @Transactional
+    public FullProfile updateProfile(String tenantSchema, DetailsPatch input, UUID actorId) {
+        TenantIdentity t = tenant(tenantSchema);
+        CompanyDetails before = details(tenantSchema);
+        DetailsPatch patch = validated(input);
+        if (!repository.updateDetails(tenantSchema, patch)) {
+            throw new DomainException(ErrorCode.TENANT_NOT_FOUND, "Tenant not found");
+        }
+        TenantIdentity afterTenant = tenant(tenantSchema);
+        CompanyDetails after = details(tenantSchema);
+        Map<String, Object> was = new LinkedHashMap<>();
+        Map<String, Object> now = new LinkedHashMap<>();
+        diff("designation", t.designation(), afterTenant.designation(), was, now);
+        diff("description", before.description(), after.description(), was, now);
+        diff("category", before.category(), after.category(), was, now);
+        diff("address", before.address(), after.address(), was, now);
+        diff("phone", before.phone(), after.phone(), was, now);
+        diff("email", before.email(), after.email(), was, now);
+        diff("niu", before.niu(), after.niu(), was, now);
+        diff("rccm", before.rccm(), after.rccm(), was, now);
+        diff("country", before.country(), after.country(), was, now);
+        if (!now.isEmpty() || !was.isEmpty()) {
+            publish(t, afterTenant, was, now, actorId, tenantSchema);
+        }
+        return full(afterTenant, after, logos.exists(tenantSchema));
+    }
+
+    /** The owner finished the sign-up steps (organisation, first store). Idempotent. */
+    @Transactional
+    public FullProfile completeSetup(String tenantSchema) {
+        TenantIdentity t = tenant(tenantSchema);
+        repository.markSetupCompleted(tenantSchema);
+        return full(t, details(tenantSchema), logos.exists(tenantSchema));
+    }
+
+    private CompanyDetails details(String tenantSchema) {
+        return repository.findDetails(tenantSchema)
+                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND, "Tenant not found"));
+    }
+
+    private static FullProfile full(TenantIdentity t, CompanyDetails d, boolean hasLogo) {
+        return new FullProfile(trimToNull(t.designation()), displayName(t), d.description(), d.category(), d.address(),
+                d.phone(), d.email(), d.niu(), d.rccm(), d.country(), hasLogo, d.setupCompleted());
+    }
+
+    private static void diff(String key, String before, String after, Map<String, Object> was, Map<String, Object> now) {
+        if (!java.util.Objects.equals(trimToNull(before), trimToNull(after))) {
+            if (trimToNull(before) != null) {
+                was.put(key, before);
+            }
+            if (trimToNull(after) != null) {
+                now.put(key, after);
+            }
+        }
+    }
+
+    static final int MAX_DESCRIPTION = 1000;
+    static final int MAX_ADDRESS = 255;
+    static final int MAX_PHONE = 30;
+    static final int MAX_EMAIL = 150;
+    static final int MAX_NIU = 30;
+    static final int MAX_RCCM = 50;
+    private static final java.util.regex.Pattern EMAIL = java.util.regex.Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+
+    /** Strips each given value (blank stays blank = clear) and rejects what the columns cannot hold. */
+    static DetailsPatch validated(DetailsPatch p) {
+        String designation = limited("designation", p.designation(), MAX_DESIGNATION);
+        String description = limited("description", p.description(), MAX_DESCRIPTION);
+        String category = stripKeepingNull(p.category());
+        if (category != null && !category.isEmpty() && !CompanyCategory.isValid(category)) {
+            throw invalid("category", "Catégorie inconnue (valeurs : " + CompanyCategory.accepted() + ")");
+        }
+        String address = limited("address", p.address(), MAX_ADDRESS);
+        String phone = limited("phone", p.phone(), MAX_PHONE);
+        String email = limited("email", p.email(), MAX_EMAIL);
+        if (email != null && !email.isEmpty() && !EMAIL.matcher(email).matches()) {
+            throw invalid("email", "Adresse e-mail invalide");
+        }
+        String niu = limited("niu", p.niu(), MAX_NIU);
+        String rccm = limited("rccm", p.rccm(), MAX_RCCM);
+        String country = stripKeepingNull(p.country());
+        if (country != null && !country.isEmpty()) {
+            country = country.toUpperCase(java.util.Locale.ROOT);
+            if (!country.matches("[A-Z]{2}")) {
+                throw invalid("country", "Pays : code ISO à 2 lettres");
+            }
+        }
+        return new DetailsPatch(designation, description, category, address, phone, email, niu, rccm, country);
+    }
+
+    private static String stripKeepingNull(String v) {
+        return v == null ? null : v.strip();
+    }
+
+    private static String limited(String field, String v, int max) {
+        String stripped = stripKeepingNull(v);
+        if (stripped != null && stripped.length() > max) {
+            throw invalid(field, "Maximum " + max + " caractères");
+        }
+        return stripped;
+    }
+
+    private static DomainException invalid(String field, String reason) {
+        return new DomainException(ErrorCode.VALIDATION_ERROR, "Invalid company profile: " + field,
+                Map.of("field", field, "reason", reason));
     }
 
     @Transactional

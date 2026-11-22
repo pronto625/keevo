@@ -1,7 +1,9 @@
 package com.keevo.identity.company.adapter.in.rest;
 
 import com.keevo.identity.company.adapter.in.rest.dto.CompanyDesignationRequestDto;
+import com.keevo.identity.company.adapter.in.rest.dto.CompanyFullProfileDto;
 import com.keevo.identity.company.adapter.in.rest.dto.CompanyProfileDto;
+import com.keevo.identity.company.adapter.in.rest.dto.CompanyProfilePatchDto;
 import com.keevo.identity.company.application.service.CompanyProfileService;
 import com.keevo.shared.capability.business.CompanyIdentity.Logo;
 import com.keevo.shared.domain.exception.DomainException;
@@ -17,6 +19,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -69,6 +73,32 @@ public class CompanyController {
         CurrentActor.requireOwner(OWNER_ONLY);
         return ResponseEntity.ok(ApiResponseWrapper.ok(CompanyProfileDto.from(service.updateDesignation(
                 TenantContext.getCurrentTenant(), request.designation(), CurrentActor.actorId()))));
+    }
+
+    @GetMapping("/profile")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
+    public ResponseEntity<ApiResponseWrapper<CompanyFullProfileDto>> getProfile() {
+        return ResponseEntity.ok(ApiResponseWrapper.ok(CompanyFullProfileDto.from(
+                service.getFullProfile(TenantContext.getCurrentTenant()))));
+    }
+
+    /** Partial update of the identity (absent ⇒ unchanged, empty ⇒ cleared). NIU and RCCM are never mandatory. */
+    @PatchMapping("/profile")
+    @PreAuthorize("hasRole('OWNER')")
+    public ResponseEntity<ApiResponseWrapper<CompanyFullProfileDto>> updateProfile(
+            @Valid @RequestBody CompanyProfilePatchDto request) {
+        CurrentActor.requireOwner(OWNER_ONLY);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(CompanyFullProfileDto.from(service.updateProfile(
+                TenantContext.getCurrentTenant(), request.toPatch(), CurrentActor.actorId()))));
+    }
+
+    /** The owner finished the sign-up steps (organisation, first store). Idempotent. */
+    @PostMapping("/setup/complete")
+    @PreAuthorize("hasRole('OWNER')")
+    public ResponseEntity<ApiResponseWrapper<CompanyFullProfileDto>> completeSetup() {
+        CurrentActor.requireOwner(OWNER_ONLY);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(CompanyFullProfileDto.from(
+                service.completeSetup(TenantContext.getCurrentTenant()))));
     }
 
     @GetMapping("/logo")
