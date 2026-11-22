@@ -77,12 +77,35 @@ class CreateCompanyServiceTest {
         RegistrationResult expected = new RegistrationResult("KV-ABC123", "access", USER_ID.toString(), "t", "refresh");
         when(provisioner.provision(any(), eq(DeviceInfo.of("dev-1", "Redmi")))).thenReturn(expected);
 
-        RegistrationResult result = service.create(new CreateCompanyCommand("login-token", DeviceInfo.of("dev-1", "Redmi")));
+        RegistrationResult result = service.create(new CreateCompanyCommand("login-token", "Ana Mballa", DeviceInfo.of("dev-1", "Redmi")));
 
         assertThat(result).isSameAs(expected);
         ArgumentCaptor<Supplier<UUID>> owner = ArgumentCaptor.forClass(Supplier.class);
         verify(provisioner).provision(owner.capture(), any());
         assertThat(owner.getValue().get()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("the full name is saved in one field (first_name), last_name stays empty")
+    void savesName() {
+        when(provisioner.provision(any(), any()))
+                .thenReturn(new RegistrationResult("KV-ABC123", "access", USER_ID.toString(), "t", "refresh"));
+
+        service.create(new CreateCompanyCommand("login-token", "  Ana Mballa ", DeviceInfo.NONE));
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(users).save(saved.capture());
+        assertThat(saved.getValue().getFirstName()).isEqualTo("Ana Mballa");
+        assertThat(saved.getValue().getLastName()).isNull();
+    }
+
+    @Test
+    @DisplayName("blank name → VALIDATION_FAILED, nothing saved nor provisioned")
+    void blankName() {
+        assertCode(() -> service.create(new CreateCompanyCommand("login-token", "   ", DeviceInfo.NONE)),
+                ErrorCode.VALIDATION_FAILED);
+        verify(users, never()).save(any());
+        verifyNoInteractions(provisioner);
     }
 
     @Test
@@ -93,14 +116,14 @@ class CreateCompanyServiceTest {
         RegistrationResult expected = new RegistrationResult("KV-NEW", "access", USER_ID.toString(), "t", "refresh");
         when(provisioner.provision(any(), any())).thenReturn(expected);
 
-        assertThat(service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE))).isSameAs(expected);
+        assertThat(service.create(new CreateCompanyCommand("login-token", "Ana Mballa", DeviceInfo.NONE))).isSameAs(expected);
     }
 
     @Test
     @DisplayName("already holds an active OWNER membership → COMPANY_ALREADY_EXISTS, nothing provisioned")
     void alreadyOwner() {
         when(memberships.hasActiveOwnerMembership(USER_ID)).thenReturn(true);
-        assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
+        assertCode(() -> service.create(new CreateCompanyCommand("login-token", "Ana Mballa", DeviceInfo.NONE)),
                 ErrorCode.COMPANY_ALREADY_EXISTS);
         verifyNoInteractions(provisioner);
     }
@@ -109,7 +132,7 @@ class CreateCompanyServiceTest {
     @DisplayName("user locked but not readable (gone) → TOKEN_INVALID, never taken for a platform administrator")
     void missingUser() {
         when(users.findById(USER_ID)).thenReturn(Optional.empty());
-        assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
+        assertCode(() -> service.create(new CreateCompanyCommand("login-token", "Ana Mballa", DeviceInfo.NONE)),
                 ErrorCode.TOKEN_INVALID);
         verifyNoInteractions(provisioner);
     }
@@ -118,7 +141,7 @@ class CreateCompanyServiceTest {
     @DisplayName("platform administrator → COMPANY_ALREADY_EXISTS, nothing provisioned")
     void superAdmin() {
         when(users.findById(USER_ID)).thenReturn(Optional.of(user(Role.SUPER_ADMIN)));
-        assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
+        assertCode(() -> service.create(new CreateCompanyCommand("login-token", "Ana Mballa", DeviceInfo.NONE)),
                 ErrorCode.COMPANY_ALREADY_EXISTS);
         verifyNoInteractions(provisioner);
     }
@@ -128,11 +151,11 @@ class CreateCompanyServiceTest {
     void tokenErrors() {
         when(jwt.parseToken("expired")).thenThrow(new ExpiredJwtException(null, null, "expired"));
         when(jwt.parseToken("bad")).thenThrow(new MalformedJwtException("bad"));
-        assertCode(() -> service.create(new CreateCompanyCommand("expired", DeviceInfo.NONE)), ErrorCode.TOKEN_EXPIRED);
-        assertCode(() -> service.create(new CreateCompanyCommand("bad", DeviceInfo.NONE)), ErrorCode.TOKEN_INVALID);
+        assertCode(() -> service.create(new CreateCompanyCommand("expired", "Ana Mballa", DeviceInfo.NONE)), ErrorCode.TOKEN_EXPIRED);
+        assertCode(() -> service.create(new CreateCompanyCommand("bad", "Ana Mballa", DeviceInfo.NONE)), ErrorCode.TOKEN_INVALID);
 
         when(jwt.extractScope(claims)).thenReturn(null);
-        assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
+        assertCode(() -> service.create(new CreateCompanyCommand("login-token", "Ana Mballa", DeviceInfo.NONE)),
                 ErrorCode.TOKEN_INVALID);
         verifyNoInteractions(provisioner);
     }
@@ -141,7 +164,7 @@ class CreateCompanyServiceTest {
     @DisplayName("user of the token no longer exists → TOKEN_INVALID")
     void unknownUser() {
         when(users.lockById(USER_ID)).thenReturn(false);
-        assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
+        assertCode(() -> service.create(new CreateCompanyCommand("login-token", "Ana Mballa", DeviceInfo.NONE)),
                 ErrorCode.TOKEN_INVALID);
     }
 }

@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.api.Role;
+import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.in.CreateCompanyCommand;
 import com.keevo.identity.auth.domain.port.in.CreateCompanyUseCase;
 import com.keevo.identity.auth.domain.port.in.RegistrationResult;
@@ -53,12 +54,17 @@ public class CreateCompanyService implements CreateCompanyUseCase {
             throw new DomainException(ErrorCode.TOKEN_INVALID);
         }
         // Story 19.6 — the platform administrator never owns a company; anyone else may, unless he already owns one.
-        boolean superAdmin = userRepository.findById(userId)
-                .orElseThrow(() -> new DomainException(ErrorCode.TOKEN_INVALID))
-                .getRole() == Role.SUPER_ADMIN;
-        if (superAdmin || membershipRepository.hasActiveOwnerMembership(userId)) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new DomainException(ErrorCode.TOKEN_INVALID));
+        if (user.getRole() == Role.SUPER_ADMIN || membershipRepository.hasActiveOwnerMembership(userId)) {
             throw new DomainException(ErrorCode.COMPANY_ALREADY_EXISTS);
         }
+        // The owner's full name, in one field: kept in first_name, last_name stays empty.
+        String name = User.normalizeIdentifier(command.name());
+        if (name == null) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED, "name is required");
+        }
+        userRepository.save(user.withNames(name, null));
         return ownerTenantProvisioner.provision(() -> userId, command.device());
     }
 }

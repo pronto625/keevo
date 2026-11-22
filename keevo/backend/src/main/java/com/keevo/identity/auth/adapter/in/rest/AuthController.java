@@ -524,6 +524,7 @@ public class AuthController {
         description = """
             Story 19.2 — with the loginToken of /auth/otp/verify, creates the company exactly like
             /auth/register (trial plan, owner) and opens its session: no /auth/select-tenant needed.
+            name (required, 100 max): the owner's full name, first and last name in one field.
             Same token errors as /auth/select-tenant. Refused when the user already owns a company.
             """
     )
@@ -538,7 +539,7 @@ public class AuthController {
     @PostMapping("/create-company")
     public ResponseEntity<RegistrationResponse> createCompany(@Valid @RequestBody CreateCompanyRequestDto request) {
         RegistrationResult result = createCompanyUseCase.create(new CreateCompanyCommand(
-                request.loginToken(), DeviceInfo.of(request.deviceId(), request.deviceLabel())));
+                request.loginToken(), request.name(), DeviceInfo.of(request.deviceId(), request.deviceLabel())));
         return ResponseEntity.status(HttpStatus.CREATED).body(new RegistrationResponse(
                 result.tenantCode(), result.token(), result.userId(), result.tenantId(), result.refreshToken()));
     }

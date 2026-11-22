@@ -7,11 +7,13 @@ import jakarta.validation.constraints.Size;
  * Story 19.2 — POST /api/v1/auth/create-company.
  *
  * @param loginToken  the loginToken of /auth/otp/verify (or /auth/login)
+ * @param name        required full name of the owner (first and last name in one field)
  * @param deviceId    optional device id (the sync device id)
  * @param deviceLabel optional readable device label (model, system)
  */
 public record CreateCompanyRequestDto(
         @NotBlank String loginToken,
+        @NotBlank @Size(max = 100) String name,
         @Size(max = 256) String deviceId,
         @Size(max = 256) String deviceLabel
 ) {}

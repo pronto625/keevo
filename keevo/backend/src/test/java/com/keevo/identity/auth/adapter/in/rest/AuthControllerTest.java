@@ -554,7 +554,7 @@ class AuthControllerTest {
         when(createCompanyUseCase.create(any())).thenReturn(
                 new RegistrationResult("KV-ABC123", "access", "user-id", "tenant-id", "refresh"));
         mockMvc.perform(post("/api/v1/auth/create-company").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginToken\":\"login-tok\",\"deviceId\":\"dev-1\"}"))
+                        .content("{\"loginToken\":\"login-tok\",\"name\":\"Ana Mballa\",\"deviceId\":\"dev-1\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.tenantCode").value("KV-ABC123"))
                 .andExpect(jsonPath("$.refreshToken").value("refresh"));
@@ -562,10 +562,18 @@ class AuthControllerTest {
         org.mockito.Mockito.reset(createCompanyUseCase);
         when(createCompanyUseCase.create(any())).thenThrow(new DomainException(ErrorCode.COMPANY_ALREADY_EXISTS));
         mockMvc.perform(post("/api/v1/auth/create-company").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"loginToken\":\"login-tok\"}"))
+                        .content("{\"loginToken\":\"login-tok\",\"name\":\"Ana Mballa\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.domainCode").value("COMPANY_ALREADY_EXISTS"))
                 .andExpect(jsonPath("$.error").value("Vous avez déjà une entreprise"));
+
+        // the name is required: absent or blank → 422
+        mockMvc.perform(post("/api/v1/auth/create-company").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginToken\":\"login-tok\"}"))
+                .andExpect(status().isUnprocessableEntity());
+        mockMvc.perform(post("/api/v1/auth/create-company").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginToken\":\"login-tok\",\"name\":\"  \"}"))
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
