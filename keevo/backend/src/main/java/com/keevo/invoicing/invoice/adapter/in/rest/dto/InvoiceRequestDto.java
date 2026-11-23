@@ -74,7 +74,18 @@ public record InvoiceRequestDto(
         UUID storeId,
         @Size(max = InvoiceTerms.NOTES_MAX, message = "Les notes ne doivent pas dépasser 2000 caractères")
         String notes,
-        LocalDate issueDate) {
+        LocalDate issueDate,
+        // Story 22.19 (D21) — optional PNG data URLs (≤ 200 KB each), stored as the document's signatures
+        String sellerSignature,
+        String clientSignature) {
+
+    /** A pre-22.19 body: no signature. */
+    public InvoiceRequestDto(UUID id, InvoiceClientDto client, List<InvoiceLineRequestDto> lines, String kind,
+                             Instant expectedUpdatedAt, Long discountAmount, Long deliveryFee, BigDecimal vatRate,
+                             Boolean vatExempt, LocalDate dueDate, UUID storeId, String notes, LocalDate issueDate) {
+        this(id, client, lines, kind, expectedUpdatedAt, discountAmount, deliveryFee, vatRate, vatExempt, dueDate,
+                storeId, notes, issueDate, null, null);
+    }
 
     /** A Story 20.14 body: no notes, no requested issue date. */
     public InvoiceRequestDto(UUID id, InvoiceClientDto client, List<InvoiceLineRequestDto> lines, String kind,

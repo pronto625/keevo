@@ -28,6 +28,7 @@ public final class AuditLabels {
             entry("PASSWORD_RESET_REQUESTED", "Réinitialisation demandée"),
             entry("PASSWORD_RESET", "Mot de passe réinitialisé"),
             entry("ONBOARDING_COMPLETED", "Configuration terminée"),
+            entry("PROFILE_UPDATED", "Profil modifié"),                                       // Story 22.19
             entry("ACCOUNT_DELETION_REQUESTED", "Suppression du compte demandée"),
             entry("ACCOUNT_DELETION_CANCELLED", "Suppression du compte annulée"),
             entry("REPORT_PREFERENCES_UPDATED", "Préférences des rapports modifiées"),
@@ -139,6 +140,7 @@ public final class AuditLabels {
             entry("INVOICE_PAYMENT_RECEIVED", "Paiement reçu"),
             entry("INVOICE_INSTALMENT_SCHEDULED", "Échéance programmée"),
             entry("INVOICE_INSTALMENT_SETTLED", "Échéance réglée"),
+            entry("INVOICE_INSTALMENT_UPDATED", "Échéance modifiée"),                           // Story 22.19
             entry("COMPANY_PROFILE_UPDATED", "Identité de l'entreprise modifiée"),
             entry("ROLE_CREATED", "Rôle créé"),
             entry("ROLE_UPDATED", "Rôle modifié"),

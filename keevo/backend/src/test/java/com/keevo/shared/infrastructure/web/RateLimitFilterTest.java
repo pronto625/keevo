@@ -29,10 +29,10 @@ class RateLimitFilterTest {
     // ── RateLimitBucket ───────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("under 100 requests — all pass (isLimitExceeded returns false)")
+    @DisplayName("under the default ceiling (300) — all pass (isLimitExceeded returns false)")
     void bucket_under100Requests_allPass() {
         RateLimitBucket bucket = new RateLimitBucket();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < RateLimitFilter.DEFAULT_REQUESTS_PER_MINUTE; i++) {
             assertThat(bucket.isLimitExceeded())
                     .as("Request #%d should NOT be rate limited", i + 1)
                     .isFalse();
@@ -40,10 +40,10 @@ class RateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("at 101st request — limit exceeded (isLimitExceeded returns true)")
+    @DisplayName("one over the default ceiling — limit exceeded (isLimitExceeded returns true)")
     void bucket_at101stRequest_exceedsLimit() {
         RateLimitBucket bucket = new RateLimitBucket();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < RateLimitFilter.DEFAULT_REQUESTS_PER_MINUTE; i++) {
             bucket.isLimitExceeded(); // consume first 100
         }
         // 101st request
@@ -56,7 +56,7 @@ class RateLimitFilterTest {
         RateLimitBucket bucket = new RateLimitBucket();
 
         // Exhaust the limit
-        for (int i = 0; i <= 100; i++) {
+        for (int i = 0; i <= RateLimitFilter.DEFAULT_REQUESTS_PER_MINUTE; i++) {
             bucket.isLimitExceeded();
         }
         assertThat(bucket.isLimitExceeded()).isTrue();
@@ -95,7 +95,7 @@ class RateLimitFilterTest {
         RateLimitBucket tenant2 = new RateLimitBucket();
 
         // Exhaust tenant1's limit
-        for (int i = 0; i <= 100; i++) {
+        for (int i = 0; i <= RateLimitFilter.DEFAULT_REQUESTS_PER_MINUTE; i++) {
             tenant1.isLimitExceeded();
         }
 
@@ -114,7 +114,7 @@ class RateLimitFilterTest {
         FilterChain chain = mock(FilterChain.class);
 
         // Send 101 requests to exhaust the limit
-        for (int i = 0; i <= 100; i++) {
+        for (int i = 0; i <= RateLimitFilter.DEFAULT_REQUESTS_PER_MINUTE; i++) {
             response = new MockHttpServletResponse();
             filter.doFilterInternal(request, response, chain);
         }
@@ -128,5 +128,22 @@ class RateLimitFilterTest {
                 new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() { });
         assertThat(body).containsEntry("error", "Trop de requêtes, veuillez patienter")
                 .containsEntry("domainCode", "RATE_LIMIT_EXCEEDED");
+    }
+
+    @Test
+    @DisplayName("22.19 — the ceiling comes from the property; the 429 body states it")
+    void filter_configuredCeiling() throws Exception {
+        RateLimitFilter small = new RateLimitFilter(3);
+        TenantContext.setCurrentTenant("kv_abc123");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        FilterChain chain = mock(FilterChain.class);
+        MockHttpServletResponse response = null;
+        for (int i = 0; i < 4; i++) {
+            response = new MockHttpServletResponse();
+            small.doFilterInternal(request, response, chain);
+            assertThat(response.getStatus()).as("request #%d", i + 1).isEqualTo(i < 3 ? 200 : 429);
+        }
+        assertThat(response.getContentAsString()).contains("\"limitPerMinute\":3");
+        assertThat(new RateLimitFilter().maxRequestsPerMinute()).isEqualTo(300);
     }
 }

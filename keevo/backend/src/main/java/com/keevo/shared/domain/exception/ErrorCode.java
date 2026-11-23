@@ -21,6 +21,9 @@ public enum ErrorCode {
     INVALID_PASSWORD,
     INVALID_CREDENTIALS,
     ACCOUNT_LOCKED,
+    ACCOUNT_DISABLED,            // Story 22.19 — HTTP 403: every membership of the account is deactivated
+    CODE_DELIVERY_FAILED,        // Story 22.19 — HTTP 503: a sign-in code could not be sent
+    UPLOAD_TOO_MANY_REQUESTS,    // Story 22.19 — HTTP 429: per-company image upload limit (30/min)
     TOKEN_EXPIRED,
     TOKEN_INVALID,              // Story 1.7 — loginToken used as accessToken, or invalid scope
     REFRESH_TOKEN_INVALID,
@@ -67,6 +70,7 @@ public enum ErrorCode {
     PRODUCT_MERGED,              // HTTP 409 — Story 20.1: the product was merged into another (unarchive refused)
     // ── Inventory ─────────────────────────────────────────────────
     INSUFFICIENT_STOCK,
+    SALE_CANCEL_NOT_SAME_DAY,   // Story 22.19 — HTTP 409: a completed sale is cancelled from the till on its day only
     STOCK_NOT_FOUND,
     STOCK_NOT_TRACKED,  // Story 17.12 — HTTP 422: stock operation on a product whose stock tracking is off
 
@@ -168,7 +172,7 @@ public enum ErrorCode {
     PLAN_PROFILE_NOT_FOUND, // Story 16.14 — HTTP 404: unknown plan type on /admin/plan-profiles/{planType} (« Offre introuvable »)
     ACCOUNT_SUSPENDED,      // HTTP 403 — tenant status = SUSPENDED (manual admin lockout)
     ACCOUNT_DELETION_PENDING, // HTTP 403 — tenant status = DELETION_PENDING (Story 14.5)
-    RATE_LIMIT_EXCEEDED,    // HTTP 429 — >100 req/min per tenant
+    RATE_LIMIT_EXCEEDED,    // HTTP 429 — over keevo.rate-limit.requests-per-minute (default 300) per tenant
     DELETION_ALREADY_REQUESTED, // HTTP 409 — deletion already pending (Story 14.5)
     DELETION_NOT_PENDING,       // HTTP 409 — no deletion pending to cancel (Story 14.5)
     INVALID_STATE,              // HTTP 409 — admin action not allowed in the tenant's current state (Story 9-2)

@@ -11,7 +11,7 @@ public interface ImageStorage {
     boolean available();
 
     /**
-     * Dépose l'image dans le dossier {@code folder} (déjà contrôlé), réduite à 1024 px au plus sans recadrage ni
+     * Dépose l'image dans le dossier {@code folder} (déjà contrôlé : {@code <code entreprise>/<dossier>}), réduite à 1024 px au plus sans recadrage ni
      * agrandissement.
      *
      * @throws java.io.IOException le stockage est injoignable ou refuse l'image

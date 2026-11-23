@@ -48,5 +48,9 @@ public record CreateProductRequestDto(
 
         /// Story 20.1 — optional free reference or barcode (absent → none / unchanged; blank → cleared). Its length
         /// (≤ 100 once trimmed, else 422) is checked by the use case (ProductKeys.cleanBarcode), not on the raw value.
-        String barcode
+        String barcode,
+
+        /// Story 22.19 (D11) — the store whose stock receives {@code stockQuantity} (« Stock initial »); absent → the
+        /// default store (a store member: always his own store).
+        UUID storeId
 ) {}

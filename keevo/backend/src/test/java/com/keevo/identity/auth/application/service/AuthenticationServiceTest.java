@@ -97,6 +97,24 @@ class AuthenticationServiceTest {
     }
 
     @Test
+    @DisplayName("22.19 (D13) — every membership deactivated → 403 ACCOUNT_DISABLED (no empty company list)")
+    void disabledAccount() {
+        UUID userId = UUID.randomUUID();
+        User user = buildUser(userId, "+22670000001", "$2a$12$hash", 0, null);
+        when(userRepository.findByPhoneNumber("+22670000001")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches(any(), any())).thenReturn(true);
+        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(List.of());
+        when(userRepository.hasOnlyInactiveMemberships(userId)).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.authenticate(
+                new AuthenticateUserCommand("+22670000001", "pass", null)))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class)
+                .extracting(e -> ((com.keevo.shared.domain.exception.DomainException) e).getDomainCode())
+                .isEqualTo("ACCOUNT_DISABLED");
+    }
+
+    @Test
     @DisplayName("authenticate does NOT publish events and does NOT save refresh tokens (step 1 only)")
     void should_not_issue_access_token_or_refresh_token_in_step1() {
         UUID userId = UUID.randomUUID();

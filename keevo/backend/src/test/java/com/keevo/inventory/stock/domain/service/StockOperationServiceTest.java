@@ -58,6 +58,7 @@ class StockOperationServiceTest {
     @Mock private ProductQueryPort        productQuery;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.keevo.store.api.StoreQueryPort storeQuery; // Story 14.10 (store :: api since 12.2d)
+    @Mock private com.keevo.catalog.api.ProductStockCounterPort stockCounter; // Story 22.19 (D11)
 
     @InjectMocks
     private StockOperationService service;
@@ -205,18 +206,41 @@ class StockOperationServiceTest {
     // ── Offline sync: negative stock allowed on request, client movement id ──
 
     @Test
-    void allowNegative_appliesTheDeltaBelowZero() {
+    void allowNegative_offlineSaleApplied_levelFlooredAtZero_byAutomaticAdjustment() {
+        // Story 22.19 (D11) — the sale movement keeps what happened (2 → -1), an adjustment brings the level to 0
         when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(2)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        UUID saleMovementId = UUID.randomUUID();
 
         StockMovement result = service.recordOperation(
-            PRODUCT_ID, null, STORE_ID, MovementType.SALE, -3, ACTOR_ID, "offline sale", null, true);
+            PRODUCT_ID, null, STORE_ID, MovementType.SALE, -3, ACTOR_ID, "offline sale", saleMovementId, true);
 
         assertThat(result.getQuantityAfter()).isEqualTo(-1);
-        verify(stockLevelRepository).save(argThat(l -> l.getQuantity() == -1));
+        verify(stockMovementRepository).save(argThat(m -> m.getMovementType() == MovementType.ADJUSTMENT
+                && m.getQuantityChange() == 1 && m.getQuantityAfter() == 0
+                && m.getId().equals(com.keevo.inventory.api.StockFloor.adjustmentIdOf(saleMovementId))
+                && com.keevo.inventory.api.StockFloor.NOTE.equals(m.getNotes())));
+        verify(stockLevelRepository).save(argThat(l -> l.getQuantity() == 0));
+        // the store ran out: alert raised whatever the threshold
+        verify(eventPublisher).publishEvent(any(com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent.class));
+    }
+
+    @Test
+    void legacyCounter_keptEqualToTheSumOfTheStoreLevels() {
+        // Story 22.19 (D11)
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
+            .thenReturn(Optional.of(levelWithQuantity(10)));
+        when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(stockLevelRepository.sumQuantityByProduct(PRODUCT_ID)).thenReturn(27);
+
+        service.recordOperation(PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY, 5, ACTOR_ID, "delivery");
+
+        verify(stockCounter).syncStockQuantity(TENANT, PRODUCT_ID, 27);
     }
 
     @Test

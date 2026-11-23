@@ -106,13 +106,17 @@ class UpdateLeaderboardVisibilityServiceTest {
     }
 
     @Test
-    @DisplayName("no preferences row → PREFERENCES_NOT_FOUND")
+    @DisplayName("22.19 — no preferences row → created from the defaults, then updated")
     void noRow() {
         when(repository.findByCurrentTenant()).thenReturn(Optional.empty());
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(repository.update(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.update(new UpdateLeaderboardVisibilityCommand(true)))
-                .isInstanceOf(DomainException.class)
-                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.PREFERENCES_NOT_FOUND));
-        verifyNoInteractions(eventPublisher);
+        assertThat(service.update(new UpdateLeaderboardVisibilityCommand(true)).leaderboardVisibleToEmployees())
+                .isTrue();
+        ArgumentCaptor<TenantPreferences> created = ArgumentCaptor.forClass(TenantPreferences.class);
+        verify(repository).save(created.capture());
+        assertThat(created.getValue().sectorType()).isNull();
+        assertThat(created.getValue().eodReportTime()).isEqualTo("20:00:00");
     }
 }

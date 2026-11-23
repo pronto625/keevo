@@ -202,22 +202,21 @@ class UpdateReportPreferencesServiceTest {
     }
 
     @Test
-    void updatePreferences_noPreferencesFound_throwsDomainException() {
-        // Given
+    void updatePreferences_noPreferencesFound_createsFromDefaults() {
+        // Story 22.19 (D2) — no row yet (GET answered the defaults without writing): created, then updated
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.empty());
+        when(tenantPreferencesRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantPreferencesRepository.update(any())).thenAnswer(inv -> inv.getArgument(0));
 
         UpdateReportPreferencesCommand cmd = new UpdateReportPreferencesCommand(
-                true, ReportChannel.WHATSAPP, "20:00:00",
+                true, ReportChannel.WHATSAPP, "18:00:00",
                 true, 0, "20:00:00", ReportChannel.WHATSAPP,
                 true, ReportChannel.WHATSAPP,
                 true, StockAlertChannel.PUSH,
                 null
         );
 
-        // Then
-        assertThatThrownBy(() -> service.update(cmd))
-                .isInstanceOf(DomainException.class)
-                .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
-                        .isEqualTo(ErrorCode.PREFERENCES_NOT_FOUND));
+        assertThat(service.update(cmd).eodReportTime()).isEqualTo("18:00:00");
+        verify(tenantPreferencesRepository).save(any());
     }
 }

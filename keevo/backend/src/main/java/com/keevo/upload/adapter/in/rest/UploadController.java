@@ -38,7 +38,7 @@ public class UploadController {
 
     /**
      * POST /api/v1/uploads (multipart {@code file}, {@code folder?}) → 201 {@code {url, publicId}}. 400 fichier absent,
-     * pas une image, plus de 5 Mo ou dossier invalide ; 502 {@code UPLOAD_FAILED} ; 503 {@code UPLOAD_UNAVAILABLE}.
+     * pas une image, plus de 5 Mo ou dossier invalide ; 429 {@code UPLOAD_TOO_MANY_REQUESTS} (30/min par entreprise) ; 502 {@code UPLOAD_FAILED} ; 503 {@code UPLOAD_UNAVAILABLE}.
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE')")
@@ -48,7 +48,8 @@ public class UploadController {
         if (file == null || file.isEmpty()) {
             throw new InvalidRequestParameterException("file", "required", "Joignez une image");
         }
-        ImageStorage.StoredImage image = uploads.upload(file.getBytes(), file.getContentType(), folder);
+        ImageStorage.StoredImage image = uploads.upload(file.getBytes(), file.getContentType(), folder,
+                com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(new UploadDto(image.url(), image.publicId())));
     }

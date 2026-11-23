@@ -9,6 +9,7 @@ import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import com.keevo.sync.sync.domain.port.in.ConflictResolutionStrategy;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
+import com.keevo.inventory.api.StockFloor;
 import com.keevo.inventory.api.StockQueryPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -82,7 +83,64 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
         }
 
         if (negative != null) return negative;
+        ConflictResult floored = "CREATE_SALE".equals(operation.operationType())
+                ? flooredSale(tenantId, payload, storeId) : null;
+        if (floored != null) return floored;
         return new ConflictResult(null, "DELTA_SUM", null);
+    }
+
+    /** Story 22.19 (D11) — conflict type of a synchronised sale whose store stock was floored at 0. */
+    public static final String STOCK_FLOORED = "STOCK_FLOORED";
+
+    /**
+     * Story 22.19 (D11) — the sale lines the inventory floored ({@link StockFloor}: an automatic adjustment whose id is
+     * derived from the line's movement id = its {@code itemId}): one query for every line; the operation stays APPLIED
+     * and carries a French {@code warning}. Null when no line was floored (or the lines carry no id).
+     */
+    @SuppressWarnings("unchecked")
+    private ConflictResult flooredSale(String tenantId, Map<String, Object> payload, String storeId) {
+        var items = (List<Map<String, Object>>) payload.get("items");
+        if (items == null) return null;
+        Map<String, Integer> quantityOfAdjustment = new LinkedHashMap<>();
+        for (var item : items) {
+            Object itemId = item.get("itemId");
+            if (itemId == null || item.get("productId") == null) continue;
+            try {
+                Object qty = item.get("quantity");
+                quantityOfAdjustment.put(StockFloor.adjustmentIdOf(UUID.fromString(String.valueOf(itemId))).toString(),
+                        qty instanceof Number n ? n.intValue() : Integer.MAX_VALUE);
+            } catch (IllegalArgumentException e) {
+                // not a UUID: never a movement id
+            }
+        }
+        if (quantityOfAdjustment.isEmpty() || !TenantSchema.isValid(tenantId)) return null;
+        // one statement: the adjustments of these lines with their product's name
+        List<Object[]> rows = entityManager.createNativeQuery("SELECT CAST(m.id AS text), CAST(m.product_id AS text), "
+                        + "m.quantity_change, p.name FROM \"" + tenantId + "\".stock_movements m LEFT JOIN \""
+                        + tenantId + "\".products p ON p.id = m.product_id WHERE m.id = ANY (CAST(?1 AS uuid[]))")
+                .setParameter(1, "{" + String.join(",", quantityOfAdjustment.keySet()) + "}")
+                .getResultList();
+        if (rows.isEmpty()) return null;
+        List<Map<String, Object>> lines = new ArrayList<>();
+        StringBuilder warning = new StringBuilder("Stock insuffisant à la synchronisation — manquant : ");
+        for (Object[] row : rows) {
+            // the adjustment also absorbs a level that was already negative: never report more than the line sold
+            int missing = Math.min(((Number) row[2]).intValue(), quantityOfAdjustment.get((String) row[0]));
+            String name = row[3] == null ? "Produit" : String.valueOf(row[3]);
+            Map<String, Object> line = new LinkedHashMap<>();
+            line.put("productId", row[1]);
+            line.put("productName", name);
+            line.put("missingQuantity", missing);
+            lines.add(line);
+            warning.append(lines.size() > 1 ? ", " : "").append(missing).append(" × ").append(name);
+        }
+        warning.append(". Le stock de la boutique a été remis à 0.");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("conflictType", STOCK_FLOORED);
+        data.put("storeId", storeId);
+        data.put("lines", lines);
+        data.put("warning", warning.toString());
+        return new ConflictResult(STOCK_FLOORED, "DELTA_SUM", data);
     }
 
     private boolean isUntracked(String tenantId, String productId) {

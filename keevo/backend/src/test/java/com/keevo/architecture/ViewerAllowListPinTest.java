@@ -24,6 +24,8 @@ class ViewerAllowListPinTest {
     /** The reviewed self-service writes a VIEWER may make ("VERB path-template"). */
     static final Set<String> PINNED = Set.of(
             "POST /api/v1/auth/change-password",
+            // Story 22.19 (D17) — the viewer's own name
+            "PUT /api/v1/auth/profile",
             "DELETE /api/v1/auth/sessions",
             "DELETE /api/v1/auth/sessions/{sessionId}",
             // Story 19.3b — the viewer's own Google / Apple links

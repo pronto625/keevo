@@ -1,7 +1,10 @@
 package com.keevo.crm.module;
 
 import com.keevo.crm.api.ClientLookupPort;
+import com.keevo.crm.api.ClientConsentPort;
+import com.keevo.crm.contact.adapter.in.api.ClientConsentAdapter;
 import com.keevo.crm.contact.adapter.in.api.ClientLookupAdapter;
+import com.keevo.crm.contact.application.usecase.SetClientMarketingConsentUseCase;
 import com.keevo.crm.contact.application.usecase.DeriveClientFromDocumentUseCase;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.shared.module.CapabilityRegistrar;
@@ -33,16 +36,25 @@ public class CrmModule implements KeevoModule {
 
     private final ClientRepository clients;
     private final DeriveClientFromDocumentUseCase documentClients;
+    /** Story 22.19 — behind {@link ClientConsentPort}; {@code null} (tests): that capability is not provided. */
+    private final SetClientMarketingConsentUseCase consent;
 
     public CrmModule(ClientRepository clients) {
-        this(clients, null);
+        this(clients, null, null);
     }
 
     /** Story 20.6 — with the document-client derivation behind {@code ClientLookupPort#findOrCreateForDocument}. */
-    @org.springframework.beans.factory.annotation.Autowired
     public CrmModule(ClientRepository clients, DeriveClientFromDocumentUseCase documentClients) {
+        this(clients, documentClients, null);
+    }
+
+    /** Story 22.19 (D8) — with the marketing consent behind {@link ClientConsentPort}. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public CrmModule(ClientRepository clients, DeriveClientFromDocumentUseCase documentClients,
+                     SetClientMarketingConsentUseCase consent) {
         this.clients = clients;
         this.documentClients = documentClients;
+        this.consent = consent;
     }
 
     @Override
@@ -53,6 +65,9 @@ public class CrmModule implements KeevoModule {
     @Override
     public void registerCapabilities(CapabilityRegistrar registrar) {
         registrar.provide(ClientLookupPort.class, new ClientLookupAdapter(clients, documentClients));
+        if (consent != null) {
+            registrar.provide(ClientConsentPort.class, new ClientConsentAdapter(consent));
+        }
     }
 
     @Override

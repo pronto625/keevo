@@ -27,6 +27,7 @@
   "provides": [],
   "needs": [
     "ClientLookupPort?",
+    "ClientConsentPort?",
     "ProductLookupPort?"
   ],
   "extensionPoints": {

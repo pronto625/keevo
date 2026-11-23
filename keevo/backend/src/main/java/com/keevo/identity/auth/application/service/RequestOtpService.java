@@ -124,7 +124,12 @@ public class RequestOtpService implements RequestOtpUseCase {
             challengeRepository.insert(UUID.randomUUID(), key, codeHash, now.plus(OtpSettings.CODE_TTL), now);
         });
 
-        send(identifier, channels, code, OtpMessages.resolve(language));
+        boolean handedOver = send(identifier, channels, code, OtpMessages.resolve(language));
+        // Story 22.19 (D14) — the client portal says when no channel took the code (the merchant sign-in keeps its
+        // silent answer); the stored code stays valid should a late delivery arrive
+        if (!handedOver && purpose == OtpPurpose.CLIENT_PORTAL) {
+            throw new DomainException(ErrorCode.CODE_DELIVERY_FAILED);
+        }
         return EXPIRES_IN_SECONDS;
     }
 
@@ -133,21 +138,40 @@ public class RequestOtpService implements RequestOtpUseCase {
         return Integer.toString(100_000 + secureRandom.nextInt(900_000));
     }
 
-    private void send(OtpIdentifier identifier, Set<OtpChannel> channels, String code, OtpMessages.Lang lang) {
+    /**
+     * @return whether at least one channel delivered the code or handed it to its provider (WhatsApp, or an uncertain
+     *         answer); also true when no channel has any provider at all (development / test setups: nothing could be
+     *         attempted, the answer stays the silent one)
+     */
+    private boolean send(OtpIdentifier identifier, Set<OtpChannel> channels, String code, OtpMessages.Lang lang) {
+        boolean handedOver = false;
+        boolean attempted = false;
         // Fixed order: SMS before WhatsApp (EnumSet order).
         for (OtpChannel channel : List.copyOf(channels)) {
+            attempted |= switch (channel) {
+                case SMS -> smsSender.isEnabled();
+                case EMAIL -> emailSender.isEnabled();
+                case WHATSAPP -> whatsAppSender.canSendCodes();
+            };
             try {
-                Boolean delivered = switch (channel) {
-                    case SMS -> deliver(smsSender.send(SmsMessage.of(identifier.value(), OtpMessages.sms(lang, code))));
-                    case EMAIL -> deliver(emailSender.send(new EmailMessage(identifier.value(),
+                DeliveryResult result = switch (channel) {
+                    case SMS -> smsSender.send(SmsMessage.of(identifier.value(), OtpMessages.sms(lang, code)));
+                    case EMAIL -> emailSender.send(new EmailMessage(identifier.value(),
                             OtpMessages.emailSubject(lang), OtpMessages.emailText(lang, code),
-                            OtpMessages.emailHtml(lang, code), null, List.of())));
-                    case WHATSAPP -> sendWhatsApp(identifier, code, lang);
+                            OtpMessages.emailHtml(lang, code), null, List.of()));
+                    case WHATSAPP -> null;
                 };
+                // Story 22.19 (D14) — an uncertain outcome (answer lost) may have reached the person: never « failed »
+                handedOver |= result != null && result.uncertain();
+                Boolean delivered = channel == OtpChannel.WHATSAPP ? sendWhatsApp(identifier, code, lang)
+                        : deliver(result);
                 if (delivered == null) {
-                    continue; // WhatsApp: no delivery result (logged in sendWhatsApp)
+                    // WhatsApp: no delivery result (logged in sendWhatsApp); handed over when a provider exists
+                    handedOver |= channel == OtpChannel.WHATSAPP && whatsAppSender.canSendCodes();
+                    continue;
                 }
                 if (delivered) {
+                    handedOver = true;
                     log.info("OTP sent by {} to {}", channel, identifier.masked());
                 } else {
                     log.error("OTP not delivered by {} to {}", channel, identifier.masked());
@@ -157,6 +181,7 @@ public class RequestOtpService implements RequestOtpUseCase {
                 log.error("OTP send by {} failed for {}: {}", channel, identifier.masked(), e.getClass().getSimpleName());
             }
         }
+        return handedOver || !attempted;
     }
 
     private static Boolean deliver(DeliveryResult result) {

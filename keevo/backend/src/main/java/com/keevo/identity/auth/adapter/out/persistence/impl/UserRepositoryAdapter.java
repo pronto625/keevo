@@ -38,9 +38,11 @@ import java.util.stream.Collectors;
 @Component
 public class UserRepositoryAdapter implements UserRepository {
 
+    /** Story 22.19 (D9) — the company name shown in the company picker: designation, else name, else code. */
     private static final String MEMBERSHIPS_WITH_TENANT_SQL = """
-            SELECT m.tenant_id, m.role, m.is_active,
-                   t.code AS tenant_code, COALESCE(t.name, t.code) AS tenant_name, t.schema_name
+            SELECT m.tenant_id, m.role, m.is_active, t.code AS tenant_code,
+                   COALESCE(NULLIF(btrim(t.designation), ''), NULLIF(btrim(t.name), ''), t.code) AS tenant_name,
+                   t.schema_name
             FROM public.user_tenant_memberships m
             JOIN public.tenants t ON t.id = m.tenant_id
             WHERE m.user_id = ? AND m.is_active = true
@@ -228,6 +230,17 @@ public class UserRepositoryAdapter implements UserRepository {
                         rs.getString("role"),
                         rs.getString("schema_name")),
                 userId);
+    }
+
+    /** Story 22.19 (D13) — one aggregate over the account's memberships (index on user_id). */
+    private static final String ONLY_INACTIVE_MEMBERSHIPS_SQL = """
+            SELECT COUNT(*) > 0 AND NOT bool_or(is_active)
+            FROM public.user_tenant_memberships WHERE user_id = ?
+            """;
+
+    @Override
+    public boolean hasOnlyInactiveMemberships(UUID userId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(ONLY_INACTIVE_MEMBERSHIPS_SQL, Boolean.class, userId));
     }
 
     /**

@@ -15,7 +15,19 @@ public interface CancelPendingSaleUseCase {
      *                    cancelling it (stock restoration) needs an online OWNER request.
      */
     record CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification,
-                                    boolean pendingOnly) {
+                                    boolean pendingOnly, boolean sameDayOnly, java.time.Instant cancelledAt) {
+
+        /** Story 22.19 (D18) — cancelled now. */
+        public CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification,
+                                        boolean pendingOnly, boolean sameDayOnly) {
+            this(saleId, actorId, assignedStoreId, justification, pendingOnly, sameDayOnly, null);
+        }
+
+        /** Story 22.19 (D18) — without the same-day rule. */
+        public CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification,
+                                        boolean pendingOnly) {
+            this(saleId, actorId, assignedStoreId, justification, pendingOnly, false, null);
+        }
 
         /** REST path: PENDING_VALIDATION and COMPLETED sales may be cancelled. */
         public CancelPendingSaleCommand(UUID saleId, UUID actorId, UUID assignedStoreId, String justification) {

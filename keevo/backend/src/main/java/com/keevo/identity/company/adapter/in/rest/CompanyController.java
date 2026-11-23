@@ -5,6 +5,7 @@ import com.keevo.identity.company.adapter.in.rest.dto.CompanyFullProfileDto;
 import com.keevo.identity.company.adapter.in.rest.dto.CompanyProfileDto;
 import com.keevo.identity.company.adapter.in.rest.dto.CompanyProfilePatchDto;
 import com.keevo.identity.company.application.service.CompanyProfileService;
+import com.keevo.identity.company.application.service.CompanySetupService;
 import com.keevo.shared.capability.business.CompanyIdentity.Logo;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -54,9 +55,11 @@ public class CompanyController {
             MediaType.IMAGE_JPEG_VALUE, MediaType.IMAGE_PNG_VALUE, MediaType.APPLICATION_OCTET_STREAM_VALUE);
 
     private final CompanyProfileService service;
+    private final CompanySetupService setup;
 
-    public CompanyController(CompanyProfileService service) {
+    public CompanyController(CompanyProfileService service, CompanySetupService setup) {
         this.service = service;
+        this.setup = setup;
     }
 
     @GetMapping
@@ -92,13 +95,16 @@ public class CompanyController {
                 TenantContext.getCurrentTenant(), request.toPatch(), CurrentActor.actorId()))));
     }
 
-    /** The owner finished the sign-up steps (organisation, first store). Idempotent. */
+    /**
+     * The owner finished the sign-up steps (organisation, first store). Idempotent. Story 22.19 (D2): also runs the
+     * sector onboarding once (preferences, sector categories) with the sector of the company category.
+     */
     @PostMapping("/setup/complete")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<CompanyFullProfileDto>> completeSetup() {
         CurrentActor.requireOwner(OWNER_ONLY);
         return ResponseEntity.ok(ApiResponseWrapper.ok(CompanyFullProfileDto.from(
-                service.completeSetup(TenantContext.getCurrentTenant()))));
+                setup.complete(TenantContext.getCurrentTenant(), CurrentActor.actorId()))));
     }
 
     @GetMapping("/logo")

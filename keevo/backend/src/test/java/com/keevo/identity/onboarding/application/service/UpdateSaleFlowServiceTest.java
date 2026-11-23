@@ -101,10 +101,13 @@ class UpdateSaleFlowServiceTest {
     @Test
     @DisplayName("no preferences row → PREFERENCES_NOT_FOUND")
     void noRow() {
+        // Story 22.19 — no row yet: created from the defaults (POS), then switched
         when(repository.findByCurrentTenant()).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.update(SaleFlow.DOCUMENT))
-                .isInstanceOf(DomainException.class)
-                .extracting(e -> ((DomainException) e).getDomainCode()).isEqualTo("PREFERENCES_NOT_FOUND");
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(repository.updateDefaultSaleFlow(any(), org.mockito.ArgumentMatchers.eq(SaleFlow.DOCUMENT)))
+                .thenReturn(true);
+        assertThat(service.update(SaleFlow.DOCUMENT).defaultSaleFlow()).isEqualTo(SaleFlow.DOCUMENT);
+        verify(repository).save(any());
     }
 
     @Test

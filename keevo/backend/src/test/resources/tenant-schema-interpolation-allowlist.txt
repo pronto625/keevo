@@ -27,3 +27,5 @@ com/keevo/admin/catalog/application/service/AdminCatalogService.java :: return v
 com/keevo/crm/contact/adapter/out/persistence/ClientPurchaseAggregate.java :: return "COALESCE(SUM(" + alias + ".doc_count), 0) AS " + COUNT   # table alias
 com/keevo/crm/contact/adapter/out/persistence/ClientPurchaseAggregate.java :: + ", COALESCE(SUM(" + alias + ".total_amount), 0) AS " + TOTAL   # table alias
 com/keevo/crm/contact/adapter/out/persistence/ClientPurchaseAggregate.java :: + ", MAX(COALESCE(" + alias + ".recorded_at, " + alias + ".created_at)) FILTER (WHERE " + alias   # table alias
+# Story 22.19 — multipart form field of the Cloudinary upload request (name / value), not SQL.
+com/keevo/upload/adapter/out/cloudinary/CloudinaryImageStorage.java :: write(out, "--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n" + value   # multipart body, not SQL

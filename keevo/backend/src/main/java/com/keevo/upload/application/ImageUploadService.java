@@ -14,7 +14,8 @@ import java.util.regex.Pattern;
 /**
  * Dépôt d'une image envoyée par l'app (comme {@code POST /v1/uploads} d'api-bref) : 5 Mo au plus, formats d'image
  * courants (le SVG est exclu : il peut embarquer du script), type vérifié aussi sur les premiers octets, dossier de
- * rangement en lettres, chiffres, tirets.
+ * rangement en lettres, chiffres, tirets. Story 22.19 : rangé sous le code de l'entreprise, 30 envois par minute et
+ * par entreprise, HEIC reconnu à sa marque (une vidéo MP4 ou MOV est refusée).
  */
 @Service
 public class ImageUploadService {
@@ -25,13 +26,32 @@ public class ImageUploadService {
     private static final Set<String> TYPES = Set.of("image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp",
             "image/heic", "image/heif");
 
-    private final ImageStorage storage;
+    /** Story 22.19 (D10) — the ISO-BMFF brands of a HEIC / HEIF image (an MP4 or a MOV is refused). */
+    private static final Set<String> HEIF_BRANDS = Set.of("heic", "heix", "hevc", "mif1", "msf1");
 
-    public ImageUploadService(ImageStorage storage) {
-        this.storage = storage;
+    private final ImageStorage storage;
+    private final UploadRateLimiter limiter;
+    /** Story 22.19 (D10) — schema → public tenant code (one-row lookup), never guessed from the schema name. */
+    private final java.util.function.Function<String, java.util.Optional<String>> tenantCodes;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ImageUploadService(ImageStorage storage, UploadRateLimiter limiter,
+                              com.keevo.shared.module.application.port.TenantModuleProvisioningPort tenants) {
+        this(storage, limiter, tenants::tenantCode);
     }
 
-    public ImageStorage.StoredImage upload(byte[] content, String contentType, String folder) {
+    ImageUploadService(ImageStorage storage, UploadRateLimiter limiter,
+                       java.util.function.Function<String, java.util.Optional<String>> tenantCodes) {
+        this.storage = storage;
+        this.limiter = limiter;
+        this.tenantCodes = tenantCodes;
+    }
+
+    /**
+     * @param tenantSchema the uploading company (Story 22.19, D10): its images go to {@code bref/<tenant code>/<folder>}
+     *                     and count towards its {@value UploadRateLimiter#PER_MINUTE} uploads per minute
+     */
+    public ImageStorage.StoredImage upload(byte[] content, String contentType, String folder, String tenantSchema) {
         String type = contentType == null ? "" : contentType.toLowerCase(java.util.Locale.ROOT);
         if (!TYPES.contains(type) || content == null || !hasImageSignature(content)) {
             throw new InvalidRequestParameterException("file", "type",
@@ -44,12 +64,26 @@ public class ImageUploadService {
         if (!FOLDER.matcher(target).matches()) {
             throw new InvalidRequestParameterException("folder", "format", "Dossier invalide");
         }
+        if (tenantSchema == null || tenantSchema.isBlank()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Upload without a company", Map.of());
+        }
         if (!storage.available()) {
             throw new DomainException(ErrorCode.UPLOAD_UNAVAILABLE, "Image storage not configured", Map.of());
         }
+        String code = tenantCodes.apply(tenantSchema)
+                .orElseThrow(() -> new DomainException(ErrorCode.FORBIDDEN, "Upload for an unknown company", Map.of()));
+        // counted once storage is there; a failed upload gives its slot back
+        if (!limiter.tryAcquire(tenantSchema)) {
+            throw new DomainException(ErrorCode.UPLOAD_TOO_MANY_REQUESTS, "Upload limit reached",
+                    Map.of("limitPerMinute", UploadRateLimiter.PER_MINUTE));
+        }
         try {
-            return storage.store(content, target);
-        } catch (IOException e) {
+            return storage.store(content, code + "/" + target);
+        } catch (IOException | RuntimeException e) {
+            limiter.release(tenantSchema);
+            if (e instanceof RuntimeException r) {
+                throw r;
+            }
             throw new DomainException(ErrorCode.UPLOAD_FAILED, "Image storage failed", Map.of());
         }
     }
@@ -64,7 +98,8 @@ public class ImageUploadService {
         boolean webp = b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F' && b[8] == 'W' && b[9] == 'E'
                 && b[10] == 'B' && b[11] == 'P';
         boolean gif = b[0] == 'G' && b[1] == 'I' && b[2] == 'F';
-        boolean heic = b[4] == 'f' && b[5] == 't' && b[6] == 'y' && b[7] == 'p';
+        boolean heic = b[4] == 'f' && b[5] == 't' && b[6] == 'y' && b[7] == 'p'
+                && HEIF_BRANDS.contains(new String(b, 8, 4, java.nio.charset.StandardCharsets.US_ASCII));
         return jpeg || png || webp || gif || heic;
     }
 }

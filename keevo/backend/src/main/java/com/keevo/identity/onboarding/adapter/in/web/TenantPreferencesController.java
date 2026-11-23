@@ -75,13 +75,10 @@ public class TenantPreferencesController {
     @GetMapping("/preferences")
     public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> getPreferences() {
         String schema = TenantContext.requireCurrent();
-        // An organisation created through the app's sign-up flow (organisation, then first store) never goes through
-        // the sector onboarding, so it has no preferences row yet: create it with the defaults on first read, so the
-        // alert / report / sale-flow settings can be shown and saved.
-        var stored = tenantPreferencesRepository.findByCurrentTenant()
-            .or(() -> java.util.Optional.of(tenantPreferencesRepository.save(
-                TenantPreferences.withDefaults(java.util.UUID.randomUUID(), null, "20:00:00", true,
-                        java.time.Instant.now()))));
+        // Story 22.19 (D2) — a read never writes: before the sector onboarding (no row yet) the defaults are returned
+        // as they would be stored (sectorType null), and the first write creates the row.
+        var stored = java.util.Optional.of(tenantPreferencesRepository.findByCurrentTenant()
+            .orElseGet(() -> TenantPreferences.defaults(null, java.time.Instant.now()).asStored()));
         return stored
             .map(prefs -> {
                 var effective = effectivePreferences.effective(schema, prefs);
@@ -107,10 +104,10 @@ public class TenantPreferencesController {
         UpdateReportPreferencesCommand command = new UpdateReportPreferencesCommand(
             request.eodReportEnabled(),
             ReportChannel.fromString(request.eodReportChannel()),
-            request.eodReportTime(),
+            UpdateReportPreferencesRequestDto.withSeconds(request.eodReportTime()),
             request.weeklyReportEnabled(),
             request.weeklyReportDay(),
-            request.weeklyReportTime(),
+            UpdateReportPreferencesRequestDto.withSeconds(request.weeklyReportTime()),
             ReportChannel.fromString(request.weeklyReportChannel()),
             request.inventoryReportEnabled(),
             ReportChannel.fromString(request.inventoryReportChannel()),

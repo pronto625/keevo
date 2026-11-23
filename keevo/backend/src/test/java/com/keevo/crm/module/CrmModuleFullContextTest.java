@@ -79,10 +79,11 @@ class CrmModuleFullContextTest extends FullContextIntegrationTest {
     @DisplayName("crm has a manifest and a KeevoModule bean; ClientLookupPort is no bean (registry only)")
     void convertedModule() {
         assertThat(registry.definition("crm")).hasValueSatisfying(m -> assertThat(m.provides())
-                .containsExactly("ClientLookupPort"));
+                .containsExactly("ClientLookupPort", "ClientConsentPort")); // 22.19: ClientConsentPort
         assertThat(modules.module("crm")).hasValueSatisfying(m -> assertThat(m.id()).isEqualTo("crm"));
         assertThat(modules.module("reporting")).isPresent();
         assertThat(context.getBeansOfType(ClientLookupPort.class)).isEmpty();
+        assertThat(context.getBeansOfType(com.keevo.crm.api.ClientConsentPort.class)).isEmpty();
     }
 
     @Test

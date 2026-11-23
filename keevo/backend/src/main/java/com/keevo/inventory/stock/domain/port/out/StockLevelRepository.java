@@ -34,4 +34,7 @@ public interface StockLevelRepository {
      * one of them is non-zero (one query; a product has one level per store).
      */
     boolean lockAndHasNonZeroStock(UUID productId);
+
+    /** Story 22.19 (D11) — the product's stock over every store and variant (one aggregate; 0 without any level). */
+    int sumQuantityByProduct(UUID productId);
 }

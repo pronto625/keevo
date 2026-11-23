@@ -96,12 +96,46 @@ public record TenantPreferences(
                 leaderboardVisibleToEmployees, flow);
     }
 
+    /**
+     * Story 22.19 (D3) — the times as a stored row reads them back ({@code LocalTime#toString}: « 20:00 »), for
+     * defaults answered without a row.
+     */
+    public TenantPreferences asStored() {
+        return new TenantPreferences(id, sectorType, storedTime(eodReportTime), stockAlertEnabled, createdAt,
+                eodReportEnabled, eodReportChannel, weeklyReportEnabled, weeklyReportDay, storedTime(weeklyReportTime),
+                weeklyReportChannel, inventoryReportEnabled, inventoryReportChannel, stockAlertChannel,
+                trendNotificationEnabled, leaderboardVisibleToEmployees, defaultSaleFlow);
+    }
+
+    private static String storedTime(String time) {
+        return time == null ? null : java.time.LocalTime.parse(time).toString();
+    }
+
+    /** Story 22.19 — the same preferences with a sector (sector onboarding of a row created before it). */
+    public TenantPreferences withSectorType(SectorType sector) {
+        return new TenantPreferences(id, sector, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled,
+                eodReportChannel, weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel,
+                inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled,
+                leaderboardVisibleToEmployees, defaultSaleFlow);
+    }
+
     /** The stored values as the published view (no Story 17.8 rule applied: see the effective-preferences use case). */
     public TenantPreferencesView toView() {
         return new TenantPreferencesView(eodReportTime, stockAlertEnabled, eodReportEnabled,
                 eodReportChannel, weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel,
                 inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled,
                 leaderboardVisibleToEmployees);
+    }
+
+    /** Default end-of-day report time (« 20:00 »). */
+    public static final String DEFAULT_EOD_REPORT_TIME = "20:00:00";
+
+    /**
+     * Story 22.19 — the default preferences of a tenant (new id, end-of-day report at 20:00, stock alerts on), used by
+     * the onboarding, by the reads before any row exists and by the first write.
+     */
+    public static TenantPreferences defaults(SectorType sectorType, Instant createdAt) {
+        return withDefaults(UUID.randomUUID(), sectorType, DEFAULT_EOD_REPORT_TIME, true, createdAt);
     }
 
     /**

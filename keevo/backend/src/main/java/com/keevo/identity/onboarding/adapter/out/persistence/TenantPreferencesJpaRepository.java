@@ -12,6 +12,9 @@ import java.util.UUID;
  * TenantPreferencesJpaRepository — Spring Data JPA repository for tenant preferences.
  */
 public interface TenantPreferencesJpaRepository extends JpaRepository<TenantPreferencesJpaEntity, UUID> {
+
+    /** Story 22.19 — the sector onboarding ran: a row with a sector (a settings write alone creates a sector-less one). */
+    boolean existsBySectorTypeIsNotNull();
     
     /**
      * Find the most recent tenant preferences (there should only be one per tenant).

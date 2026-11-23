@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * RateLimitFilter — Per-tenant request rate limiting (100 req/min).
+ * RateLimitFilter — Per-tenant request rate limiting (keevo.rate-limit.requests-per-minute, default 300 req/min).
  *
  * <p>Runs AFTER {@code JwtAuthFilter} ({@code @Order(1)}) so that
  * {@link TenantContext} is already set when this filter executes.
@@ -41,10 +41,37 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Order(2)
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    static final int MAX_REQUESTS_PER_MINUTE = 100;
+    /**
+     * Story 22.19 (D15) — default per-tenant ceiling, property {@code keevo.rate-limit.requests-per-minute} (was a
+     * hardcoded 100, refused 43 requests of the RN app in 25 min).
+     */
+    static final int DEFAULT_REQUESTS_PER_MINUTE = 300;
 
     private final ConcurrentHashMap<String, RateLimitBucket> buckets =
             new ConcurrentHashMap<>();
+    private final int maxRequestsPerMinute;
+    private final String rateLimitBody;
+
+    /** Default ceiling — tests. */
+    public RateLimitFilter() {
+        this(DEFAULT_REQUESTS_PER_MINUTE);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RateLimitFilter(
+            @org.springframework.beans.factory.annotation.Value(
+                    "${keevo.rate-limit.requests-per-minute:" + DEFAULT_REQUESTS_PER_MINUTE + "}")
+            int maxRequestsPerMinute) {
+        if (maxRequestsPerMinute < 1) {
+            throw new IllegalArgumentException("keevo.rate-limit.requests-per-minute must be >= 1");
+        }
+        this.maxRequestsPerMinute = maxRequestsPerMinute;
+        this.rateLimitBody = rateLimitBody(maxRequestsPerMinute);
+    }
+
+    int maxRequestsPerMinute() {
+        return maxRequestsPerMinute;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -58,14 +85,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
             return;
         }
 
-        RateLimitBucket bucket = buckets.computeIfAbsent(tenantId, k -> new RateLimitBucket());
+        RateLimitBucket bucket = buckets.computeIfAbsent(tenantId, k -> new RateLimitBucket(maxRequestsPerMinute));
 
         if (bucket.isLimitExceeded()) {
             response.setStatus(429);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding("UTF-8");
             // Story 16.14 — French text from the shared catalogue
-            response.getWriter().write(rateLimitBody());
+            response.getWriter().write(rateLimitBody);
             return;
         }
 
@@ -75,13 +102,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
     /** Serialised once by Jackson (escaping handled); the constant is only a never-expected fallback. */
     private static final ObjectMapper JSON = new ObjectMapper();
     static final String FALLBACK_BODY = "{\"error\":\"Trop de requêtes, veuillez patienter\","
-            + "\"domainCode\":\"RATE_LIMIT_EXCEEDED\",\"details\":{\"limitPerMinute\":100,\"resetInSeconds\":60}}";
+            + "\"domainCode\":\"RATE_LIMIT_EXCEEDED\",\"details\":{\"resetInSeconds\":60}}";
 
-    static String rateLimitBody() {
+    static String rateLimitBody(int limitPerMinute) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", ErrorMessages.of("RATE_LIMIT_EXCEEDED", "Trop de requêtes, veuillez patienter"));
         body.put("domainCode", "RATE_LIMIT_EXCEEDED");
-        body.put("details", Map.of("limitPerMinute", 100, "resetInSeconds", 60));
+        body.put("details", Map.of("limitPerMinute", limitPerMinute, "resetInSeconds", 60));
         try {
             return JSON.writeValueAsString(body);
         } catch (JsonProcessingException e) {
@@ -101,6 +128,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         private final AtomicInteger count = new AtomicInteger(0);
         private volatile long windowStart = System.currentTimeMillis();
+        private final int limit;
+
+        RateLimitBucket() {
+            this(DEFAULT_REQUESTS_PER_MINUTE);
+        }
+
+        RateLimitBucket(int limit) {
+            this.limit = limit;
+        }
 
         /**
          * Increment count and return {@code true} if the limit has been exceeded.
@@ -117,7 +153,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 count.set(0);
                 windowStart = now;
             }
-            return count.incrementAndGet() > MAX_REQUESTS_PER_MINUTE;
+            return count.incrementAndGet() > limit;
         }
     }
 }

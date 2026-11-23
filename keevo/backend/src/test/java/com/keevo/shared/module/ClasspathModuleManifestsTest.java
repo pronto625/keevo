@@ -68,13 +68,14 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("messaging").enhances()).containsExactly("reporting", "pos", "inventory");
         assertThat(byId.get("catalog").enhances()).containsExactly("reporting");
         assertThat(byId.get("crm").enhances()).containsExactly("pos");
-        assertThat(byId.get("crm").provides()).containsExactly("ClientLookupPort");
+        assertThat(byId.get("crm").provides()).containsExactly("ClientLookupPort", "ClientConsentPort"); // 22.19
         assertThat(byId.get("pos").needs()).containsExactly("ClientLookupPort?");
         // 14.1: invoicing — standalone (core only), enhances pos/crm, optional ClientLookupPort, own permissions
         assertThat(byId.get("invoicing").requires()).containsExactly("core");
         // 20.6: enhances catalog too, optional ProductLookupPort (document → catalogue products)
         assertThat(byId.get("invoicing").enhances()).containsExactly("pos", "crm", "catalog");
-        assertThat(byId.get("invoicing").needs()).containsExactly("ClientLookupPort?", "ProductLookupPort?");
+        assertThat(byId.get("invoicing").needs()).containsExactly("ClientLookupPort?", "ClientConsentPort?",
+                "ProductLookupPort?"); // 22.19: the marketing consent of a converted quote
         assertThat(byId.get("catalog").provides()).containsExactly("ProductLookupPort");
         assertThat(byId.get("invoicing").permissions()).containsExactly("INVOICE_CREATE", "INVOICE_VIEW",
                 "INVOICE_SEND", "INVOICE_MANAGE", "DOCUMENT_STORE_VIEW"); // 19.14
@@ -132,8 +133,10 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("catalog").rolePermissions().get("VIEWER")).isEmpty();
         // 19.5b — fine rights of the store manager (and the viewer's store sales)
         // 19.14 — « Créer des ventes » becomes a permission (same holders as today: MANAGER, EMPLOYEE)
-        assertThat(byId.get("pos").permissions()).containsExactly("STORE_SALES_VIEW", "SALE_CREATE");
-        assertThat(byId.get("pos").rolePermissions().get("MANAGER")).containsExactly("STORE_SALES_VIEW", "SALE_CREATE");
+        // 22.19 (D18) — « Annuler une vente du jour », MANAGER by default
+        assertThat(byId.get("pos").permissions()).containsExactly("STORE_SALES_VIEW", "SALE_CREATE", "SALE_CANCEL");
+        assertThat(byId.get("pos").rolePermissions().get("MANAGER"))
+                .containsExactly("STORE_SALES_VIEW", "SALE_CREATE", "SALE_CANCEL");
         assertThat(byId.get("pos").rolePermissions().get("VIEWER")).containsExactly("STORE_SALES_VIEW");
         assertThat(byId.get("pos").rolePermissions().get("EMPLOYEE")).containsExactly("SALE_CREATE");
         assertThat(byId.get("counting").permissions()).containsExactly("INVENTORY_SESSION_MANAGE");

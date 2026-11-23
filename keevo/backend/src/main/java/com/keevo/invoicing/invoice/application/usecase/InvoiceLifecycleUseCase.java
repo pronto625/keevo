@@ -113,13 +113,19 @@ public class InvoiceLifecycleUseCase {
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
         locked.assertIssuable(seller); // throws the precise error before any number is allocated
-        // the day the seller asked the invoice to be dated (today by default), never before the latest issued one
-        LocalDate issueDay = locked.terms().issueDateOr(today);
-        invoices.latestIssueDate().filter(issueDay::isBefore).ifPresent(latest -> {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Issue date before the latest invoice",
-                    Map.of("reason", "La date d'émission ne peut pas précéder celle de la dernière facture émise ("
-                            + latest + ")"));
-        });
+        // Story 22.19 (D4) — the day the seller asked the invoice to be dated (today by default), moved up to the latest
+        // issued one when earlier (an offline sale synchronised after another device's invoice): issuing never fails
+        // on an earlier date, the requested day stays in requested_issue_date. The year's counter row is locked first
+        // so two issues cannot both read the same latest date.
+        LocalDate requested = locked.terms().issueDateOr(today);
+        invoices.lockCounter(requested.getYear());
+        LocalDate issueDay = invoices.latestIssueDate().filter(requested::isBefore)
+                .filter(latest -> latest.getYear() == requested.getYear()).orElse(requested);
+        LocalDate due = locked.terms().dueDate();
+        if (issueDay.isAfter(requested) && due != null && due.isBefore(issueDay)) {
+            // Story 22.19 (D4) — the day was moved up: the due date follows (never before the issue date)
+            locked = locked.withTerms(locked.terms().withDueDate(issueDay));
+        }
         locked.terms().assertDueDateFrom(issueDay); // Story 20.5 — a due date never precedes the issue date
         if (counted) { // 19.8: before numbering, same transaction — a refusal keeps the draft and the sequence
             quotas.assertAndIncrementForSchema(tenantId, UsageMetric.DOCUMENTS, 1);

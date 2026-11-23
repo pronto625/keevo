@@ -52,7 +52,8 @@ public class ConvertQuoteUseCase {
     private final Clock clock;
     private final com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations;
     private final DocumentStoreResolver stores;
-    private final com.keevo.crm.api.ClientCommandPort crmClients;
+    /** Story 22.19 (D8) — the marketing consent's own transaction ({@code null} in unit tests: none recorded). */
+    private final org.springframework.transaction.support.TransactionTemplate consentTx;
     private final com.keevo.shared.module.CapabilityRegistry capabilities;
     private final com.keevo.shared.module.EntitlementService entitlements;
 
@@ -67,15 +68,26 @@ public class ConvertQuoteUseCase {
         this(invoices, settings, lifecycle, events, clock, presentations, stores, null, null, null);
     }
 
-    /** {@code crmClients}: where the marketing consent given at the conversion is recorded ({@code null}: nowhere). */
+    /**
+     * Story 22.19 (D8) — the marketing consent given at the conversion goes to the crm through the
+     * {@code ClientConsentPort} capability ({@code capabilities}), in its own transaction ({@code transactionManager});
+     * {@code null}: nowhere.
+     */
     @org.springframework.beans.factory.annotation.Autowired
     public ConvertQuoteUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                InvoiceLifecycleUseCase lifecycle, ApplicationEventPublisher events, Clock clock,
                                com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations,
-                               DocumentStoreResolver stores, com.keevo.crm.api.ClientCommandPort crmClients,
+                               DocumentStoreResolver stores,
+                               org.springframework.transaction.PlatformTransactionManager transactionManager,
                                com.keevo.shared.module.CapabilityRegistry capabilities,
                                com.keevo.shared.module.EntitlementService entitlements) {
-        this.crmClients = crmClients;
+        if (transactionManager == null) {
+            this.consentTx = null;
+        } else {
+            this.consentTx = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+            this.consentTx.setPropagationBehavior(
+                    org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        }
         this.capabilities = capabilities;
         this.entitlements = entitlements;
         this.presentations = presentations;
@@ -158,31 +170,39 @@ public class ConvertQuoteUseCase {
     /**
      * The client agreed to marketing messages when accepting the quote: recorded on the invoice's CRM client (the
      * crm audits it), found or created from the invoice's client when the document is not linked to one yet. Run
-     * after the conversion is committed: a refusal never undoes it, and a client already consenting is left as it
-     * is. Does nothing when the crm is unavailable or the client has no usable phone.
+     * after the conversion is committed, in its own transaction (Story 22.19, D8): a refusal never undoes the
+     * conversion nor fails its answer — it is logged only — and a client already consenting is left as it is. Does
+     * nothing when the crm is off for the tenant or the client has no usable phone.
      */
-    @Transactional
     public void recordMarketingConsent(Invoice invoice, UUID actorId, String tenantId) {
-        if (crmClients == null) {
+        if (consentTx == null || capabilities == null) {
             return;
         }
         try {
-            UUID clientId = invoice.client().clientId();
-            if (clientId == null && capabilities != null && invoice.client().phone() != null
-                    && entitlements.state(tenantId, "crm") == com.keevo.shared.module.ModuleState.ENABLED) {
-                var c = invoice.client();
-                clientId = capabilities.find(com.keevo.crm.api.ClientLookupPort.class, tenantId)
-                        .flatMap(crm -> crm.findOrCreateForDocument(tenantId,
-                                new com.keevo.crm.api.DocumentClientInput(c.name(), c.phone(), c.email(), c.rccm(),
-                                        c.niu(), c.address(), invoice.storeId()), actorId))
-                        .orElse(null);
-            }
-            if (clientId != null) {
-                crmClients.setMarketingConsent(tenantId, clientId, true, actorId);
-            }
+            consentTx.executeWithoutResult(status -> giveConsent(invoice, actorId, tenantId));
         } catch (RuntimeException e) {
             org.slf4j.LoggerFactory.getLogger(ConvertQuoteUseCase.class)
-                    .warn("Marketing consent not recorded: {}", e.getMessage());
+                    .warn("Marketing consent not recorded ({})", e.getClass().getSimpleName());
+        }
+    }
+
+    private void giveConsent(Invoice invoice, UUID actorId, String tenantId) {
+        var consent = capabilities.find(com.keevo.crm.api.ClientConsentPort.class, tenantId);
+        if (consent.isEmpty()) {
+            return; // crm off for the tenant
+        }
+        UUID clientId = invoice.client().clientId();
+        if (clientId == null && invoice.client().phone() != null
+                && entitlements.state(tenantId, "crm") == com.keevo.shared.module.ModuleState.ENABLED) {
+            var c = invoice.client();
+            clientId = capabilities.find(com.keevo.crm.api.ClientLookupPort.class, tenantId)
+                    .flatMap(crm -> crm.findOrCreateForDocument(tenantId,
+                            new com.keevo.crm.api.DocumentClientInput(c.name(), c.phone(), c.email(), c.rccm(),
+                                    c.niu(), c.address(), invoice.storeId()), actorId))
+                    .orElse(null);
+        }
+        if (clientId != null) {
+            consent.get().giveMarketingConsent(tenantId, clientId, actorId);
         }
     }
 

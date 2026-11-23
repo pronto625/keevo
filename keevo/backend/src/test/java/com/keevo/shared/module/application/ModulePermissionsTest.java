@@ -172,7 +172,9 @@ class ModulePermissionsTest {
                         // 19.5b — fine rights of the store manager
                         "STORE_SALES_VIEW", "INVENTORY_SESSION_MANAGE", "PRODUCT_MERGE", "TEAM_MANAGE",
                         // 19.14 — selling and the store's documents, as permissions (same holders as before)
-                        "SALE_CREATE", "DOCUMENT_STORE_VIEW");
+                        "SALE_CREATE", "DOCUMENT_STORE_VIEW",
+                        // 22.19 (D18) — cancelling a sale of the day from the till
+                        "SALE_CANCEL");
         // 19.5b — a VIEWER reads his store's sales
         assertThat(permissions.permissionsFor(Role.VIEWER)).containsExactlyInAnyOrder("INVOICE_VIEW",
                 "STORE_SALES_VIEW", "DOCUMENT_STORE_VIEW");

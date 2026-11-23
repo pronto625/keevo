@@ -30,11 +30,12 @@
   },
   "permissions": [
     "STORE_SALES_VIEW",
-    "SALE_CREATE"
+    "SALE_CREATE",
+    "SALE_CANCEL"
   ],
   "routes": [],
   "rolePermissions": {
-    "MANAGER": ["STORE_SALES_VIEW", "SALE_CREATE"],
+    "MANAGER": ["STORE_SALES_VIEW", "SALE_CREATE", "SALE_CANCEL"],
     "EMPLOYEE": ["SALE_CREATE"],
     "VIEWER": ["STORE_SALES_VIEW"]
   },

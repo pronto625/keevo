@@ -56,6 +56,8 @@ class MultiStoreStockControllerTest {
     @Mock private GetStoreStockDetailUseCase       detailUseCase;
     @Mock private GetCrossStoreAvailabilityUseCase availabilityUseCase;
 
+    @Mock private com.keevo.shared.module.EntitlementService entitlements;   // Story 22.19 (D19)
+    @Mock private com.keevo.store.api.StoreQueryPort stores;
     @InjectMocks private MultiStoreStockController controller;
 
     private MockMvc mockMvc;
@@ -108,6 +110,41 @@ class MultiStoreStockControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.content").isArray())
             .andExpect(jsonPath("$.data.content[0].productName").value("Prod A"));
+    }
+
+    @Test
+    void D19_owner_defaultStore_readableWithoutMultiStore() throws Exception {
+        asOwner();
+        when(stores.defaultStore("kv_test01")).thenReturn(java.util.Optional.of(storeId));
+        when(detailUseCase.execute(any())).thenReturn(new PageImpl<>(List.of(sampleEntry()), PageRequest.of(0, 25), 1));
+
+        mockMvc.perform(get("/api/v1/stock/stores/{storeId}/products", storeId)).andExpect(status().isOk());
+        org.mockito.Mockito.verifyNoInteractions(entitlements);
+    }
+
+    @Test
+    void D19_owner_otherStore_needsMultiStore() throws Exception {
+        asOwner();
+        when(stores.defaultStore("kv_test01")).thenReturn(java.util.Optional.of(UUID.randomUUID()));
+        org.mockito.Mockito.doThrow(new com.keevo.shared.domain.exception.DomainException(
+                com.keevo.shared.domain.exception.ErrorCode.MODULE_NOT_IN_PLAN, "multi-store"))
+                .when(entitlements).assertEnabled("kv_test01", "multi-store");
+
+        mockMvc.perform(get("/api/v1/stock/stores/{storeId}/products", storeId))
+                .andExpect(status().is4xxClientError());
+        org.mockito.Mockito.verifyNoInteractions(detailUseCase);
+    }
+
+    private static void asOwner() {
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(UUID.randomUUID(),
+                        null, List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                        "ROLE_OWNER"))));
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearAuth22() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
     }
 
     @Test

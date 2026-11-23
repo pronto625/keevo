@@ -143,4 +143,10 @@ public interface ProductRepository {
 
     /** Products whose barcode is {@code code} or whose key is {@code key}, direct and visible ones first. */
     List<Product> findByBarcodeOrKey(String code, String key, int limit);
+
+    /**
+     * Story 22.19 (D11) — the legacy counter of a tracked product set to {@code total} when it differs
+     * ({@code updated_at} is left alone: it drives the sync conflict rules); false when nothing changed.
+     */
+    boolean updateStockQuantity(UUID id, int total);
 }

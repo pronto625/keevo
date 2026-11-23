@@ -97,6 +97,18 @@ class VerifyOtpServiceTest {
     }
 
     @Test
+    @DisplayName("22.19 (D13) — every membership deactivated → ACCOUNT_DISABLED, the code still consumed")
+    void disabledAccount() {
+        User member = owner(PHONE, null);
+        when(users.findByPhoneNumber(PHONE)).thenReturn(Optional.of(member));
+        when(users.findMembershipsWithTenantInfo(member.getId())).thenReturn(List.of());
+        when(users.hasOnlyInactiveMemberships(member.getId())).thenReturn(true);
+
+        assertCode(() -> service.verify(new VerifyOtpCommand(PHONE, "123456")), ErrorCode.ACCOUNT_DISABLED);
+        verify(repo).consume(CHALLENGE_ID, NOW);
+    }
+
+    @Test
     @DisplayName("already verified: no save")
     void alreadyVerified() {
         User owner = owner(PHONE, null).withPhoneVerifiedAt(NOW.minus(Duration.ofDays(1)));

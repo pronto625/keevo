@@ -106,9 +106,12 @@ public final class SaleInvoiceMapper {
                     ? UNNAMED_PRODUCT : line.productName().strip();
             int q = line.quantity();
             if (net[i] % q == 0) {
-                lines.add(new LineInput(name, BigDecimal.valueOf(q), net[i] / q, VatTreatment.STANDARD));
+                lines.add(new LineInput(name, BigDecimal.valueOf(q), net[i] / q, VatTreatment.STANDARD,
+                        line.productId(), null));
             } else {
-                lines.add(new LineInput(name + " (× " + q + ")", BigDecimal.ONE, net[i], VatTreatment.STANDARD));
+                // Story 22.19 (D6) — the sale line's product, so top products group it with the other invoices
+                lines.add(new LineInput(name + " (× " + q + ")", BigDecimal.ONE, net[i], VatTreatment.STANDARD,
+                        line.productId(), null));
             }
         }
         return List.copyOf(lines);

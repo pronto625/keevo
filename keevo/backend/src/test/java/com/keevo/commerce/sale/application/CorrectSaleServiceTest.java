@@ -96,7 +96,7 @@ class CorrectSaleServiceTest {
         assertThat(eventCaptor.getValue()).isInstanceOf(SaleCorrectedEvent.class);
         // Story 14.7: the corrected lines, total, client and payment mode for the new invoice of the sale
         SaleCorrectedEvent event = (SaleCorrectedEvent) eventCaptor.getValue();
-        assertThat(event.lines()).containsExactly(
+        assertThat(event.lines()).usingRecursiveFieldByFieldElementComparatorIgnoringFields("productId").containsExactly(
                 new com.keevo.shared.event.catalog.sale.SaleCompletedEvent.Line("Produit A", 1000, 2));
         assertThat(event.totalAmount()).isEqualTo(2000L);
         assertThat(event.clientId()).isNull();

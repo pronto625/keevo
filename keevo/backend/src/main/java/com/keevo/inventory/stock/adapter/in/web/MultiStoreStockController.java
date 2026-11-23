@@ -44,13 +44,53 @@ public class MultiStoreStockController {
     private final GetMultiStoreOverviewUseCase     overviewUseCase;
     private final GetStoreStockDetailUseCase       detailUseCase;
     private final GetCrossStoreAvailabilityUseCase availabilityUseCase;
+    /** Story 22.19 (D19) — {@code null} (tests built by hand): the multi-store entitlement is always required. */
+    private final com.keevo.shared.module.EntitlementService entitlements;
+    private final com.keevo.store.api.StoreQueryPort stores;
 
     public MultiStoreStockController(GetMultiStoreOverviewUseCase overviewUseCase,
                                      GetStoreStockDetailUseCase detailUseCase,
                                      GetCrossStoreAvailabilityUseCase availabilityUseCase) {
+        this(overviewUseCase, detailUseCase, availabilityUseCase, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MultiStoreStockController(GetMultiStoreOverviewUseCase overviewUseCase,
+                                     GetStoreStockDetailUseCase detailUseCase,
+                                     GetCrossStoreAvailabilityUseCase availabilityUseCase,
+                                     com.keevo.shared.module.EntitlementService entitlements,
+                                     com.keevo.store.api.StoreQueryPort stores) {
         this.overviewUseCase     = overviewUseCase;
         this.detailUseCase       = detailUseCase;
         this.availabilityUseCase = availabilityUseCase;
+        this.entitlements        = entitlements;
+        this.stores              = stores;
+    }
+
+    /**
+     * Story 22.19 (D19) — the stock of one store is core stock reading (module {@code inventory}). One rule (same as
+     * {@code GET /products?storeId=}): a member with an assigned store reads that store only (403 otherwise); the
+     * owner, or a member without an assigned store, reads any store — the company's default store freely, any other
+     * one with the {@code multi-store} offer. Without an entitlement service (tests built by hand) no offer is checked.
+     */
+    private void assertStoreReadable(UUID storeId) {
+        UUID own = com.keevo.shared.infrastructure.security.CurrentActor.assignedStoreIdOrNull();
+        if (own != null) {
+            if (!own.equals(storeId)) {
+                throw com.keevo.shared.domain.exception.DomainException.userFacing(
+                        com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN,
+                        "Vous ne pouvez consulter que le stock de votre boutique.");
+            }
+            return;
+        }
+        if (entitlements == null || stores == null) {
+            return;
+        }
+        String tenant = com.keevo.shared.infrastructure.persistence.TenantContext.requireCurrent();
+        if (stores.defaultStore(tenant).filter(storeId::equals).isPresent()) {
+            return;
+        }
+        entitlements.assertEnabled(tenant, "multi-store");
     }
 
     @Operation(summary = "Get stock summary for all active stores + warehouse")
@@ -66,7 +106,7 @@ public class MultiStoreStockController {
     }
 
     @Operation(summary = "Get paginated product stock list for a specific store")
-    @RequiresEntitlement(value = "multi-store", access = RequiresEntitlement.Access.READ)
+    @RequiresEntitlement(value = "inventory", access = RequiresEntitlement.Access.READ)
     @GetMapping("/stores/{storeId}/products")
     public ResponseEntity<ApiResponseWrapper<Page<StoreProductStockEntryDto>>> getStoreDetail(
             @PathVariable UUID storeId,
@@ -76,6 +116,7 @@ public class MultiStoreStockController {
             @RequestParam(defaultValue = "false") boolean lowOnly) {
 
         if (size < 1 || size > 100) size = 25; // safety clamp
+        assertStoreReadable(storeId); // Story 22.19 (D19)
 
         Page<StoreProductStockEntryDto> result = detailUseCase
                 .execute(new GetStoreStockDetailQuery(storeId, page, size, sortLowFirst, lowOnly,

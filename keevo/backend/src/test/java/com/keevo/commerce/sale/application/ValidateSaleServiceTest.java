@@ -120,7 +120,7 @@ class ValidateSaleServiceTest {
         // Story 14.4 — the invoice data of the validated sale
         assertThat(completed.getPaymentMode()).isEqualTo("CASH");
         assertThat(completed.getClientId()).isEqualTo(CLIENT_ID);
-        assertThat(completed.getLines()).containsExactly(new SaleCompletedEvent.Line("Produit A", 3000, 2),
+        assertThat(completed.getLines()).usingRecursiveFieldByFieldElementComparatorIgnoringFields("productId").containsExactly(new SaleCompletedEvent.Line("Produit A", 3000, 2),
                 new SaleCompletedEvent.Line("Produit B", 5000, 1));
     }
 
@@ -289,6 +289,90 @@ class ValidateSaleServiceTest {
         assertThat(eventCaptor.getValue()).isInstanceOf(SaleCancelledEvent.class);
         var event = (SaleCancelledEvent) eventCaptor.getValue();
         assertThat(event.itemsSnapshot()).isNotNull().isNotBlank();
+    }
+
+    @Test
+    void cancelPendingSale_sameDayRule_saleOfToday_cancelled() {
+        // Story 22.19 (D18) — the till cancels a completed sale of the day
+        Sale sale = completedSale(1L);
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(sale));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, 1L, SaleStatus.CANCELLED))
+                .thenReturn(true);
+
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
+                "Annulation de la vente depuis la caisse", false, true));
+
+        verify(eventPublisher).publishEvent(any(SaleCancelledEvent.class));
+    }
+
+    @Test
+    void cancelPendingSale_sameDayRule_saleOfAnotherDay_refusedInFrench() {
+        Instant twoDaysAgo = Instant.now().minus(java.time.Duration.ofDays(2));
+        Sale old = new Sale(SALE_ID, STORE_ID, ACTOR_ID, null, PaymentMode.CASH, 3000, 0, SaleStatus.COMPLETED,
+                twoDaysAgo, twoDaysAgo,
+                List.of(new SaleItem(UUID.randomUUID(), SALE_ID, PRODUCT_A, null, "Produit A", 3000, 3000, 1)), 0L);
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(old));
+
+        assertThatThrownBy(() -> service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
+                "Annulation de la vente depuis la caisse", false, true)))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("userMessage", "Une vente ne s'annule que le jour même");
+        verify(stockCommand, never()).recordMovement(any(), any());
+    }
+
+    @Test
+    void cancelPendingSale_sameDayRule_offlineCancelOfYesterday_syncedToday_accepted() {
+        // Story 22.19 (D18) — sale and cancel both made yesterday on the till, the cancel synchronised after midnight
+        java.time.ZoneId wat = com.keevo.shared.domain.time.KeevoZones.WAT;
+        Instant yesterdayNoon = java.time.LocalDate.now(wat).minusDays(1).atTime(12, 0).atZone(wat).toInstant();
+        Sale sale = new Sale(SALE_ID, STORE_ID, ACTOR_ID, null, PaymentMode.CASH, 3000, 0, SaleStatus.COMPLETED,
+                yesterdayNoon, yesterdayNoon,
+                List.of(new SaleItem(UUID.randomUUID(), SALE_ID, PRODUCT_A, null, "Produit A", 3000, 3000, 1)), 2L);
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(sale));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, 2L, SaleStatus.CANCELLED))
+                .thenReturn(true);
+
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
+                "Annulation de la vente depuis la caisse", false, true, yesterdayNoon.plusSeconds(600)));
+
+        verify(eventPublisher).publishEvent(any(SaleCancelledEvent.class));
+    }
+
+    @Test
+    void cancelPendingSale_sameDayRule_clientTimeInTheFuture_ignored_refused() {
+        // a till clock ahead of the server by hours never makes an old sale cancellable
+        Instant twoDaysAgo = Instant.now().minus(java.time.Duration.ofDays(2));
+        Sale old = new Sale(SALE_ID, STORE_ID, ACTOR_ID, null, PaymentMode.CASH, 3000, 0, SaleStatus.COMPLETED,
+                twoDaysAgo, twoDaysAgo,
+                List.of(new SaleItem(UUID.randomUUID(), SALE_ID, PRODUCT_A, null, "Produit A", 3000, 3000, 1)), 0L);
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(old));
+
+        assertThatThrownBy(() -> service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
+                "Annulation de la vente depuis la caisse", false, true,
+                Instant.now().plus(java.time.Duration.ofHours(3)))))
+                .isInstanceOf(DomainException.class)
+                .hasFieldOrPropertyWithValue("userMessage", "Une vente ne s'annule que le jour même");
+    }
+
+    @Test
+    void cancelPendingSale_flooredOfflineSale_restoresOnlyWhatLeftTheStock() {
+        // Story 22.19 (D11) — sold 3 offline with 1 in stock: floored by +2; cancelling gives back 1, not 3
+        Sale sale = completedSale(4L);
+        SaleItem item = new SaleItem(UUID.randomUUID(), SALE_ID, PRODUCT_A, null, "Produit A", 1000, 1000, 3);
+        Sale three = new Sale(SALE_ID, STORE_ID, ACTOR_ID, null, PaymentMode.CASH, 3000, 0, SaleStatus.COMPLETED,
+                sale.getOccurredAt(), sale.getCreatedAt(), List.of(item), 4L);
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(three));
+        when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.COMPLETED, 4L, SaleStatus.CANCELLED))
+                .thenReturn(true);
+        UUID floorId = com.keevo.inventory.api.StockFloor.adjustmentIdOf(item.getId());
+        when(stockQuery.findMovement(TenantContext.getCurrentTenant(), floorId)).thenReturn(Optional.of(
+                new com.keevo.inventory.api.RecordedMovement(floorId, PRODUCT_A, null, STORE_ID, "ADJUSTMENT", 2)));
+
+        service.cancelPendingSale(new CancelPendingSaleCommand(SALE_ID, ACTOR_ID, null,
+                "Erreur de scan, article rendu au client"));
+
+        verify(stockCommand).recordMovement(any(), argThat(m -> m.quantityChange() == 1
+                && m.kind() == StockMovementKind.SALE_CANCELLED));
     }
 
     @Test

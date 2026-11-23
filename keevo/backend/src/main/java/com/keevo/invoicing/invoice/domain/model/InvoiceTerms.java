@@ -59,6 +59,11 @@ public record InvoiceTerms(long discount, long deliveryFee, BigDecimal vatRate, 
         }
     }
 
+    /** Story 22.19 (D4) — the same terms with another due date. */
+    public InvoiceTerms withDueDate(LocalDate newDueDate) {
+        return new InvoiceTerms(discount, deliveryFee, vatRate, vatExempt, newDueDate, notes, issueDate);
+    }
+
     /** The same terms without the requested issue date (a quote converted into an invoice is dated by its issue). */
     public InvoiceTerms withoutIssueDate() {
         return new InvoiceTerms(discount, deliveryFee, vatRate, vatExempt, dueDate, notes, null);
@@ -66,7 +71,8 @@ public record InvoiceTerms(long discount, long deliveryFee, BigDecimal vatRate, 
 
     /**
      * The date an invoice is issued on: the requested one, else {@code today}. Refused ({@code VALIDATION_ERROR}) when
-     * in the future or in another year than {@code today} (the number sequence is per year).
+     * in the future. Story 22.19 (D4) — an earlier year (a sale made offline on 31/12, synchronised in January) is
+     * never refused: the invoice is dated on the first day of {@code today}'s year (the number sequence is per year).
      */
     public LocalDate issueDateOr(LocalDate today) {
         if (issueDate == null) {
@@ -75,8 +81,8 @@ public record InvoiceTerms(long discount, long deliveryFee, BigDecimal vatRate, 
         if (issueDate.isAfter(today)) {
             throw invalid("La date d'émission ne peut pas être dans le futur");
         }
-        if (issueDate.getYear() != today.getYear()) {
-            throw invalid("La date d'émission doit être dans l'année en cours");
+        if (issueDate.getYear() < today.getYear()) {
+            return today.withDayOfYear(1);
         }
         return issueDate;
     }

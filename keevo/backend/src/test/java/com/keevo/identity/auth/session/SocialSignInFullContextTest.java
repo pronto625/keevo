@@ -97,7 +97,8 @@ class SocialSignInFullContextTest extends FullContextIntegrationTest {
         assertThat(user.get("email_verified_at")).isNotNull();
 
         MvcResult created = postJson("/api/v1/auth/create-company",
-                Map.of("loginToken", json(signedIn).get("loginToken").asText(), "deviceId", "dev-social"));
+                Map.of("loginToken", json(signedIn).get("loginToken").asText(), "name", "Aicha Mbarga",
+                        "deviceId", "dev-social"));
         assertThat(created.getResponse().getStatus()).isEqualTo(201);
         assertThat(json(created).get("userId").asText()).isEqualTo(user.get("id").toString());
         MvcResult profile = mockMvc.perform(get("/api/v1/auth/profile")

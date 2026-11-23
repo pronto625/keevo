@@ -41,6 +41,12 @@ public class StockLevelRepositoryAdapter implements StockLevelRepository {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public int sumQuantityByProduct(UUID productId) {
+        return Math.toIntExact(springRepository.sumQuantityByProduct(productId));
+    }
+
+    @Override
     @Transactional
     public boolean lockAndHasNonZeroStock(UUID productId) {
         return springRepository.lockAllByProduct(productId).stream()

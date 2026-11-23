@@ -30,6 +30,7 @@ public class PermissionCatalog {
     static final Map<String, String> LABELS = Map.ofEntries(
             entry("SALE_CREATE", "Créer des ventes"),
             entry("STORE_SALES_VIEW", "Voir les ventes de toute la boutique"),
+            entry("SALE_CANCEL", "Annuler une vente du jour"),                 // Story 22.19
             entry("PURCHASE_PRICE_VIEW", "Voir les prix d'achat"),
             entry("PRODUCT_MERGE", "Fusionner des produits"),
             entry("INVENTORY_SESSION_MANAGE", "Gérer les inventaires de la boutique"),

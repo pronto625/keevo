@@ -375,7 +375,7 @@ class RecordSaleServiceTest {
         assertThat(completedEvents.get(0).getClientId()).isNull();
         assertThat(completedEvents.get(0).getPaymentMode()).isEqualTo("CASH");
         assertThat(completedEvents.get(0).getLines())
-                .containsExactly(new SaleCompletedEvent.Line("Produit A", 1500, 2));
+                .containsExactly(new SaleCompletedEvent.Line("Produit A", 1500, 2, PRODUCT_ID)); // 22.19 (D6)
     }
 
     @Test
@@ -393,7 +393,7 @@ class RecordSaleServiceTest {
         SaleCompletedEvent completed = eventCaptor.getAllValues().stream()
                 .filter(SaleCompletedEvent.class::isInstance).map(SaleCompletedEvent.class::cast)
                 .findFirst().orElseThrow();
-        assertThat(completed.getLines()).containsExactly(new SaleCompletedEvent.Line("Produit A", 1200, 2));
+        assertThat(completed.getLines()).containsExactly(new SaleCompletedEvent.Line("Produit A", 1200, 2, PRODUCT_ID));
         assertThat(completed.getTotalAmount()).isEqualTo(2400);
     }
 

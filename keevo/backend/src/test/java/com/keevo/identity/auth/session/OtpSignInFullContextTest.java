@@ -139,7 +139,8 @@ class OtpSignInFullContextTest extends FullContextIntegrationTest {
                 .getResponse().getStatus()).isEqualTo(401);
 
         MvcResult created = postJson("/api/v1/auth/create-company",
-                Map.of("loginToken", loginToken, "deviceId", "dev-otp", "deviceLabel", "Redmi"), null);
+                Map.of("loginToken", loginToken, "name", "Paul Etoundi", "deviceId", "dev-otp", "deviceLabel", "Redmi"),
+                null);
         assertThat(created.getResponse().getStatus()).isEqualTo(201);
         JsonNode company = json(created);
         assertThat(company.get("userId").asText()).isEqualTo(user.get("id").toString());
@@ -168,7 +169,7 @@ class OtpSignInFullContextTest extends FullContextIntegrationTest {
         MvcResult again = postJson("/api/v1/auth/otp/verify", Map.of("identifier", id, "code", "654321"), null);
         assertThat(json(again).get("memberships")).hasSize(1);
         MvcResult refused = postJson("/api/v1/auth/create-company",
-                Map.of("loginToken", json(again).get("loginToken").asText()), null);
+                Map.of("loginToken", json(again).get("loginToken").asText(), "name", "Paul Etoundi"), null);
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
         assertThat(json(refused).get("domainCode").asText()).isEqualTo("COMPANY_ALREADY_EXISTS");
     }

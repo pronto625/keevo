@@ -133,6 +133,7 @@ public class AuditEventListener {
     static final String LABEL_SALE = "Vente";
     static final String LABEL_DAY_CLOSURE = "Clôture de journée";
     static final String LABEL_INVENTORY = "Inventaire";
+    static final String LABEL_INVENTORY_COUNT = "Comptage d'inventaire";
 
     private final AuditPort auditPort;
     private final ObjectMapper objectMapper;
@@ -763,6 +764,25 @@ public class AuditEventListener {
                 event.tenantId(), event.actorId());
     }
 
+    /** Story 22.19 (D17) — a user changed his own name; only the names that changed, before → after. */
+    @EventListener
+    public void on(com.keevo.shared.event.catalog.auth.UserProfileUpdatedEvent event) {
+        Map<String, Object> before = new LinkedHashMap<>();
+        Map<String, Object> after = new LinkedHashMap<>();
+        if (!java.util.Objects.equals(event.firstNameBefore(), event.firstName())) {
+            before.put("firstName", event.firstNameBefore());
+            after.put("firstName", event.firstName());
+        }
+        if (!java.util.Objects.equals(event.lastNameBefore(), event.lastName())) {
+            before.put("lastName", event.lastNameBefore());
+            after.put("lastName", event.lastName());
+        }
+        String fullName = (event.firstName() + " " + event.lastName()).strip();
+        write(event.userId(), event.tenantId(), "PROFILE_UPDATED", "User", event.userId(),
+                before, after, null, fullName, null, fullName);
+        log.info("AUDIT: profile_updated userId={} tenantId={}", event.userId(), event.tenantId());
+    }
+
     // ── Sale events (Story 4.1 / 4.3) ────────────────────────────────────────
 
     @EventListener
@@ -921,7 +941,7 @@ public class AuditEventListener {
                         "theoretical", event.theoretical(),
                         "physical", event.physical(),
                         "ecart", event.ecart()),
-                event.storeId(), null,
+                event.storeId(), LABEL_INVENTORY_COUNT, // Story 22.19 (D16) — object label, never empty
                 map("sessionId", str(event.sessionId()), "occurredAt", str(event.occurredAt())),
                 null);
         log.info("AUDIT: inventory_count_saved countId={} sessionId={} productId={} ecart={} tenantId={}",
@@ -1034,15 +1054,22 @@ public class AuditEventListener {
             case RECEIVED -> "INVOICE_PAYMENT_RECEIVED";
             case SCHEDULED -> "INVOICE_INSTALMENT_SCHEDULED";
             case SETTLED -> "INVOICE_INSTALMENT_SETTLED";
+            case UPDATED -> "INVOICE_INSTALMENT_UPDATED"; // Story 22.19 (D8)
         };
         String amount = com.keevo.shared.domain.XafAmounts.group(event.amount()) + " FCFA";
         String detail = switch (event.kind()) {
-            case SCHEDULED -> amount + " à régler le " + (event.dueDate() == null ? "" : PAID_DAY.format(event.dueDate()));
+            case SCHEDULED, UPDATED ->
+                    amount + " à régler le " + (event.dueDate() == null ? "" : PAID_DAY.format(event.dueDate()));
             case RECEIVED -> amount + " reçus le " + day(event.paidAt());
             case SETTLED -> amount + " réglés le " + day(event.paidAt());
         };
+        // Story 22.19 (D8) — an instalment change keeps what it was
+        Map<String, Object> before = event.kind() == InvoicePaymentRecordedEvent.Kind.UPDATED
+                ? map("amount", event.previousAmount(),
+                        "dueDate", event.previousDueDate() == null ? null : PAID_DAY.format(event.previousDueDate()))
+                : null;
         write(event.actorId(), event.tenantId(), action, "Invoice", event.invoiceId(),
-                null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
+                before, map("invoiceNumber", event.number(), "clientName", event.clientName(),
                         "amount", event.amount(), "paymentMethod", event.method()),
                 null, event.number() != null ? event.number()
                         : event.clientName() != null ? "brouillon de " + event.clientName() : "brouillon de facture",

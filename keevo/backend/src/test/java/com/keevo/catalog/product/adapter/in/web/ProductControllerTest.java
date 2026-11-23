@@ -128,7 +128,7 @@ class ProductControllerTest {
     @DisplayName("POST /api/v1/products should create product with valid data")
     void should_create_product_with_valid_data() throws Exception {
         // Given
-        when(createOrRestoreProductUseCase.execute(any()))
+        when(createOrRestoreProductUseCase.execute(any(), any()))
                 .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false));
 
         String requestBody = """
@@ -148,13 +148,13 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.data.name").value("Test Product"))
                 .andExpect(jsonPath("$.data.sku").value("KEV-TST123"));
 
-        verify(createOrRestoreProductUseCase).execute(any());
+        verify(createOrRestoreProductUseCase).execute(any(), any());
     }
 
     @Test
     @DisplayName("17.13: POST with the name of an archived product → 200, the restored product, restored = true")
     void create_restoringArchived_returns200_withRestoredMarker() throws Exception {
-        when(createOrRestoreProductUseCase.execute(any()))
+        when(createOrRestoreProductUseCase.execute(any(), any()))
                 .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, true));
 
         mockMvc.perform(post("/api/v1/products")
@@ -169,7 +169,7 @@ class ProductControllerTest {
     @Test
     @DisplayName("17.13: draft creation whose restore was refused → 200, the archived product as is, no restored field")
     void create_draftFallbackMerge_returns200_withoutMarker() throws Exception {
-        when(createOrRestoreProductUseCase.execute(any()))
+        when(createOrRestoreProductUseCase.execute(any(), any()))
                 .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false, true));
 
         mockMvc.perform(post("/api/v1/products")
@@ -183,7 +183,7 @@ class ProductControllerTest {
     @Test
     @DisplayName("17.13: a plain creation carries no restored field (additive, V1 shape unchanged)")
     void create_plain_hasNoRestoredField() throws Exception {
-        when(createOrRestoreProductUseCase.execute(any()))
+        when(createOrRestoreProductUseCase.execute(any(), any()))
                 .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false));
 
         mockMvc.perform(post("/api/v1/products")
@@ -423,6 +423,37 @@ class ProductControllerTest {
     // ── v1s-15-9: actor label never falls back to the raw UUID ────────────
 
     @Test
+    @DisplayName("22.19 (D11): a member's initial stock goes to his own store, whatever storeId he sends; the "
+            + "owner's to the one he asks")
+    void create_initialStockStore() throws Exception {
+        UUID own = UUID.randomUUID();
+        UUID asked = UUID.randomUUID();
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                UUID.randomUUID(), null,
+                java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_EMPLOYEE")));
+        auth.setDetails(com.keevo.shared.infrastructure.security.AuthDetails.employee("Paul", own));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        when(createOrRestoreProductUseCase.execute(any(), any()))
+                .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false));
+        String body = "{\"name\": \"Riz\", \"stockQuantity\": 4, \"storeId\": \"" + asked + "\"}";
+
+        mockMvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        var store = org.mockito.ArgumentCaptor.forClass(UUID.class);
+        verify(createOrRestoreProductUseCase).execute(any(), store.capture());
+        org.assertj.core.api.Assertions.assertThat(store.getValue()).isEqualTo(own);
+
+        var owner = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                UUID.randomUUID(), null,
+                java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_OWNER")));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(owner);
+        mockMvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isCreated());
+        verify(createOrRestoreProductUseCase, org.mockito.Mockito.times(2)).execute(any(), store.capture());
+        org.assertj.core.api.Assertions.assertThat(store.getValue()).isEqualTo(asked);
+    }
+
+    @Test
     @DisplayName("v1s-15-9: POST by EMPLOYEE without firstName claim passes 'Un employé', not the UUID")
     void create_by_employee_without_firstName_uses_fallback_label() throws Exception {
         UUID actorId = UUID.randomUUID();
@@ -432,7 +463,7 @@ class ProductControllerTest {
                 java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_EMPLOYEE")));
         auth.setDetails(com.keevo.shared.infrastructure.security.AuthDetails.employee(null, storeId));
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
-        when(createOrRestoreProductUseCase.execute(any()))
+        when(createOrRestoreProductUseCase.execute(any(), any()))
                 .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false));
 
         mockMvc.perform(post("/api/v1/products")
@@ -441,7 +472,7 @@ class ProductControllerTest {
                 .andExpect(status().isCreated());
 
         var captor = org.mockito.ArgumentCaptor.forClass(CreateProductUseCase.CreateProductDto.class);
-        verify(createOrRestoreProductUseCase).execute(captor.capture());
+        verify(createOrRestoreProductUseCase).execute(captor.capture(), any());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().actorName())
                 .isEqualTo("Un employé")
                 .doesNotContain(actorId.toString());

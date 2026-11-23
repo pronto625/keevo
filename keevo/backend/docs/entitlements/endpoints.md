@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 428 — gated: 174, exempt: 254.
+Handlers: 430 — gated: 175, exempt: 255.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -193,6 +193,7 @@ Handlers: 428 — gated: 174, exempt: 254.
 | POST | `/api/v1/auth/otp/request` | — | — | — | authentification | AuthController#requestOtp |
 | POST | `/api/v1/auth/otp/verify` | — | — | — | authentification | AuthController#verifyOtp |
 | GET | `/api/v1/auth/profile` | — | — | — | authentification | AuthController#getProfile |
+| PUT | `/api/v1/auth/profile` | — | — | — | authentification: mon profil | OwnProfileController#update |
 | POST | `/api/v1/auth/refresh` | — | — | — | authentification | AuthController#refresh |
 | POST | `/api/v1/auth/register` | — | — | — | authentification | AuthController#register |
 | POST | `/api/v1/auth/reset-password` | — | — | — | authentification | AuthController#resetPassword |
@@ -276,8 +277,8 @@ Handlers: 428 — gated: 174, exempt: 254.
 | GET | `/api/v1/invoices/clients` | `invoicing` | READ | `INVOICE_CREATE` |  | InvoiceController#clientSuggestions |
 | GET | `/api/v1/invoices/public/{token}` | — | — | — | ancien lien public Bref d'une facture importée (lien déjà partagé au client) | InvoiceLegacyLinkController#legacy |
 | GET | `/api/v1/invoices/shared` | — | — | — | lien signé envoyé au client (facture déjà contrôlée à l'envoi) | InvoiceSharedLinkController#shared |
-| GET | `/api/v1/invoices/stats` | `invoicing` | READ | — |  | InvoiceController#stats |
-| GET | `/api/v1/invoices/top-products` | `invoicing` | READ | — |  | InvoiceController#topProducts |
+| GET | `/api/v1/invoices/stats` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#stats |
+| GET | `/api/v1/invoices/top-products` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#topProducts |
 | DELETE | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#delete |
 | GET | `/api/v1/invoices/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#get |
 | PUT | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#update |
@@ -375,12 +376,13 @@ Handlers: 428 — gated: 174, exempt: 254.
 | POST | `/api/v1/sales/{id}/validate` | `pos` | WRITE | `SALE_CREATE` |  | PendingSaleController#validateSale |
 | GET | `/api/v1/stock/overview` | `multi-store` | READ | — |  | MultiStoreStockController#getOverview |
 | GET | `/api/v1/stock/products/{productId}/availability` | `multi-store` | READ | — |  | MultiStoreStockController#getProductAvailability |
-| GET | `/api/v1/stock/stores/{storeId}/products` | `multi-store` | READ | — |  | MultiStoreStockController#getStoreDetail |
+| GET | `/api/v1/stock/stores/{storeId}/products` | `inventory` | READ | — |  | MultiStoreStockController#getStoreDetail |
 | GET | `/api/v1/stock/transfers` | `multi-store` | READ | — |  | StockTransferController#getHistory |
 | POST | `/api/v1/stock/transfers` | `multi-store` | WRITE | — |  | StockTransferController#transfer |
 | POST | `/api/v1/stock/transfers/{id}/complete` | `multi-store` | WRITE | — |  | StockTransferController#complete |
 | GET | `/api/v1/stores` | `store` | READ | — |  | StoreController#listStores |
 | POST | `/api/v1/stores` | `store` | WRITE | — |  | StoreController#createStore |
+| GET | `/api/v1/stores/{storeId}` | `store` | READ | — |  | StoreController#getStore |
 | PATCH | `/api/v1/stores/{storeId}` | `store` | WRITE | — |  | StoreController#updateStore |
 | PATCH | `/api/v1/stores/{storeId}/deactivate` | `store` | WRITE | — |  | StoreController#deactivateStore |
 | DELETE | `/api/v1/stores/{storeId}/logo` | `store` | WRITE | — |  | StoreLogoController#delete |

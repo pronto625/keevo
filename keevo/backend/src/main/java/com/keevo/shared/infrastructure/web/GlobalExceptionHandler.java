@@ -317,6 +317,7 @@ public class GlobalExceptionHandler {
                  "INVENTORY_SESSION_NOT_IN_PROGRESS",
                  "REPORT_ALREADY_SENT",
                  "SALE_ALREADY_CANCELLED",
+                 "SALE_CANCEL_NOT_SAME_DAY",   // 22.19
                  "OPTIMISTIC_LOCK",
                  "PHONE_ALREADY_REGISTERED",
                  "DELETION_ALREADY_REQUESTED",
@@ -402,6 +403,7 @@ public class GlobalExceptionHandler {
                  "WHATSAPP_CLOUD_UNAVAILABLE", // 21.5 — no Meta app configured
                  "PLATFORM_WHATSAPP_UNAVAILABLE", // 21.6 — platform number not configured
                  "MIGRATION_SOURCE_UNAVAILABLE",  // 24.2 — Bref source not configured / unreachable
+                 "CODE_DELIVERY_FAILED",       // 22.19 — sign-in code not sent
                  "PUBLIC_BASE_URL_MISSING" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
@@ -438,12 +440,14 @@ public class GlobalExceptionHandler {
                  "CANNOT_SET_OWN_PASSWORD",
                  "PLAN_FEATURE_REQUIRED",
                  "APP_UPDATE_REQUIRED",
+                 "ACCOUNT_DISABLED",           // 22.19 — every membership deactivated
                  "EXPORT_LINK_INVALID" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2); CANNOT_* = role anti-lockout (v1s-14-11)
             case "RATE_LIMIT_EXCEEDED",
                  "OTP_TOO_MANY_ATTEMPTS",
                  "OTP_TOO_MANY_REQUESTS",
                  "PORTAL_TOO_MANY_REQUESTS",   // 21.7 — client portal brake
                  "INVOICE_LINK_RATE_LIMITED",
+                 "UPLOAD_TOO_MANY_REQUESTS",   // 22.19 — image uploads per company
                  "EXPORT_QUEUE_FULL",
                  "AI_QUESTION_IN_PROGRESS" -> HttpStatus.TOO_MANY_REQUESTS;  // 21.4 — one question at a time per user
             case "WHATSAPP_DELIVERY_FAILED",

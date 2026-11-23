@@ -40,9 +40,16 @@ public interface TenantPreferencesRepository {
 
     /**
      * Returns {@code true} if the tenant has already completed onboarding.
-     * Determined by the presence of at least one row in {@code tenant_preferences}.
+     * Story 22.19 — determined by a row WITH a sector in {@code tenant_preferences} (a preference write made before
+     * the sector onboarding creates a sector-less row from the defaults, which does not count).
      */
     boolean hasOnboardingCompleted();
+
+    /**
+     * Story 22.19 — takes the tenant's transaction-scoped preferences lock (released at commit / rollback), so a
+     * find-then-insert of the row by two concurrent requests creates one row only. Call it before the find.
+     */
+    void lockForCreation();
 
     /**
      * Find tenant preferences for the current tenant.

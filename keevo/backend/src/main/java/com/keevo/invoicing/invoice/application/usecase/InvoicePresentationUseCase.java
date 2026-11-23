@@ -105,14 +105,19 @@ public class InvoicePresentationUseCase {
         }
         StoredImage image = normalizer.normalize(upload);
         Invoice invoice = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
-        assertSignable(invoice);
         InvoicePresentation presentation = presentations.find(id).orElse(InvoicePresentation.NONE);
         String previous = presentation.signature(role);
+        assertSignable(invoice);
         if (previous != null && frozen(invoice, presentation, role) && fileExists(tenantSchema, previous)) {
             throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, invoice.isQuote()
                             ? "Ce devis a été envoyé au client : sa signature ne peut plus être remplacée"
                             : "Ce document émis est déjà signé : sa signature ne peut pas être remplacée",
                     Map.of("status", "déjà signé"));
+        }
+        // Story 22.19 (D21) — the same image again on a signable document (a draft saved with its signatures):
+        // nothing rewritten nor audited. The state guards above still apply (a frozen document answers 409).
+        if (previous != null && sameImage(tenantSchema, previous, image)) {
+            return invoice;
         }
         String fileName;
         try {
@@ -238,6 +243,16 @@ public class InvoicePresentationUseCase {
     /** « 58 mm », « 80 mm », « A4 ». */
     static String widthLabel(TicketWidth w) {
         return w == TicketWidth.A4 ? "A4" : w.code() + " mm";
+    }
+
+    private boolean sameImage(String tenantSchema, String file, StoredImage image) {
+        try {
+            return storage.read(tenantSchema, file)
+                    .filter(stored -> java.util.Arrays.equals(stored.content(), image.content()))
+                    .isPresent();
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private boolean fileExists(String tenantSchema, String file) {

@@ -76,7 +76,7 @@ public class PortalAuthController {
     @Operation(summary = "Send a portal sign-in code to a phone",
             description = "SMS (and WhatsApp when configured); same answer whether the phone has invoices or not. "
                     + "422 PHONE_COUNTRY_NOT_SUPPORTED / VALIDATION_FAILED, 422 VALIDATION_ERROR (field missing), "
-                    + "429 OTP_TOO_MANY_REQUESTS.")
+                    + "429 OTP_TOO_MANY_REQUESTS, 503 CODE_DELIVERY_FAILED (no channel could send the code).")
     @SecurityRequirements
     @PostMapping("/otp/request")
     public ResponseEntity<ApiResponseWrapper<CodeSent>> requestCode(

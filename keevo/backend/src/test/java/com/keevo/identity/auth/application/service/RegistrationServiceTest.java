@@ -42,6 +42,7 @@ class RegistrationServiceTest {
     @Mock private SessionTokenIssuer sessionTokenIssuer;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private TenantSchemaPort tenantSchemaPort; // C2 — role assignment in tenant schema
+    @Mock private com.keevo.identity.company.domain.port.out.CompanyProfileRepository companyProfiles;
 
     private RegistrationService registrationService;
 
@@ -50,7 +51,7 @@ class RegistrationServiceTest {
     void setUp() {
         registrationService = new RegistrationService(userRepository, passwordEncoder,
                 new OwnerTenantProvisioner(userMembershipRepository, tenantFactory, sessionTokenIssuer,
-                        eventPublisher, tenantSchemaPort));
+                        eventPublisher, tenantSchemaPort, companyProfiles));
     }
 
     // ── Fixtures ────────────────────────────────────────────────────────────
@@ -95,6 +96,8 @@ class RegistrationServiceTest {
         // owner is logged out when the access token expires.
         assertThat(result.refreshToken()).isEqualTo("refresh-token");
         verify(sessionTokenIssuer).issue(user.getId(), tenant, "OWNER");
+        // Story 22.19 (D1) — /auth/register never runs the app's sign-up steps: marked completed
+        verify(companyProfiles).markSetupCompleted(tenant.getSchemaName());
         assertThat(result.userId()).isEqualTo(user.getId().toString());
         assertThat(result.tenantId()).isEqualTo(tenant.getId().toString());
     }

@@ -165,6 +165,13 @@ public class InvoicePaymentUseCase {
         PaymentStateCalculator.assertWithinDue(due, others, amount);
         payments.updateScheduled(paymentId, amount, dueDate, note, now);
         recompute(invoice, payments.findByInvoice(invoiceId), due, now, actorId, tenantId);
+        // Story 22.19 (D8) — an amount or due date change is traced in the audit and the invoice's history, before →
+        // after (a note-only change is not)
+        if (amount != row.amount() || !java.util.Objects.equals(dueDate, row.dueDate())) {
+            events.publishEvent(new InvoicePaymentRecordedEvent(invoiceId, invoice.number(), invoice.client().name(),
+                    Kind.UPDATED, amount, dueDate, null, row.method(), actorId, tenantId, now, row.amount(),
+                    row.dueDate()));
+        }
         return new Result(reread(invoiceId), true);
     }
 

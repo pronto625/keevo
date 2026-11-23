@@ -12,7 +12,8 @@
   "publishes": [],
   "consumes": [],
   "provides": [
-    "ClientLookupPort"
+    "ClientLookupPort",
+    "ClientConsentPort"
   ],
   "needs": [],
   "extensionPoints": {

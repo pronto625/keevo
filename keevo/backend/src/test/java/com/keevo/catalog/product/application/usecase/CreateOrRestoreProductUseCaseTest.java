@@ -252,4 +252,77 @@ class CreateOrRestoreProductUseCaseTest {
         assertThat(outcome.product()).isSameAs(created);
         verifyNoInteractions(unarchiveProductUseCase);
     }
+
+    // ── Story 22.19 (D11) — initial stock of a created product ───────────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    private final org.springframework.beans.factory.ObjectProvider<com.keevo.catalog.api.InitialStockPort> stockPorts =
+            org.mockito.Mockito.mock(org.springframework.beans.factory.ObjectProvider.class);
+    private final com.keevo.catalog.api.InitialStockPort stockPort =
+            org.mockito.Mockito.mock(com.keevo.catalog.api.InitialStockPort.class);
+    private final com.keevo.store.api.StoreQueryPort stores =
+            org.mockito.Mockito.mock(com.keevo.store.api.StoreQueryPort.class);
+
+    private CreateOrRestoreProductUseCase withStock() {
+        org.mockito.Mockito.lenient().when(stockPorts.getIfAvailable()).thenReturn(stockPort);
+        return new CreateOrRestoreProductUseCase(createProductUseCase, unarchiveProductUseCase, productRepository,
+                transactionLock, stockPorts, stores);
+    }
+
+    private com.keevo.store.api.StoreView store(UUID id, boolean active) {
+        var view = org.mockito.Mockito.mock(com.keevo.store.api.StoreView.class);
+        org.mockito.Mockito.lenient().when(view.id()).thenReturn(id);
+        org.mockito.Mockito.lenient().when(view.active()).thenReturn(active);
+        return view;
+    }
+
+    @Test
+    @DisplayName("22.19 — explicit active store: the initial quantity enters that store as « Stock initial »")
+    void initialStock_explicitActiveStore() {
+        UUID id = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        when(productRepository.findByName("riz")).thenReturn(Optional.empty());
+        when(createProductUseCase.execute(any())).thenReturn(product(id, "Riz", false, ProductStatus.ACTIVE));
+        when(productRepository.findById(id)).thenReturn(Optional.of(product(id, "Riz", false, ProductStatus.ACTIVE)));
+        var view = store(storeId, true);
+        when(stores.findById("kv_test", storeId)).thenReturn(Optional.of(view));
+
+        withStock().execute(dto("riz"), storeId);
+
+        verify(stockPort).recordInitialStock("kv_test", id, storeId, 5, actorId, "Stock initial");
+    }
+
+    @Test
+    @DisplayName("22.19 — unknown or closed store → 422 VALIDATION_ERROR on storeId (French), no entry")
+    void initialStock_invalidStore_refused() {
+        UUID id = UUID.randomUUID();
+        UUID closed = UUID.randomUUID();
+        when(productRepository.findByName("riz")).thenReturn(Optional.empty());
+        when(createProductUseCase.execute(any())).thenReturn(product(id, "Riz", false, ProductStatus.ACTIVE));
+        var view = store(closed, false);
+        when(stores.findById("kv_test", closed)).thenReturn(Optional.of(view));
+
+        assertThatThrownBy(() -> withStock().execute(dto("riz"), closed))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> {
+                    DomainException d = (DomainException) e;
+                    assertThat(d.getDomainCode()).isEqualTo("VALIDATION_ERROR");
+                    assertThat(d.getDetails()).containsEntry("field", "storeId");
+                    assertThat(d.getUserMessage()).isEqualTo(CreateOrRestoreProductUseCase.INVALID_STORE);
+                });
+        verifyNoInteractions(stockPort);
+    }
+
+    @Test
+    @DisplayName("22.19 — a restored archived product gets no initial entry")
+    void initialStock_restoredProduct_noEntry() {
+        UUID id = UUID.randomUUID();
+        when(productRepository.findByName("riz")).thenReturn(Optional.of(product(id, "Riz", true, ProductStatus.ACTIVE)));
+        when(productRepository.findById(id)).thenReturn(Optional.of(product(id, "Riz", false, ProductStatus.ACTIVE)));
+        when(unarchiveProductUseCase.execute(any())).thenReturn(true);
+
+        assertThat(withStock().execute(dto("riz"), UUID.randomUUID()).restored()).isTrue();
+
+        verifyNoInteractions(stockPort, stores);
+    }
 }

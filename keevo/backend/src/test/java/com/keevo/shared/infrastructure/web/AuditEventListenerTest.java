@@ -764,4 +764,39 @@ class AuditEventListenerTest {
             assertThat(e.entityLabel()).isNull();
         }
     }
+
+    @Test
+    @DisplayName("22.19 (D8) — instalment change: INVOICE_INSTALMENT_UPDATED on the invoice, before → after, French "
+            + "detail")
+    void onInstalmentUpdated() {
+        UUID invoiceId = UUID.randomUUID();
+        listener.on(new com.keevo.shared.event.catalog.invoicing.InvoicePaymentRecordedEvent(invoiceId,
+                "FAC-2026-000012", "Société Ndolo",
+                com.keevo.shared.event.catalog.invoicing.InvoicePaymentRecordedEvent.Kind.UPDATED, 30_000L,
+                java.time.LocalDate.of(2026, 11, 30), null, null, UUID.randomUUID(), "kv_abc123", Instant.now(),
+                40_000L, java.time.LocalDate.of(2026, 11, 20)));
+
+        ArgumentCaptor<AuditPort.AuditEntry> e = ArgumentCaptor.forClass(AuditPort.AuditEntry.class);
+        verify(auditPort).record(e.capture());
+        assertThat(e.getValue().action()).isEqualTo("INVOICE_INSTALMENT_UPDATED");
+        assertThat(e.getValue().entityId()).isEqualTo(invoiceId);
+        assertThat(e.getValue().valueBefore()).contains("40000").contains("20/11/2026");
+        assertThat(e.getValue().entityLabel()).isEqualTo("FAC-2026-000012");
+        assertThat(e.getValue().metadataJson()).contains("FCFA à régler le 30/11/2026");
+        assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get("INVOICE_INSTALMENT_UPDATED"))
+                .isEqualTo("Échéance modifiée");
+    }
+
+    @Test
+    @DisplayName("22.19 (D16) — an inventory count is labelled « Comptage d'inventaire », never empty")
+    void onInventoryCountSaved_labelled() {
+        listener.on(new com.keevo.shared.event.catalog.counting.InventoryCountSavedEvent(UUID.randomUUID(),
+                UUID.randomUUID(), UUID.randomUUID(), null, 5, 4, -1, UUID.randomUUID(), "kv_abc123", Instant.now(),
+                UUID.randomUUID()));
+
+        ArgumentCaptor<AuditPort.AuditEntry> e = ArgumentCaptor.forClass(AuditPort.AuditEntry.class);
+        verify(auditPort).record(e.capture());
+        assertThat(e.getValue().action()).isEqualTo("INVENTORY_COUNT_SAVED");
+        assertThat(e.getValue().entityLabel()).isEqualTo("Comptage d'inventaire");
+    }
 }

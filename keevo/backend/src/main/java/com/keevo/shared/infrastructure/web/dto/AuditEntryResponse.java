@@ -2,6 +2,8 @@ package com.keevo.shared.infrastructure.web.dto;
 
 import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.keevo.shared.application.port.AuditPort;
+import com.keevo.shared.infrastructure.export.AuditLabels;
+import com.keevo.shared.infrastructure.export.ExportValues;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -12,7 +14,8 @@ import java.util.UUID;
  * <p>Story 1.8 — returned by {@link com.keevo.shared.infrastructure.web.AuditController}.
  * Story v1s-18-6 — additive enrichment fields (null on entries written before V14, except
  * {@code actorName}, resolved at read time). {@code metadata} is emitted as a JSON object
- * (raw jsonb text), not as a string.
+ * (raw jsonb text), not as a string. Story 22.19 (D16) — additive {@code actionLabel}: the French title of the
+ * action ({@link AuditLabels#ACTIONS}, an unknown code humanized, never raw).
  */
 public record AuditEntryResponse(
         UUID      id,
@@ -30,7 +33,8 @@ public record AuditEntryResponse(
         String    deviceId,
         String    source,
         @JsonRawValue String metadata,
-        String    actorName
+        String    actorName,
+        String    actionLabel
 ) {
 
     /**
@@ -53,7 +57,8 @@ public record AuditEntryResponse(
                 r.deviceId(),
                 r.source(),
                 r.metadata(),
-                r.actorName()
+                r.actorName(),
+                ExportValues.frLabel(AuditLabels.ACTIONS, r.action())
         );
     }
 }

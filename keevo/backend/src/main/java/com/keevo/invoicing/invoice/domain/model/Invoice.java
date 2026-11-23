@@ -563,6 +563,14 @@ public record Invoice(
     }
 
     /** Story 14.2 — the issued invoice with the seller identity flags frozen at issue. */
+    /** Story 22.19 (D4) — the same document with other terms (the due date moved with a clamped issue day). */
+    public Invoice withTerms(InvoiceTerms newTerms) {
+        return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
+                vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy,
+                createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt,
+                sourceQuoteId, newTerms, storeId);
+    }
+
     public Invoice withSellerIdentity(boolean nameFromDisplayName, boolean hasLogo) {
         if (seller == null) {
             return this;

@@ -24,9 +24,26 @@ import java.util.UUID;
 public class JpaTenantPreferencesRepository implements TenantPreferencesRepository {
 
     private final TenantPreferencesJpaRepository jpaRepository;
+    /** Story 22.19 — {@code null} in tests built by hand: no lock. */
+    private final com.keevo.shared.application.port.TransactionLockPort transactionLock;
 
     public JpaTenantPreferencesRepository(TenantPreferencesJpaRepository jpaRepository) {
+        this(jpaRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public JpaTenantPreferencesRepository(TenantPreferencesJpaRepository jpaRepository,
+                                          com.keevo.shared.application.port.TransactionLockPort transactionLock) {
         this.jpaRepository = jpaRepository;
+        this.transactionLock = transactionLock;
+    }
+
+    @Override
+    public void lockForCreation() {
+        if (transactionLock != null) {
+            transactionLock.lock("tenant-preferences:" + com.keevo.shared.infrastructure.persistence.TenantContext
+                    .requireCurrent());
+        }
     }
 
     @Override
@@ -67,7 +84,7 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
 
     @Override
     public boolean hasOnboardingCompleted() {
-        return jpaRepository.count() > 0;
+        return jpaRepository.existsBySectorTypeIsNotNull(); // Story 22.19 — a sector-less row is not an onboarding
     }
 
     @Override

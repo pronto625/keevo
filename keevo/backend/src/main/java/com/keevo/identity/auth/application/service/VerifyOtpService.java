@@ -124,6 +124,10 @@ public class VerifyOtpService implements VerifyOtpUseCase {
                 .map(found -> markVerified(found, identifier, now))
                 .orElseGet(() -> createAccount(identifier, now));
         List<UserMembershipInfo> memberships = userRepository.findMembershipsWithTenantInfo(user.getId());
+        // Story 22.19 (D13) — every membership deactivated: say so instead of an empty company list
+        if (memberships.isEmpty() && userRepository.hasOnlyInactiveMemberships(user.getId())) {
+            throw new DomainException(ErrorCode.ACCOUNT_DISABLED);
+        }
         return new LoginSessionResult(jwtTokenProvider.generateLoginToken(user.getId()), memberships);
     }
 

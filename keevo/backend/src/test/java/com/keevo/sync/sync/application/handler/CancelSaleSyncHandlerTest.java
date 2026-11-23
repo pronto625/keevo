@@ -144,15 +144,63 @@ class CancelSaleSyncHandlerTest {
     }
 
     @Test
-    void apply_alwaysSendsPendingOnly() {
+    void apply_sendsSameDayRule_notPendingOnly() {
+        // Story 22.19 (D18) — a completed sale of the day is cancellable from the till
         authenticateAsOwner();
 
         handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
         ArgumentCaptor<CancelPendingSaleCommand> captor = ArgumentCaptor.forClass(CancelPendingSaleCommand.class);
         verify(cancelPendingSaleUseCase).cancelPendingSale(captor.capture());
-        assertThat(captor.getValue().pendingOnly()).isTrue();
+        assertThat(captor.getValue().pendingOnly()).isFalse();
+        assertThat(captor.getValue().sameDayOnly()).isTrue();
         assertThat(captor.getValue().saleId()).isEqualTo(SALE_ID);
+    }
+
+    @Test
+    void apply_holderOfSaleCancel_inHisStore_applied_withDefaultJustification() {
+        // Story 22.19 (D18) — MANAGER (or a custom role) holding SALE_CANCEL; no justification sent
+        var permissions = mock(com.keevo.shared.infrastructure.security.ActorPermissions.class);
+        when(permissions.currentActorHolds("SALE_CANCEL")).thenReturn(true);
+        handler = new CancelSaleSyncHandler(
+                CommerceSaleApiTestSupport.saleCommandPort(null, null, cancelPendingSaleUseCase), permissions);
+        authenticateAsEmployee(STORE_ID);
+        var op = new SyncOperation("op-3", "CANCEL_SALE", SALE_ID.toString(), Map.of("saleId", SALE_ID.toString()),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        ArgumentCaptor<CancelPendingSaleCommand> captor = ArgumentCaptor.forClass(CancelPendingSaleCommand.class);
+        verify(cancelPendingSaleUseCase).cancelPendingSale(captor.capture());
+        assertThat(captor.getValue().assignedStoreId()).isEqualTo(STORE_ID);
+        assertThat(captor.getValue().justification()).isEqualTo(CancelSaleSyncHandler.DEFAULT_JUSTIFICATION);
+    }
+
+    @Test
+    void apply_saleOfAnotherDay_rejected_withFrenchMessage() {
+        authenticateAsOwner();
+        doThrow(DomainException.userFacing(ErrorCode.SALE_CANCEL_NOT_SAME_DAY,
+                "Une vente ne s'annule que le jour même"))
+                .when(cancelPendingSaleUseCase).cancelPendingSale(any());
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("SALE_CANCEL_NOT_SAME_DAY");
+        assertThat(result.conflictData()).containsEntry("message", "Une vente ne s'annule que le jour même");
+    }
+
+    @Test
+    void apply_alreadyCancelled_rejected_withFrenchMessage() {
+        authenticateAsOwner();
+        doThrow(new DomainException(ErrorCode.SALE_ALREADY_CANCELLED, "Sale already cancelled"))
+                .when(cancelPendingSaleUseCase).cancelPendingSale(any());
+
+        var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.reason()).isEqualTo("SALE_ALREADY_CANCELLED");
+        assertThat(result.conflictData()).containsEntry("message", "Vente déjà annulée");
     }
 
     // Story v1s-13-5 AC5 / 13.9: COMPLETED (at load or validated concurrently) is refused by the

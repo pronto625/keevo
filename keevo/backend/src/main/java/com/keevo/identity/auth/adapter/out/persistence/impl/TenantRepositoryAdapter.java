@@ -33,7 +33,9 @@ public class TenantRepositoryAdapter implements TenantRepository {
 
     @Override
     public Tenant save(Tenant tenant) {
-        TenantJpaEntity saved = springRepository.save(toEntity(tenant));
+        // Story 22.19 — flushed at once: raw JDBC statements of the same transaction (setup mark of /auth/register and
+        // of the Bref import) must see the row
+        TenantJpaEntity saved = springRepository.saveAndFlush(toEntity(tenant));
         return toDomain(saved);
     }
 

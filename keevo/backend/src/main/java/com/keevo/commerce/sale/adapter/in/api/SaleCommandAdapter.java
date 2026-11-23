@@ -59,6 +59,7 @@ class SaleCommandAdapter implements SaleCommandPort {
     public void cancelSale(String tenantSchema, CancelSaleInput in) {
         TenantContext.requireCurrent(tenantSchema);
         cancelPendingSaleUseCase.cancelPendingSale(new CancelPendingSaleCommand(
-                in.saleId(), in.actorId(), in.assignedStoreId(), in.justification(), in.pendingOnly()));
+                in.saleId(), in.actorId(), in.assignedStoreId(), in.justification(), in.pendingOnly(),
+                in.sameDayOnly(), in.cancelledAt()));
     }
 }

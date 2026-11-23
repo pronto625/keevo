@@ -207,12 +207,13 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                         + "seller_phone = ?, seller_niu = ?, seller_rccm = ?, seller_payment_details = ?, "
                         + "seller_footer = ?, vat_registered = ?, vat_rate = ?, prices_include_vat = ?, "
                         + "vat_mention = ?, total_ht = ?, total_vat = ?, total_ttc = ?, issued_at = ?, updated_at = ?, "
-                        + "seller_name_from_display = ?, seller_has_logo = ?, subtotal = ? "
+                        + "seller_name_from_display = ?, seller_has_logo = ?, subtotal = ?, due_date = ? "
                         + "WHERE id = ? AND status = 'DRAFT' AND kind = 'INVOICE'",
                 issued.number(), Date.valueOf(issued.issueDate()), s.legalName(), s.address(), s.phone(), s.niu(),
                 s.rccm(), s.paymentDetails(), s.footer(), issued.vatRegistered(), issued.vatRate(),
                 issued.pricesIncludeVat(), issued.vatMention(), t.totalHt(), t.totalVat(), t.totalTtc(),
                 ts(issued.issuedAt()), ts(issued.updatedAt()), s.nameFromDisplayName(), s.hasLogo(), t.subtotal(),
+                issued.terms().dueDate() == null ? null : Date.valueOf(issued.terms().dueDate()), // 22.19 (D4)
                 issued.id()),
                 "issue");
         // lines are recomputed with the settings of the issue, then frozen
@@ -390,15 +391,23 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             args.add(sellerId);
         }
         // one bucket per collection state; a cancelled invoice is its own bucket
-        List<Bucket> buckets = jdbc.query("SELECT CASE WHEN status = 'CANCELLED' THEN 'CANCELLED' ELSE "
-                + PAYMENT_STATE + " END AS state, COUNT(*) AS n, COALESCE(SUM(total_ttc), 0) AS amount FROM " + table
-                + w.sql() + extra + " GROUP BY 1", (rs, i) -> new Bucket(rs.getString("state"), rs.getLong("n"),
-                rs.getLong("amount")), args.toArray());
+        // Story 22.19 (D5) — per invoice, the credit notes and the payments received (correlated sums served by
+        // idx_credit_notes_invoice / idx_invoice_payments_invoice, same formula as outstandingByClient)
+        String payments = InvoicingTables.qualified(InvoicingTables.PAYMENTS);
+        String creditNotes = InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES);
+        List<Bucket> buckets = jdbc.query("SELECT state, COUNT(*) AS n, COALESCE(SUM(total_ttc), 0) AS amount, "
+                + "COALESCE(SUM(credited), 0) AS credited, "
+                + "COALESCE(SUM(GREATEST(GREATEST(total_ttc - credited, 0) - paid, 0)), 0) AS due FROM ("
+                + "SELECT CASE WHEN status = 'CANCELLED' THEN 'CANCELLED' ELSE " + PAYMENT_STATE + " END AS state, "
+                + "total_ttc, COALESCE((SELECT SUM(c.total_ttc) FROM " + creditNotes + " c WHERE c.invoice_id = inv.id), 0)"
+                + " AS credited, COALESCE((SELECT SUM(p.amount) FROM " + payments + " p WHERE p.invoice_id = inv.id "
+                + "AND p.paid_at IS NOT NULL), 0) AS paid FROM " + table + " inv" + w.sql() + extra + ") s GROUP BY state",
+                (rs, i) -> new Bucket(rs.getString("state"), rs.getLong("n"), rs.getLong("amount"),
+                        rs.getLong("credited"), rs.getLong("due")), args.toArray());
         Long customers = jdbc.queryForObject("SELECT COUNT(DISTINCT COALESCE(NULLIF(client_phone, ''), "
                 + "NULLIF(lower(client_name), ''))) FROM " + table + w.sql() + extra
                 + " AND status <> 'CANCELLED'", Long.class, args.toArray());
         // money already received on invoices that are not fully paid yet (deposit, paid instalments)
-        String payments = InvoicingTables.qualified(InvoicingTables.PAYMENTS);
         Long received = jdbc.queryForObject("SELECT COALESCE(SUM(p.amount), 0) FROM " + payments + " p WHERE p.paid_at IS NOT NULL "
                 + "AND p.invoice_id IN (SELECT id FROM " + table + w.sql() + extra + " AND status <> 'CANCELLED' AND "
                 + PAYMENT_STATE + " <> 'PAID')", Long.class, args.toArray());
@@ -485,6 +494,13 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 + " WHERE number IS NOT NULL AND kind = 'INVOICE'", (rs, i) -> rs.getDate(1));
         return latest.isEmpty() || latest.get(0) == null ? Optional.empty()
                 : Optional.of(latest.get(0).toLocalDate());
+    }
+
+    @Override
+    public void lockCounter(int year) {
+        String table = InvoicingTables.qualified(InvoicingTables.COUNTERS);
+        jdbc.update("INSERT INTO " + table + " (year, last_number) VALUES (?, 0) ON CONFLICT (year) DO NOTHING", year);
+        jdbc.query("SELECT last_number FROM " + table + " WHERE year = ? FOR UPDATE", rs -> { }, year);
     }
 
     @Override

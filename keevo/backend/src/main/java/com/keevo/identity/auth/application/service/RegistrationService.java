@@ -67,6 +67,6 @@ public class RegistrationService implements RegisterUserUseCase {
         // 3–7. Story 19.2 — tenant, user (saved once the tenant exists), OWNER membership, owner role, session and
         //      event through the provisioner shared with create-company. Same order and transaction as before.
         return ownerTenantProvisioner.provision(
-                () -> userRepository.save(User.newOwner(phone, passwordHash)).getId(), null);
+                () -> userRepository.save(User.newOwner(phone, passwordHash)).getId(), null, true);
     }
 }

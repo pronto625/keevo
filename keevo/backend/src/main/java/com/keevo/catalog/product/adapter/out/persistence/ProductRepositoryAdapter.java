@@ -145,6 +145,11 @@ public class ProductRepositoryAdapter implements ProductRepository {
     }
 
     @Override
+    public boolean updateStockQuantity(UUID id, int total) {
+        return springRepository.updateStockQuantityIfDifferent(id, total) > 0; // updated_at kept (sync rules)
+    }
+
+    @Override
     public boolean updateTrackStock(UUID id, boolean tracked, Instant updatedAt) {
         return springRepository.updateTrackStockIfDifferent(id, tracked, updatedAt) > 0;
     }

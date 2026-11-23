@@ -90,6 +90,8 @@ public class LegacyIdentityImportService implements LegacyIdentityImportPort {
         Map<UUID, UUID> membership = store.insertMemberships(tenant.getId(), List.of(member), List.of(Role.OWNER),
                 List.of(true));
         tenantSchemaPort.assignOwnerRole(tenant.getSchemaName(), member.id());
+        // Story 22.19 (D1) — the imported owner lands on the home screen after the « go », not on the sign-up steps
+        store.markSetupCompleted(tenant.getId());
         return new ImportedTenant(tenant.getId(), tenant.getSchemaName(), tenant.getCode(), ownerInserted,
                 membership.get(member.id()));
     }

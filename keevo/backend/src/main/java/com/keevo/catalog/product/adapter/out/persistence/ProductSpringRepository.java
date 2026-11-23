@@ -91,6 +91,17 @@ public interface ProductSpringRepository extends JpaRepository<ProductJpaEntity,
     int updateTrackStockIfDifferent(@Param("id") UUID id, @Param("tracked") boolean tracked,
                                     @Param("updatedAt") Instant updatedAt);
 
+    /**
+     * Story 22.19 (D11) — the legacy counter equal to the store levels' sum; tracked products only, written only when
+     * it differs. Flushes first, never clears the persistence context (it runs inside sales and entries).
+     * {@code updated_at} is NOT moved: it is the product's edit time used by the sync conflict rules (a later offline
+     * edit of the product must never look outdated because stock moved); the devices read the stock from the levels.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("UPDATE ProductJpaEntity p SET p.stockQuantity = :total "
+            + "WHERE p.id = :id AND p.trackStock = true AND (p.stockQuantity IS NULL OR p.stockQuantity <> :total)")
+    int updateStockQuantityIfDifferent(@Param("id") UUID id, @Param("total") int total);
+
     // ── Story 20.1 — merge, redirection, barcode lookup ─────────────────────────────────────────
 
     /** Both merge rows, locked ({@code FOR UPDATE}) in id order: two crossed merges cannot deadlock. */

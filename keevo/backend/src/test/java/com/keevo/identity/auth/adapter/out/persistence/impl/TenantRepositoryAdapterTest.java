@@ -50,7 +50,7 @@ class TenantRepositoryAdapterTest {
         Tenant tenant = new Tenant(id, "KV-TEST01", "kv_test01", "Test Shop",
                 TenantStatus.ACTIVE, PlanType.FREE, created);
 
-        when(springRepository.save(any(TenantJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(springRepository.saveAndFlush(any(TenantJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Tenant result = adapter.save(tenant);
 
@@ -66,7 +66,7 @@ class TenantRepositoryAdapterTest {
         Tenant tenant = new Tenant(id, "KV-TEST02", "kv_test02", "Deleting Shop",
                 TenantStatus.DELETION_PENDING, PlanType.FREE, created, scheduledDeletion);
 
-        when(springRepository.save(any(TenantJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(springRepository.saveAndFlush(any(TenantJpaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Tenant result = adapter.save(tenant);
 

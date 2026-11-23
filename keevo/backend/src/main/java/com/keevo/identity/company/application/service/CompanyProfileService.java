@@ -235,8 +235,10 @@ public class CompanyProfileService implements CompanyIdentity {
         String designation = limited("designation", p.designation(), MAX_DESIGNATION);
         String description = limited("description", p.description(), MAX_DESCRIPTION);
         String category = stripKeepingNull(p.category());
-        if (category != null && !category.isEmpty() && !CompanyCategory.isValid(category)) {
-            throw invalid("category", "Catégorie inconnue (valeurs : " + CompanyCategory.accepted() + ")");
+        if (category != null && !category.isEmpty()) {
+            // Story 22.19 — the key or its French label (as the message lists them)
+            category = CompanyCategory.resolve(category).orElseThrow(() ->
+                    invalid("category", "Catégorie inconnue (valeurs : " + CompanyCategory.accepted() + ")"));
         }
         String address = limited("address", p.address(), MAX_ADDRESS);
         String phone = limited("phone", p.phone(), MAX_PHONE);

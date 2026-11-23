@@ -21,8 +21,15 @@ import java.util.UUID;
  */
 public class SaleCompletedEvent implements DomainEvent {
 
-    /** One sold line: the product name, the applied unit price (VAT included, francs) and the quantity. */
-    public record Line(String productName, long unitPrice, int quantity) {
+    /**
+     * One sold line: the product name, the applied unit price (VAT included, francs) and the quantity. Story 22.19
+     * (D6) — {@code productId}: the catalogue product sold (null in events stored before, or for a free line).
+     */
+    public record Line(String productName, long unitPrice, int quantity, UUID productId) {
+
+        public Line(String productName, long unitPrice, int quantity) {
+            this(productName, unitPrice, quantity, null);
+        }
     }
 
     private final UUID saleId;

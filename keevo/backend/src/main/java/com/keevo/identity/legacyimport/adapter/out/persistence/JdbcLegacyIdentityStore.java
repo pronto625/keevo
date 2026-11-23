@@ -141,6 +141,10 @@ class JdbcLegacyIdentityStore implements LegacyIdentityStore {
             RETURNING user_id, id
             """;
 
+    /** Story 22.19 (D1) — sign-up steps closed for an imported company (set once). */
+    static final String MARK_SETUP_COMPLETED_SQL =
+            "UPDATE public.tenants SET setup_completed_at = now() WHERE id = ? AND setup_completed_at IS NULL";
+
     /** Story 24.2 — the suspension trace of an imported tenant, set once (the admin drawer shows it). */
     static final String TRACE_SUSPENSION_SQL = """
             UPDATE public.tenants SET suspended_at = COALESCE(suspended_at, now()),
@@ -348,6 +352,11 @@ class JdbcLegacyIdentityStore implements LegacyIdentityStore {
     @Override
     public void traceSuspension(UUID tenantId, String reason) {
         jdbc.update(TRACE_SUSPENSION_SQL, reason, tenantId);
+    }
+
+    @Override
+    public void markSetupCompleted(UUID tenantId) {
+        jdbc.update(MARK_SETUP_COMPLETED_SQL, tenantId);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

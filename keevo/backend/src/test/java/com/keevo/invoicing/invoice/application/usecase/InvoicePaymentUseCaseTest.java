@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -309,5 +310,38 @@ class InvoicePaymentUseCaseTest {
                 .isInstanceOf(DomainException.class);
         verify(payments, never()).settle(any(), any(), any(), any());
         verify(payments, never()).settleUnpaid(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("22.19 (D8) — an unpaid instalment changed: audited UPDATED with its new amount and due date")
+    void instalmentUpdateAudited() {
+        locked(issued());
+        UUID id = UUID.randomUUID();
+        stored.add(InvoicePayment.scheduled(id, invoiceId, 40_000, TODAY.plusDays(10), null, null));
+
+        useCase.updateInstalment(invoiceId, id, new InvoicePaymentUseCase.InstalmentChange(30_000L,
+                TODAY.plusDays(15), null), ACTOR, TENANT);
+
+        ArgumentCaptor<InvoicePaymentRecordedEvent> e = ArgumentCaptor.forClass(InvoicePaymentRecordedEvent.class);
+        verify(events).publishEvent(e.capture());
+        assertThat(e.getValue().kind()).isEqualTo(InvoicePaymentRecordedEvent.Kind.UPDATED);
+        assertThat(e.getValue().amount()).isEqualTo(30_000);
+        assertThat(e.getValue().dueDate()).isEqualTo(TODAY.plusDays(15));
+        assertThat(e.getValue().previousAmount()).isEqualTo(40_000L);
+        assertThat(e.getValue().previousDueDate()).isEqualTo(TODAY.plusDays(10));
+    }
+
+    @Test
+    @DisplayName("22.19 (D8) — a note-only change of an instalment: written, no audit line")
+    void instalmentNoteOnlyNotAudited() {
+        locked(issued());
+        UUID id = UUID.randomUUID();
+        stored.add(InvoicePayment.scheduled(id, invoiceId, 40_000, TODAY.plusDays(10), null, null));
+
+        useCase.updateInstalment(invoiceId, id, new InvoicePaymentUseCase.InstalmentChange(null, null,
+                "Payer au guichet"), ACTOR, TENANT);
+
+        verify(payments).updateScheduled(any(), anyLong(), any(), any(), any());
+        verify(events, never()).publishEvent(any(InvoicePaymentRecordedEvent.class));
     }
 }

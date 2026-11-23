@@ -60,6 +60,23 @@ public class ProductController {
     private final LookupProductByBarcodeUseCase lookupByBarcode; // Story 20.1
     private final MergeProductsUseCase mergeProducts;            // Story 20.1
     private final PurchasePriceVisibility purchasePrices;        // Story 16.13 (reprise, D2)
+    /** Story 22.19 (D19) — optional (the catalogue starts without stock); {@code null} in tests built by hand. */
+    private org.springframework.beans.factory.ObjectProvider<com.keevo.catalog.api.ProductStockQuantities> stockQuantities;
+
+    /** Story 22.19 (D19) — {@code null} in tests built by hand: no offer checked for another store. */
+    private com.keevo.shared.module.EntitlementService entitlements;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setEntitlements(com.keevo.shared.module.EntitlementService entitlements) {
+        this.entitlements = entitlements;
+    }
+
+    /** Story 22.19 (D19) — the per-store stock reader (inventory), when the stock module is there. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setStockQuantities(
+            org.springframework.beans.factory.ObjectProvider<com.keevo.catalog.api.ProductStockQuantities> stock) {
+        this.stockQuantities = stock;
+    }
 
     public ProductController(CreateOrRestoreProductUseCase createOrRestoreProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
@@ -89,7 +106,8 @@ public class ProductController {
      *
      * <p>Story 17.13 — a name held by an ARCHIVED product restores that product instead (200, {@code restored: true},
      * see {@link CreateOrRestoreProductUseCase}); nothing of the request is applied to it — in particular
-     * {@code stockQuantity}, which never creates stock here anyway (legacy column only, 17-11), is ignored.
+     * {@code stockQuantity} is ignored. Story 22.19 (D11): a created, tracked product with {@code stockQuantity > 0} gets
+     * that quantity as a stock entry « Stock initial » in {@code storeId} (else the default store).
      */
     @RequiresEntitlement("catalog")
     @PostMapping
@@ -124,7 +142,8 @@ public class ProductController {
         // Story 17.13: a name held by an ARCHIVED product restores it (limit-checked, existing fields kept) → 200
         // with the existing product and restored = true; a draft creation whose restore is refused gets the archived
         // product as is (200, no marker); a visible product's name keeps the 409.
-        var outcome = createOrRestoreProductUseCase.execute(dto);
+        // Story 22.19 (D11) — the initial quantity enters a store (stock entry « Stock initial »)
+        var outcome = createOrRestoreProductUseCase.execute(dto, initialStockStore(request.storeId()));
         if (outcome.restored()) {
             return ResponseEntity.ok(ApiResponseWrapper.ok(respond(outcome.product(), true)));
         }
@@ -143,14 +162,52 @@ public class ProductController {
      */
     @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping
-    public ResponseEntity<ApiResponseWrapper<List<ProductResponseDto>>> listProducts() {
+    public ResponseEntity<ApiResponseWrapper<List<ProductResponseDto>>> listProducts(
+            @RequestParam(name = "storeId", required = false) UUID storeId) {
         List<Product> products = productRepository.findAllActive();
         boolean purchasePriceVisible = purchasePrices.currentActorCanView(); // once for the whole list
+        // Story 22.19 (D19, D20) — one grouped query each: the photo flags, and the stock of ?storeId= when asked
+        List<UUID> ids = products.stream().map(Product::getId).toList();
+        java.util.Set<UUID> withPhoto = productRepository.findPhotoUrlsByIds(ids).keySet();
+        java.util.Map<UUID, Integer> storeStock = storeStock(ids, storeId);
         List<ProductResponseDto> response = products.stream()
-                .map(p -> ProductResponseDto.fromDomain(p).forReader(purchasePriceVisible))
+                .map(p -> {
+                    ProductResponseDto dto = ProductResponseDto.fromDomain(p).forReader(purchasePriceVisible)
+                            .withHasPhoto(withPhoto.contains(p.getId()));
+                    return storeStock == null ? dto : dto.withStoreStock(storeStock.getOrDefault(p.getId(), 0));
+                })
                 .toList();
         
         return ResponseEntity.ok(ApiResponseWrapper.ok(response));
+    }
+
+    /**
+     * Story 22.19 (D19) — the stock of {@code storeId} for these products (absent level = 0), {@code null} when no store
+     * is asked or no stock module is there. A store member reads his own store only (another one → 403).
+     */
+    private java.util.Map<UUID, Integer> storeStock(java.util.Collection<UUID> ids, UUID storeId) {
+        if (storeId == null) {
+            return null;
+        }
+        // one rule (same as GET /stock/stores/{id}/products): a member with a store → that store only; the owner or
+        // a member without a store → any store, the default one freely, any other with the multi-store offer
+        UUID own = CurrentActor.assignedStoreIdOrNull();
+        if (own != null && !storeId.equals(own)) {
+            throw com.keevo.shared.domain.exception.DomainException.userFacing(
+                    com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN,
+                    "Vous ne pouvez consulter que le stock de votre boutique.");
+        }
+        String tenant = TenantContext.getCurrentTenant();
+        if (own == null && entitlements != null
+                && storeQuery.defaultStore(tenant).filter(storeId::equals).isEmpty()) {
+            entitlements.assertEnabled(tenant, "multi-store");
+        }
+        var port = stockQuantities == null ? null : stockQuantities.getIfAvailable();
+        if (port == null) {
+            return null;
+        }
+        return ids.isEmpty() ? java.util.Map.of()
+                : port.quantities(TenantContext.getCurrentTenant(), ids, storeId);
     }
 
     /**
@@ -186,10 +243,15 @@ public class ProductController {
      */
     @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> getProduct(@PathVariable UUID id) {
+    public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> getProduct(@PathVariable UUID id,
+            @RequestParam(name = "storeId", required = false) UUID storeId) {
         return productRepository.findById(id)
                 .map(product -> {
                     ProductResponseDto response = respond(product);
+                    java.util.Map<UUID, Integer> stock = storeStock(List.of(id), storeId); // Story 22.19 (D19)
+                    if (stock != null) {
+                        response = response.withStoreStock(stock.getOrDefault(id, 0));
+                    }
                     return ResponseEntity.ok(ApiResponseWrapper.ok(response));
                 })
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -299,10 +361,20 @@ public class ProductController {
     }
 
     private ProductResponseDto respond(Product product, Boolean restored) {
-        return ProductResponseDto.fromDomain(product, restored).forReader(purchasePrices.currentActorCanView());
+        return ProductResponseDto.fromDomain(product, restored).forReader(purchasePrices.currentActorCanView())
+                .withHasPhoto(productRepository.findPhotoUrl(product.getId()).isPresent()); // Story 22.19 (D20)
     }
 
     // ── Story 14.10 helpers ─────────────────────────────────────────────
+
+    /** Story 22.19 (D11) — a store member's initial stock goes to his own store; the owner's to the one he asked. */
+    private static UUID initialStockStore(UUID requested) {
+        if (CurrentActor.authentication() != null
+                && CurrentActor.authentication().getDetails() instanceof AuthDetails ad && ad.storeId() != null) {
+            return ad.storeId();
+        }
+        return requested;
+    }
 
     /** Resolve employee's assigned store name, or null for OWNER. */
     private String resolveEmployeeStoreName() {

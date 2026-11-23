@@ -49,6 +49,12 @@ public interface LegacyIdentityStore {
     /** Sets the suspension date and reason of a suspended tenant when they are not set yet. */
     void traceSuspension(UUID tenantId, String reason);
 
+    /**
+     * Story 22.19 (D1) — marks the sign-up steps of an imported company finished ({@code setup_completed_at}), once:
+     * an imported owner never runs the app's sign-up steps again after the « go ».
+     */
+    void markSetupCompleted(UUID tenantId);
+
     /** Story 24.9 — SUSPENDED (with this reason) → ACTIVE, trace cleared, one statement. @return ids activated */
     Set<UUID> activateSuspended(Collection<UUID> tenantIds, String reason);
 

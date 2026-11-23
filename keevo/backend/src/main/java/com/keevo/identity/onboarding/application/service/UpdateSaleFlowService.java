@@ -4,8 +4,6 @@ import com.keevo.identity.api.SaleFlow;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.UpdateSaleFlowUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.event.catalog.onboarding.SaleFlowChangedEvent;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
@@ -37,8 +35,11 @@ public class UpdateSaleFlowService implements UpdateSaleFlowUseCase {
     @Override
     public TenantPreferences update(SaleFlow flow) {
         Objects.requireNonNull(flow, "flow");
+        preferencesRepository.lockForCreation(); // Story 22.19 — one row even under concurrent first writes
         TenantPreferences existing = preferencesRepository.findByCurrentTenant()
-                .orElseThrow(() -> new DomainException(ErrorCode.PREFERENCES_NOT_FOUND));
+                // Story 22.19 (D2) — before the sector onboarding the GET returns the defaults without a row: the first
+                // write creates it from those defaults
+                .orElseGet(() -> preferencesRepository.save(TenantPreferences.defaults(null, java.time.Instant.now())));
         if (existing.defaultSaleFlow() == flow) {
             return existing;
         }

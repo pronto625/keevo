@@ -92,9 +92,11 @@ public class RecordSaleService implements RecordSaleUseCase {
                 if (stockQuery.isUntracked(tenantSchema, item.productId())) continue;
                 int available = getAvailableStock(tenantSchema, item.productId(), item.variantId(), command.storeId());
                 if (available < item.quantity()) {
-                    throw new DomainException(ErrorCode.INSUFFICIENT_STOCK,
-                            "Stock insuffisant pour " + item.productName()
-                                    + ": disponible=" + available + " demandé=" + item.quantity());
+                    // Story 22.19 (D11) — French answer naming what is left in the sale's store
+                    throw DomainException.userFacing(ErrorCode.INSUFFICIENT_STOCK,
+                            "Stock insuffisant dans cette boutique : il reste " + Math.max(available, 0),
+                            java.util.Map.of("productId", item.productId().toString(),
+                                    "available", Math.max(available, 0), "requested", item.quantity()));
                 }
             }
         }

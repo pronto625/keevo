@@ -600,7 +600,7 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
         assertThat(session.path("memberships")).as(s + " — nouveau compte sans entreprise").isEmpty();
 
         MvcResult created = anonymous("/api/v1/auth/create-company", Map.of("loginToken",
-                session.path("loginToken").asText(), "deviceId", "acceptance-" + saleFlow, "deviceLabel", "Redmi"));
+                session.path("loginToken").asText(), "name", "Aicha Mbarga", "deviceId", "acceptance-" + saleFlow, "deviceLabel", "Redmi"));
         assertThat(status(created)).as(s + " — création de l'entreprise : " + body(created)).isEqualTo(201);
         JsonNode company = objectMapper.readTree(body(created));
         String token = company.path("token").asText();

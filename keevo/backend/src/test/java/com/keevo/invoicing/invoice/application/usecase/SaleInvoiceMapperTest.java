@@ -119,4 +119,17 @@ class SaleInvoiceMapperTest {
         assertThat(SaleInvoiceMapper.paymentMethod(null)).isNull();
         assertThat(SaleInvoiceMapper.paymentMethod("CHEQUE")).isNull();
     }
+
+    @Test
+    @DisplayName("22.19 (D6) — each line carries the sold product, on both shapes (divisible and « (× q) »)")
+    void productIdOnBothBranches() {
+        java.util.UUID riz = java.util.UUID.randomUUID();
+        java.util.UUID savon = java.util.UUID.randomUUID();
+        List<LineInput> lines = SaleInvoiceMapper.lines(List.of(new Line("Riz", 1000, 2, riz),
+                new Line("Savon", 1000, 3, savon)), 4999);
+
+        assertThat(lines).extracting(LineInput::productId).containsExactly(riz, savon);
+        assertThat(lines.get(1).description()).isEqualTo("Savon (× 3)");
+        assertThat(SaleInvoiceMapper.lines(List.of(new Line("Libre", 500, 1)), 500).get(0).productId()).isNull();
+    }
 }

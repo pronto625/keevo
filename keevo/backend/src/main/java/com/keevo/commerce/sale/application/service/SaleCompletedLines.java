@@ -16,7 +16,8 @@ final class SaleCompletedLines {
 
     static List<SaleCompletedEvent.Line> of(Sale sale) {
         return sale.getItems().stream()
-                .map(i -> new SaleCompletedEvent.Line(i.getProductName(), i.getAppliedUnitPrice(), i.getQuantity()))
+                .map(i -> new SaleCompletedEvent.Line(i.getProductName(), i.getAppliedUnitPrice(), i.getQuantity(),
+                        i.getProductId()))
                 .toList();
     }
 

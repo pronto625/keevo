@@ -37,4 +37,8 @@ public interface StockLevelSpringRepository extends JpaRepository<StockLevelJpaE
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM StockLevelJpaEntity s WHERE s.productId = :productId ORDER BY s.id")
     List<StockLevelJpaEntity> lockAllByProduct(@Param("productId") UUID productId);
+
+    /** Story 22.19 (D11) — one aggregate on uq_stock_level (leads with product_id). */
+    @Query("SELECT COALESCE(SUM(s.quantity), 0) FROM StockLevelJpaEntity s WHERE s.productId = :productId")
+    long sumQuantityByProduct(@Param("productId") UUID productId);
 }

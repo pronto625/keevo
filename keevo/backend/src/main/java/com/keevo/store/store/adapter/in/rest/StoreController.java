@@ -1,5 +1,7 @@
 package com.keevo.store.store.adapter.in.rest;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
@@ -40,13 +42,16 @@ public class StoreController {
     private final DeactivateStoreUseCase deactivateStoreUseCase;
     private final ListStoresUseCase listStoresUseCase;
     private final ReactivateStoreUseCase reactivateStoreUseCase;
+    private final GetStoreUseCase getStoreUseCase;
 
     public StoreController(
             CreateStoreUseCase createStoreUseCase,
             UpdateStoreUseCase updateStoreUseCase,
             DeactivateStoreUseCase deactivateStoreUseCase,
             ListStoresUseCase listStoresUseCase,
-            ReactivateStoreUseCase reactivateStoreUseCase) {
+            ReactivateStoreUseCase reactivateStoreUseCase,
+            GetStoreUseCase getStoreUseCase) {
+        this.getStoreUseCase = getStoreUseCase;
         this.createStoreUseCase = createStoreUseCase;
         this.updateStoreUseCase = updateStoreUseCase;
         this.deactivateStoreUseCase = deactivateStoreUseCase;
@@ -83,6 +88,28 @@ public class StoreController {
         List<StoreResponseDto> dtos = listStoresUseCase.execute(new ListStoresQuery(includeInactive))
                 .stream().map(StoreResponseDto::fromDomain).toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
+    }
+
+    /**
+     * Story 22.19 (D12) — GET /api/v1/stores/{storeId}: the owner reads any store, a store member (EMPLOYEE, MANAGER,
+     * VIEWER, custom role) only the store of his token (another one → 403). The seller's app reads its store here.
+     */
+    @Operation(summary = "Read one store (owner: any store; member: his own store)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Store returned"),
+            @ApiResponse(responseCode = "403", description = "Another store than the member's"),
+            @ApiResponse(responseCode = "404", description = "Store not found")
+    })
+    @RequiresEntitlement(value = "store", access = RequiresEntitlement.Access.READ)
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/{storeId}")
+    public ResponseEntity<ApiResponseWrapper<StoreResponseDto>> getStore(@PathVariable UUID storeId) {
+        UUID assigned = CurrentActor.isOwner() ? null : CurrentActor.assignedStoreId();
+        if (!CurrentActor.isOwner() && assigned == null) {
+            throw DomainException.userFacing(ErrorCode.FORBIDDEN, "Vous n'avez accès qu'à votre boutique");
+        }
+        return ResponseEntity.ok(ApiResponseWrapper.ok(StoreResponseDto.fromDomain(
+                getStoreUseCase.execute(storeId, assigned))));
     }
 
     @Operation(summary = "Update a store's name, address, phone and Bref fields (absent ⇒ unchanged)")

@@ -94,7 +94,7 @@ class ProductControllerBrefTest {
     @DisplayName("POST avec barcode → transmis à la création")
     void create_passes_the_barcode() throws Exception {
         UUID id = UUID.randomUUID();
-        when(createOrRestore.execute(any())).thenReturn(
+        when(createOrRestore.execute(any(), any())).thenReturn(
                 new CreateOrRestoreProductUseCase.Outcome(product(id, "REF-001", null), false));
 
         mockMvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)
@@ -103,7 +103,7 @@ class ProductControllerBrefTest {
                 .andExpect(jsonPath("$.data.barcode").value("REF-001"));
 
         var dto = ArgumentCaptor.forClass(CreateProductUseCase.CreateProductDto.class);
-        verify(createOrRestore).execute(dto.capture());
+        verify(createOrRestore).execute(dto.capture(), any());
         assertThat(dto.getValue().barcode()).isEqualTo("REF-001");
     }
 
@@ -111,7 +111,7 @@ class ProductControllerBrefTest {
     @DisplayName("POST : un code ≤ 100 caractères une fois nettoyé passe (la longueur est vérifiée par le cas d'usage)")
     void create_with_a_padded_barcode_reaches_the_use_case() throws Exception {
         String padded = "  " + "1".repeat(100) + "  ";
-        when(createOrRestore.execute(any())).thenReturn(
+        when(createOrRestore.execute(any(), any())).thenReturn(
                 new CreateOrRestoreProductUseCase.Outcome(product(UUID.randomUUID(), "1".repeat(100), null), false));
 
         mockMvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)
@@ -119,14 +119,14 @@ class ProductControllerBrefTest {
                 .andExpect(status().isCreated());
 
         var dto = ArgumentCaptor.forClass(CreateProductUseCase.CreateProductDto.class);
-        verify(createOrRestore).execute(dto.capture());
+        verify(createOrRestore).execute(dto.capture(), any());
         assertThat(dto.getValue().barcode()).isEqualTo(padded);
     }
 
     @Test
     @DisplayName("POST avec un code de plus de 100 caractères → 422 (refus du cas d'usage)")
     void create_with_a_too_long_barcode_is_422() throws Exception {
-        when(createOrRestore.execute(any())).thenThrow(DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+        when(createOrRestore.execute(any(), any())).thenThrow(DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
                 "La référence ou le code-barres ne doit pas dépasser 100 caractères"));
 
         mockMvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)

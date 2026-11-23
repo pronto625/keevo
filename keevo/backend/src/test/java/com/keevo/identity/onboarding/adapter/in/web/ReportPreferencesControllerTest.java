@@ -163,12 +163,15 @@ class ReportPreferencesControllerTest {
     }
 
     @Test
-    void GET_preferences_noRow_returns404() throws Exception {
+    void GET_preferences_noRow_returnsDefaultsWithoutWriting() throws Exception {
+        // Story 22.19 (D2) — a read never writes: the defaults, sector unknown, still no row
         authenticateAs("OWNER");
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/api/v1/tenant/preferences")).andExpect(status().isNotFound());
-        verifyNoInteractions(entitlementService);
+        mockMvc.perform(get("/api/v1/tenant/preferences")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sectorType").doesNotExist())
+                .andExpect(jsonPath("$.data.eodReportTime").value("20:00"));
+        verify(tenantPreferencesRepository, never()).save(any());
     }
 
     // ── Story 17.2 — leaderboard visibility ───────────────────────────────────
@@ -362,6 +365,24 @@ class ReportPreferencesControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validPutBody()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void PUT_reportPreferences_acceptsHHmm_storedWithSeconds() throws Exception {
+        // Story 22.19 (D3) — the app sends back the « HH:mm » the GET returned
+        authenticateAs("OWNER");
+        when(updateReportPreferencesUseCase.update(any())).thenReturn(samplePrefs());
+
+        mockMvc.perform(put("/api/v1/tenant/report-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validPutBody().replace("\"22:00:00\"", "\"18:00\"")
+                                .replace("\"weeklyReportTime\": \"20:00:00\"", "\"weeklyReportTime\": \"19:30\"")))
+                .andExpect(status().isOk());
+        var command = org.mockito.ArgumentCaptor.forClass(
+                com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand.class);
+        verify(updateReportPreferencesUseCase).update(command.capture());
+        org.assertj.core.api.Assertions.assertThat(command.getValue().eodReportTime()).isEqualTo("18:00:00");
+        org.assertj.core.api.Assertions.assertThat(command.getValue().weeklyReportTime()).isEqualTo("19:30:00");
     }
 
     @Test

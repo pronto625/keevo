@@ -33,7 +33,12 @@ public record ProductResponseDto(
         boolean priceManual,    // Story 20.1 — price typed by a person
         UUID mergedIntoId,      // Story 20.1 — merge target, null when not merged
         // Story 17.13 — only on a creation that restored the archived product of that name; absent otherwise
-        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean restored
+        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean restored,
+        // Story 22.19 (D20) — whether GET /products/{id}/photo has something to answer (absent where not computed)
+        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean hasPhoto,
+        // Story 22.19 (D19) — the stock in the store asked by ?storeId= (0 without a level; absent otherwise or for an
+        // untracked product)
+        @JsonInclude(JsonInclude.Include.NON_NULL) Integer storeStockQuantity
 ) {
     /**
      * Story 16.13 (reprise, D2) — the same payload for a reader who may not see purchase prices
@@ -43,7 +48,21 @@ public record ProductResponseDto(
     public ProductResponseDto withoutPurchasePrices() {
         return new ProductResponseDto(id, name, description, sku, categoryId, price, null, null, stockQuantity,
                 archived, status, minimumThreshold, createdAt, updatedAt, trackStock, barcode, productKey,
-                priceManual, mergedIntoId, restored);
+                priceManual, mergedIntoId, restored, hasPhoto, storeStockQuantity);
+    }
+
+    /** Story 22.19 (D20) — with the photo flag. */
+    public ProductResponseDto withHasPhoto(boolean photo) {
+        return new ProductResponseDto(id, name, description, sku, categoryId, price, buyPrice, transportCost,
+                stockQuantity, archived, status, minimumThreshold, createdAt, updatedAt, trackStock, barcode,
+                productKey, priceManual, mergedIntoId, restored, photo, storeStockQuantity);
+    }
+
+    /** Story 22.19 (D19) — with the stock of the store asked (ignored for an untracked product). */
+    public ProductResponseDto withStoreStock(Integer quantity) {
+        return new ProductResponseDto(id, name, description, sku, categoryId, price, buyPrice, transportCost,
+                stockQuantity, archived, status, minimumThreshold, createdAt, updatedAt, trackStock, barcode,
+                productKey, priceManual, mergedIntoId, restored, hasPhoto, trackStock ? quantity : null);
     }
 
     /** {@link #withoutPurchasePrices()} unless {@code purchasePriceVisible}. */
@@ -80,7 +99,9 @@ public record ProductResponseDto(
                 product.getProductKey(),
                 product.isPriceManual(),
                 product.getMergedIntoId(),
-                restored
+                restored,
+                null,
+                null
         );
     }
 }

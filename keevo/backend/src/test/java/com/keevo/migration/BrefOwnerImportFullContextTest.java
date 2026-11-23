@@ -206,7 +206,9 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
 
         UUID tenantId = UUID.fromString(batch.path("tenantId").asText());
         Map<String, Object> tenant = jdbc.queryForMap("SELECT schema_name, status, name, suspended_reason, "
-                + "suspended_at FROM public.tenants WHERE id = ?", tenantId);
+                + "suspended_at, setup_completed_at FROM public.tenants WHERE id = ?", tenantId);
+        // Story 22.19 (D1) — the imported owner never runs the app's sign-up steps again
+        assertThat(tenant.get("setup_completed_at")).isNotNull();
         String schema = (String) tenant.get("schema_name");
         assertThat(tenant.get("status")).isEqualTo("SUSPENDED");
         assertThat((String) tenant.get("name")).startsWith("Boutique ");

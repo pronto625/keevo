@@ -633,7 +633,7 @@ public class AuthController {
         return version == null || version.isBlank();
     }
 
-    private UserProfileResponse toProfileResponse(UserProfileData data) {
+    static UserProfileResponse toProfileResponse(UserProfileData data) {
         return new UserProfileResponse(
             data.userId(),
             data.phoneNumber(),

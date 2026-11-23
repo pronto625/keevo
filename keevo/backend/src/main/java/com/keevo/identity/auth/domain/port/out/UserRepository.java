@@ -117,4 +117,10 @@ public interface UserRepository {
      * @return list of membership projections, empty if none
      */
     List<UserMembershipInfo> findMembershipsWithTenantInfo(UUID userId);
+
+    /**
+     * Story 22.19 (D13) — whether the account was disabled by its companies: it has at least one membership and none
+     * is active. An account without any membership (owner before create-company) is not disabled.
+     */
+    boolean hasOnlyInactiveMemberships(UUID userId);
 }

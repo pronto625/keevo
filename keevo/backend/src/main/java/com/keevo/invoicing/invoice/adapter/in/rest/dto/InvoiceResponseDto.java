@@ -124,7 +124,18 @@ public record InvoiceResponseDto(
         String lastSendErrorCode,
         String lastSendError,
         String notes,
-        LocalDate requestedIssueDate) {
+        LocalDate requestedIssueDate,
+        // Story 22.19 (D21) — the signature images as PNG data URLs, on single-document answers only (create,
+        // update, read); absent in lists and when not signed
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        String sellerSignature,
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        String clientSignature) {
+
+    /** Story 22.19 (D21) — the same answer with the signature images (data URLs, {@code null} = not signed). */
+    public InvoiceResponseDto withSignatures(String sellerImage, String clientImage) {
+        return new InvoiceResponseDto(id, number, status, statusLabel, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention, lines, totalHt, totalVat, totalTtc, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdAt, updatedAt, complianceWarnings, lastSentAt, lastSentTo, sendCount, saleId, creditedTtc, fullyCredited, creditNotes, supersededAt, kind, quoteReference, convertedInvoiceId, convertedAt, sourceQuoteId, paymentState, paymentStateLabel, amountPaid, amountDue, payments, subtotal, discountAmount, deliveryFee, vatRateOverride, vatExempt, dueDate, invoiceTemplate, ticketWidth, clientSigned, sellerSigned, legacyReference, storeId, storeName, lastSentChannel, lastSentChannelLabel, lastSendStatus, lastSendStatusLabel, lastSendStatusChannel, lastSendErrorCode, lastSendError, notes, requestedIssueDate, sellerImage, clientImage);
+    }
 
     /** Story 20.4 — a payment received ({@code paidAt}) or an instalment ({@code dueDate}, unpaid while no paidAt). */
     public record Payment(UUID id, long amount, LocalDate dueDate, Instant paidAt, String method, String note,
@@ -215,7 +226,7 @@ public record InvoiceResponseDto(
                 d.lastSendErrorCode(),
                 d.lastSendErrorCode() == null ? null
                         : com.keevo.shared.infrastructure.web.ErrorMessages.of(d.lastSendErrorCode(), "Envoi impossible"),
-                i.terms().notes(), i.terms().issueDate());
+                i.terms().notes(), i.terms().issueDate(), null, null);
     }
 
     private static Line line(InvoiceLine l) {

@@ -137,6 +137,10 @@ public class AuthenticationService implements AuthenticateUserUseCase {
         // 5. Load tenant memberships (via JdbcTemplate — no TenantContext needed)
         List<UserMembershipInfo> memberships =
                 userRepository.findMembershipsWithTenantInfo(user.getId());
+        // Story 22.19 (D13) — every membership deactivated: say so instead of an empty company list
+        if (memberships.isEmpty() && userRepository.hasOnlyInactiveMemberships(user.getId())) {
+            throw new DomainException(ErrorCode.ACCOUNT_DISABLED);
+        }
 
         // 6. Generate short-lived loginToken (5min, scope=login_pending)
         //    This token is NOT usable for API access — JwtAuthFilter rejects scope=login_pending

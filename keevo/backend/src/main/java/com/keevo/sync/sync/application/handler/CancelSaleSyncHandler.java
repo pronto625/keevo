@@ -5,6 +5,7 @@ import com.keevo.commerce.api.CancelSaleInput;
 import com.keevo.commerce.api.SaleCommandPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.ActorPermissions;
 import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.shared.application.port.sync.SyncOperationResult;
 import com.keevo.shared.application.port.sync.SyncOperationStatus;
@@ -17,10 +18,24 @@ import java.util.UUID;
 @Component
 public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
 
+    /** Story 22.19 (D18) — « Annuler une vente du jour » (MANAGER by default, grantable to a custom role). */
+    public static final String CANCEL_PERMISSION = "SALE_CANCEL";
+    /** Story 22.19 (D18) — the justification recorded when the till sends none (the audit needs one). */
+    static final String DEFAULT_JUSTIFICATION = "Annulation de la vente depuis la caisse";
+    /** Story 22.19 (D18) — the till's short text (the REST answer keeps the V1 catalogue text). */
+    static final String ALREADY_CANCELLED = "Vente déjà annulée";
+
     private final SaleCommandPort saleCommandPort;
+    private final ActorPermissions permissions;
 
     public CancelSaleSyncHandler(SaleCommandPort saleCommandPort) {
+        this(saleCommandPort, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CancelSaleSyncHandler(SaleCommandPort saleCommandPort, ActorPermissions permissions) {
         this.saleCommandPort = saleCommandPort;
+        this.permissions = permissions;
     }
 
     @Override
@@ -43,28 +58,51 @@ public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
-        // Story 11.4: same rule as REST (PendingSaleController.cancelSale is OWNER-only) — the
-        // offline queue must not let an EMPLOYEE cancel what the online API refuses. Role read
-        // from the authenticated actor (JWT), never from the payload; fails closed when absent.
-        if (!isOwnerRole()) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "OWNER role required to cancel a sale");
+        // Story 22.19 (D18) — the owner, or a holder of « Annuler une vente du jour » (MANAGER by default, custom
+        // roles that hold it); role read from the authenticated actor, never from the payload; fails closed.
+        if (!isOwnerRole() && (permissions == null || !permissions.currentActorHolds(CANCEL_PERMISSION))) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Cancelling a sale is not allowed for this role");
         }
         Map<String, Object> p = operation.payload();
 
         UUID saleId = UUID.fromString((String) p.get("saleId"));
         String justification = (String) p.get("justification");
+        if (justification == null || justification.isBlank()) {
+            justification = DEFAULT_JUSTIFICATION;
+        }
 
-        // Story v1s-13-5 AC5: cancelling a COMPLETED sale (with stock restoration) requires
-        // an online OWNER-authenticated REST request — the sync channel does not carry a
-        // verifiable role, so it must reject rather than silently widen what an offline
-        // EMPLOYEE device can do (see Décision D2). Story 13.9: the guard lives in the use case
-        // (pendingOnly=true) so the status check and the cancellation are one atomic claim —
-        // a sale validated concurrently is refused with FORBIDDEN too.
+        // Story 22.19 (D18, B5) — a pending sale, or a COMPLETED sale of the same business day: stock restored and the
+        // sale's automatic invoice cancelled by the invoicing module (credit note, on SaleCancelledEvent). A sale of
+        // an earlier day → SALE_CANCEL_NOT_SAME_DAY; already cancelled → SALE_ALREADY_CANCELLED. A member only
+        // cancels in his own store.
         UUID assignedStoreId = extractAssignedStoreId();
         saleCommandPort.cancelSale(tenantId,
-                new CancelSaleInput(saleId, actorId, assignedStoreId, justification, true));
+                new CancelSaleInput(saleId, actorId, assignedStoreId, justification, false, true,
+                        operation.clientTimestamp()));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);
+    }
+
+    /**
+     * Story 22.19 (D18) — a refused cancellation carries its French reason in {@code conflictData.message} (« Une vente
+     * ne s'annule que le jour même », « Vente déjà annulée »…), so the till shows it as is.
+     */
+    @Override
+    protected SyncOperationResult mapDomainException(SyncOperation op, DomainException e) {
+        SyncOperationResult mapped = super.mapDomainException(op, e);
+        String message = "SALE_ALREADY_CANCELLED".equals(mapped.reason()) ? ALREADY_CANCELLED
+                : com.keevo.shared.infrastructure.web.ErrorMessages.of(mapped.reason(), null);
+        if (e.getUserMessage() != null) {
+            message = e.getUserMessage();
+        }
+        if (message == null) {
+            return mapped;
+        }
+        Map<String, Object> details = mapped.conflictData() == null ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(mapped.conflictData());
+        details.put("message", message);
+        return new SyncOperationResult(mapped.operationId(), mapped.status(), mapped.serverEntityId(),
+                mapped.reason(), details);
     }
 }

@@ -176,6 +176,9 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                     throw completedViaPendingOnly();
                 }
                 enforceEmployeeStoreScope(command.assignedStoreId(), sale.getStoreId());
+                if (command.sameDayOnly()) {
+                    requireSameDay(sale, command.cancelledAt());
+                }
                 requireJustification(command.justification());
                 // Claim the COMPLETED→CANCELLED transition first: a concurrent cancellation that
                 // read the same COMPLETED sale loses here and must not restore the stock again.
@@ -186,11 +189,21 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                     throw lostCompletedRace(sale.getId());
                 }
                 for (SaleItem item : sale.getItems()) {
+                    // Story 22.19 (D11) — an offline sale synchronised beyond the stock was floored at 0 by an
+                    // automatic adjustment (id derived from the sale movement = the item id): only what really left
+                    // the stock comes back, never phantom units
+                    int floored = item.getId() == null ? 0 : stockQuery.findMovement(tenantId,
+                                    com.keevo.inventory.api.StockFloor.adjustmentIdOf(item.getId()))
+                            .map(com.keevo.inventory.api.RecordedMovement::quantityChange).orElse(0);
+                    int restored = item.getQuantity() - Math.max(floored, 0);
+                    if (restored <= 0) {
+                        continue;
+                    }
                     // v1s-13-13: deterministic id (same on the device), so the pull does not
                     // add a second SALE_CANCELLED row to the history.
                     stockCommand.recordMovement(tenantId, new StockMovementInput(
                             item.getProductId(), item.getVariantId(), sale.getStoreId(),
-                            StockMovementKind.SALE_CANCELLED, item.getQuantity(),
+                            StockMovementKind.SALE_CANCELLED, restored,
                             command.actorId(), "Annulation vente " + sale.getId(),
                             DeterministicIds.saleCancelledMovementId(item.getId()), false));
                 }
@@ -210,6 +223,28 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
     @Override
     public List<Sale> getPendingSalesByStore(UUID storeId) {
         return saleRepository.findByStoreIdAndStatus(storeId, SaleStatus.PENDING_VALIDATION);
+    }
+
+    /** Story 22.19 (D18) — tolerance on the till's clock (ahead of the server, or a cancel noted before the sale). */
+    static final java.time.Duration CLIENT_CLOCK_SKEW = java.time.Duration.ofMinutes(5);
+
+    /**
+     * Story 22.19 (D18) — a completed sale is cancelled from the till only on its business day (Africa/Douala): the
+     * day it was made ({@code occurredAt}, else its creation) must be the day of the cancellation — the till's time
+     * ({@code cancelledAt}: an offline cancel synchronised after midnight) when it is plausible (not ahead of the
+     * server by more than {@link #CLIENT_CLOCK_SKEW}, not before the sale), else the server's time.
+     */
+    private static void requireSameDay(Sale sale, Instant cancelledAt) {
+        Instant made = sale.getOccurredAt() != null ? sale.getOccurredAt() : sale.getCreatedAt();
+        Instant now = Instant.now();
+        Instant reference = cancelledAt != null && !cancelledAt.isAfter(now.plus(CLIENT_CLOCK_SKEW))
+                && (made == null || !cancelledAt.isBefore(made.minus(CLIENT_CLOCK_SKEW))) ? cancelledAt : now;
+        java.time.ZoneId wat = com.keevo.shared.domain.time.KeevoZones.WAT;
+        if (made == null || !java.time.LocalDate.ofInstant(made, wat)
+                .equals(java.time.LocalDate.ofInstant(reference, wat))) {
+            throw DomainException.userFacing(ErrorCode.SALE_CANCEL_NOT_SAME_DAY,
+                    "Une vente ne s'annule que le jour même");
+        }
     }
 
     /** Story v1s-13-5 AC5 (Décision D2): the sync channel never cancels a COMPLETED sale. */

@@ -5,6 +5,8 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductStockCounterPort;
+import com.keevo.inventory.api.StockFloor;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.entity.StockMovement;
@@ -53,12 +55,16 @@ public class StockOperationService {
     private final ProductQueryPort productQuery; // 12.2a: catalog public API
     private final ApplicationEventPublisher eventPublisher;
     private final StoreQueryPort storeQuery; // Story 14.10
+    /** Story 22.19 (D11) — the legacy counter kept equal to the levels' sum ({@code null} in unit tests: untouched). */
+    private final ProductStockCounterPort stockCounter;
 
     public StockOperationService(StockLevelRepository stockLevelRepository,
                                  StockMovementRepository stockMovementRepository,
                                  ProductQueryPort productQuery,
                                  ApplicationEventPublisher eventPublisher,
-                                 StoreQueryPort storeQuery) {
+                                 StoreQueryPort storeQuery,
+                                 ProductStockCounterPort stockCounter) {
+        this.stockCounter = stockCounter;
         this.stockLevelRepository    = stockLevelRepository;
         this.stockMovementRepository = stockMovementRepository;
         this.productQuery            = productQuery;
@@ -96,8 +102,9 @@ public class StockOperationService {
      * @param movementId    client-generated movement id (null → server generates). Keeping the
      *                      local id lets the pull upsert the device's own movement row instead of
      *                      adding a second copy to the history.
-     * @param allowNegative true only for an offline sale that already happened: the stock may go
-     *                      negative and the sync layer reports it as a STOCK_NEGATIVE conflict.
+     * @param allowNegative true only for an offline sale that already happened: applied even beyond the stock;
+     *                      Story 22.19 (D11) — the level is then floored at 0 by an automatic adjustment
+     *                      « Écart constaté à la synchronisation » ({@link StockFloor}) and a stock alert is raised.
      */
     @Transactional
     public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
@@ -169,11 +176,30 @@ public class StockOperationService {
         );
         var savedMovement = stockMovementRepository.save(movement);
 
+        // 4b. Story 22.19 (D11) — an offline sale beyond the stock already happened: applied, then the level is
+        //     floored at 0 by an automatic adjustment (id derived from the sale movement's, see StockFloor)
+        StockMovement floor = null;
+        if (quantityAfter < 0 && allowNegative) {
+            floor = stockMovementRepository.save(new StockMovement(
+                    StockFloor.adjustmentIdOf(savedMovement.getId()),
+                    productId, variantId, storeId,
+                    MovementType.ADJUSTMENT,
+                    quantityAfter, -quantityAfter, 0,
+                    actorId, StockFloor.NOTE, now));
+        }
+        int levelAfter = floor != null ? 0 : quantityAfter;
+
         // 5. Update (or create) the stock level
-        StockLevel updatedLevel = currentLevel.withQuantity(quantityAfter);
+        StockLevel updatedLevel = currentLevel.withQuantity(levelAfter);
         stockLevelRepository.save(updatedLevel);
 
         String tenantId = TenantContext.getCurrentTenant();
+
+        // 5b. Story 22.19 (D11) — products.stock_quantity = the sum of the store levels (one aggregate, one
+        //     conditional UPDATE), so the apps reading the legacy counter see the real stock
+        if (stockCounter != null) {
+            stockCounter.syncStockQuantity(tenantId, productId, stockLevelRepository.sumQuantityByProduct(productId));
+        }
 
         // 6. Publish stock adjusted event (Observer — decouples audit from domain)
         // Story 14.10: actorRole/actorName/storeName from the authenticated actor.
@@ -216,21 +242,35 @@ public class StockOperationService {
             counterpartStoreName
         ));
 
-        // 7. Threshold check — server-side enforcement (cannot be bypassed client-side)
+        if (floor != null) {
+            eventPublisher.publishEvent(new StockAdjustedEvent(
+                productId, variantId, storeId, MovementKind.ADJUSTMENT,
+                quantityAfter, -quantityAfter, 0,
+                actorId, StockFloor.NOTE,
+                tenantId,
+                actorRole, actorName, storeName, product.name(),
+                now,
+                null
+            ));
+            log.warn("STOCK_FLOORED: product={} store={} shortfall={}", productId, storeId, -quantityAfter);
+        }
+
+        // 7. Threshold check — server-side enforcement (cannot be bypassed client-side). Story 22.19: a floored
+        //    level (the store ran out) always raises the alert.
         int threshold = product.minimumThreshold();
-        if (threshold > 0 && quantityAfter <= threshold) {
+        if ((threshold > 0 && levelAfter <= threshold) || floor != null) {
             eventPublisher.publishEvent(new StockThresholdBreachedEvent(
                 productId,
                 product.name(),
                 storeId,
-                quantityAfter,
-                threshold,
+                levelAfter,
+                Math.max(threshold, 0),
                 actorId,
                 tenantId,
                 now
             ));
             log.warn("STOCK_THRESHOLD_BREACHED: product={} store={} quantity={} threshold={}",
-                productId, storeId, quantityAfter, threshold);
+                productId, storeId, levelAfter, threshold);
         }
 
         log.info("STOCK_OPERATION: type={} product={} store={} before={} change={} after={}",

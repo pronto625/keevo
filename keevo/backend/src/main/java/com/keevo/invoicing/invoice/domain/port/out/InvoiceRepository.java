@@ -107,7 +107,15 @@ public interface InvoiceRepository {
     Page list(Filter filter, int page, int size);
 
     /** Invoices of one collection state: {@code state} UNPAID, PARTIAL, PAID, OVERDUE or CANCELLED. */
-    record Bucket(String state, long count, long amount) {
+    /**
+     * One collection state: {@code amount} = TTC total; Story 22.19 (D5) — {@code credited} = credit notes issued on
+     * these invoices, {@code due} = what is still owed (TTC − credit notes − payments received, never negative).
+     */
+    record Bucket(String state, long count, long amount, long credited, long due) {
+
+        public Bucket(String state, long count, long amount) {
+            this(state, count, amount, 0, 0);
+        }
     }
 
     /**
@@ -207,6 +215,12 @@ public interface InvoiceRepository {
      * number back): 1, 2, 3…
      */
     long nextNumber(int year);
+
+    /**
+     * Story 22.19 (D4) — locks the year's counter row (created at 0 when absent) until the caller's transaction ends:
+     * concurrent issues of the year run one after the other, so the latest issue date read next is stable.
+     */
+    void lockCounter(int year);
 
     /** The issue date of the latest issued invoice ({@code number} given); empty when none was ever issued. */
     java.util.Optional<java.time.LocalDate> latestIssueDate();

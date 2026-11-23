@@ -8,8 +8,6 @@ import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import jakarta.transaction.Transactional;
@@ -43,8 +41,11 @@ public class UpdateReportPreferencesService implements UpdateReportPreferencesUs
 
     @Override
     public TenantPreferences update(UpdateReportPreferencesCommand command) {
+        preferencesRepository.lockForCreation(); // Story 22.19 — one row even under concurrent first writes
         TenantPreferences existing = preferencesRepository.findByCurrentTenant()
-                .orElseThrow(() -> new DomainException(ErrorCode.PREFERENCES_NOT_FOUND));
+                // Story 22.19 (D2) — before the sector onboarding the GET returns the defaults without a row: the first
+                // write creates it from those defaults
+                .orElseGet(() -> preferencesRepository.save(TenantPreferences.defaults(null, java.time.Instant.now())));
 
         String newEodTime = command.eodReportTime() != null
                 ? command.eodReportTime()

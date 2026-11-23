@@ -142,6 +142,7 @@ class InvoicingTermsMigrationPostgresIntegrationTest {
         }
 
         script("V18__invoice_send_channel.sql"); // 20.8: the repository reads last_sent_channel
+        script("V20__invoice_notes_issue_date.sql"); // the repository reads notes, requested_issue_date
         TenantContext.setCurrentTenant(SCHEMA);
         JdbcInvoiceRepository repository = new JdbcInvoiceRepository(jdbc);
         Invoice ttc = repository.findById(issuedTtc).orElseThrow();

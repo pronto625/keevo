@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.identity.auth.domain.model.OtpIdentifier;
+import com.keevo.identity.auth.domain.model.OtpPurpose;
 import com.keevo.identity.auth.domain.model.OtpChannel;
 import com.keevo.identity.auth.domain.port.in.RequestOtpCommand;
 import com.keevo.identity.auth.domain.port.out.OtpChallengeRepository;
@@ -102,6 +104,45 @@ class RequestOtpServiceTest {
                 "Votre code de connexion Bref Point : " + code.getValue() + ". Valable 5 minutes. Ne le partagez pas.");
         verify(whatsApp).sendCode(PHONE, code.getValue(), smsMsg.getValue().text(), "fr");
         verifyNoInteractions(email);
+    }
+
+    @Test
+    @DisplayName("22.19 (D14) — portal code that no channel took (SMS not delivered, no WhatsApp) → 503 "
+            + "CODE_DELIVERY_FAILED; the merchant sign-in keeps its silent answer")
+    void portalDeliveryFailure() {
+        when(sms.isEnabled()).thenReturn(true);
+        when(sms.send(any())).thenReturn(DeliveryResult.notDelivered());
+        when(whatsApp.canSendCodes()).thenReturn(false);
+        OtpIdentifier phone = OtpIdentifier.parse(PHONE, java.util.Set.of("237"));
+
+        assertThatThrownBy(() -> service.issue(phone, phone.channelsFor(null), OtpPurpose.CLIENT_PORTAL,
+                "10.0.0.1", null))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class)
+                .extracting(e -> ((com.keevo.shared.domain.exception.DomainException) e).getDomainCode())
+                .isEqualTo("CODE_DELIVERY_FAILED");
+        assertThat(service.issue(phone, phone.channelsFor(null), OtpPurpose.SIGN_IN, "10.0.0.2", null))
+                .isEqualTo(300);
+    }
+
+    @Test
+    @DisplayName("22.19 (D14) — no provider at all (development): nothing attempted, the silent answer is kept")
+    void portalWithoutAnyProvider() {
+        when(whatsApp.canSendCodes()).thenReturn(false);
+        when(sms.send(any())).thenReturn(DeliveryResult.notDelivered());
+        OtpIdentifier phone = OtpIdentifier.parse(PHONE, java.util.Set.of("237"));
+
+        assertThat(service.issue(phone, phone.channelsFor(null), OtpPurpose.CLIENT_PORTAL, "10.0.0.1", null))
+                .isEqualTo(300);
+    }
+
+    @Test
+    @DisplayName("22.19 (D14) — portal code handed to WhatsApp counts as sent even when the SMS failed")
+    void portalWhatsAppHandedOver() {
+        when(sms.send(any())).thenReturn(DeliveryResult.notDelivered());
+        OtpIdentifier phone = OtpIdentifier.parse(PHONE, java.util.Set.of("237"));
+
+        assertThat(service.issue(phone, phone.channelsFor(null), OtpPurpose.CLIENT_PORTAL, "10.0.0.1", null))
+                .isEqualTo(300);
     }
 
     @Test

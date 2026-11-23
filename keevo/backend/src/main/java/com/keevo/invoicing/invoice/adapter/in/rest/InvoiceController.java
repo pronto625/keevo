@@ -137,9 +137,11 @@ public class InvoiceController {
         // Story 20.14 — a refused storeId is a DomainException (403 FORBIDDEN, or VALIDATION_ERROR field storeId),
         // answered by the global mapping with its French message, exactly like the sync rejection
         access.requireCreatable(request.id()); // Story 20.14 — an id of a document the actor does not see → 404
-        Invoice draft = drafts.create(request.id(), content(request), CurrentActor.actorId(),
-                TenantContext.getCurrentTenant());
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(dto(draft)));
+        // Story 22.19 (D21) — the signatures are checked before anything is written
+        var signatures = InvoiceSignatureIntake.decode(request.sellerSignature(), request.clientSignature());
+        Invoice draft = signed(() -> drafts.create(request.id(), content(request), CurrentActor.actorId(),
+                TenantContext.getCurrentTenant()), signatures);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(single(draft)));
     }
 
     /**
@@ -217,10 +219,12 @@ public class InvoiceController {
 
     /**
      * GET /api/v1/invoices/stats?from=&to=&storeId=&sellerId= — figures of the issued invoices (cancelled ones counted
-     * apart): {@code count}, {@code totalAmount} (without the cancelled), {@code totalPaid} (cash received: paid invoices + deposits and
-     * paid instalments of the others), {@code totalPending} (unpaid + partial), {@code totalOverdue}, {@code averageAmount}, {@code uniqueCustomers}, {@code byState}
+     * apart): {@code count}, {@code totalAmount} (without the cancelled, credit notes deducted — 22.19), {@code totalPaid} (cash
+     * received: paid invoices + deposits and paid instalments of the others), {@code totalPending} (still owed on the
+     * unpaid and partial ones: TTC − credit notes − payments received — 22.19), {@code totalOverdue} (still owed on the overdue ones — 22.19), {@code averageAmount}, {@code uniqueCustomers}, {@code byState}
      * (UNPAID, PARTIAL, PAID, OVERDUE, CANCELLED). Same scope rules as the list.
      */
+    @RequiresPermission(InvoicingModule.INVOICE_VIEW) // Story 22.19 (D7) — same right as the list
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping("/stats")
     public ResponseEntity<ApiResponseWrapper<StatsDto>> stats(
@@ -237,19 +241,27 @@ public class InvoiceController {
         stats.buckets().forEach(b -> byState.put(b.state(), new StateStats(b.count(), b.amount())));
         long count = 0;
         long amount = 0;
-        for (var e : byState.entrySet()) {
-            if (!"CANCELLED".equals(e.getKey())) {
-                count += e.getValue().count();
-                amount += e.getValue().amount();
+        long pending = 0;
+        long overdue = 0;
+        for (InvoiceRepository.Bucket b : stats.buckets()) {
+            if ("OVERDUE".equals(b.state())) {
+                overdue += b.due(); // Story 22.19 (D5) — what is still owed, like totalPending
+            }
+            if (!"CANCELLED".equals(b.state())) {
+                count += b.count();
+                amount += b.amount() - b.credited(); // Story 22.19 (D5) — credit notes reduce the amount invoiced
+            }
+            if ("UNPAID".equals(b.state()) || "PARTIAL".equals(b.state())) {
+                pending += b.due(); // Story 22.19 (D5) — what is still owed, not the TTC total
             }
         }
-        long pending = byState.get("UNPAID").amount() + byState.get("PARTIAL").amount();
         return ResponseEntity.ok(ApiResponseWrapper.ok(new StatsDto(count, amount, byState.get("PAID").amount() + stats.receivedOnOpen(),
-                pending, byState.get("OVERDUE").amount(), count == 0 ? 0 : Math.round((double) amount / count),
+                pending, overdue, count == 0 ? 0 : Math.round((double) amount / count),
                 stats.uniqueClients(), byState)));
     }
 
     /** GET /api/v1/invoices/top-products?from=&to=&storeId=&limit=5 (1–50) — what sold most on issued or paid invoices. */
+    @RequiresPermission(InvoicingModule.INVOICE_VIEW) // Story 22.19 (D7) — same right as the list
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping("/top-products")
     public ResponseEntity<ApiResponseWrapper<List<TopProductDto>>> topProducts(
@@ -298,7 +310,7 @@ public class InvoiceController {
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> get(@PathVariable UUID id) {
         access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
-        return ResponseEntity.ok(ApiResponseWrapper.ok(dto(queries.get(id))));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(single(queries.get(id))));
     }
 
     /**
@@ -311,7 +323,10 @@ public class InvoiceController {
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> update(@PathVariable UUID id,
                                                                          @Valid @RequestBody InvoiceRequestDto request) {
         access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
-        return ResponseEntity.ok(ApiResponseWrapper.ok(dto(drafts.update(id, content(request), TenantContext.getCurrentTenant()))));
+        var signatures = InvoiceSignatureIntake.decode(request.sellerSignature(), request.clientSignature());
+        Invoice updated = signed(() -> drafts.update(id, content(request), TenantContext.getCurrentTenant()),
+                signatures);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(single(updated)));
     }
 
     /** DELETE /api/v1/invoices/{id} — a draft only (an issued invoice is never deleted). */
@@ -501,6 +516,30 @@ public class InvoiceController {
 
     private InvoiceResponseDto dto(Invoice invoice) {
         return assembler.dto(invoice);
+    }
+
+    /** Story 22.19 (D21) — {@code null} in tests built by hand: signatures in bodies ignored, none returned. */
+    private InvoiceSignatureIntake signatureIntake;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setSignatureIntake(InvoiceSignatureIntake signatureIntake) {
+        this.signatureIntake = signatureIntake;
+    }
+
+    /** The draft write, with its signatures in the same transaction when the body carries some (22.19, D21). */
+    private Invoice signed(java.util.function.Supplier<Invoice> draftWrite,
+                           InvoiceSignatureIntake.Signatures signatures) {
+        if (signatures.none() || signatureIntake == null) {
+            return draftWrite.get();
+        }
+        return signatureIntake.writeSigned(draftWrite, signatures, CurrentActor.actorId(),
+                TenantContext.getCurrentTenant());
+    }
+
+    /** One document as answered by create, update and read: with its signature images (22.19, D21). */
+    private InvoiceResponseDto single(Invoice invoice) {
+        InvoiceResponseDto dto = dto(invoice);
+        return signatureIntake == null ? dto : signatureIntake.withImages(dto, TenantContext.getCurrentTenant());
     }
 
     private static InvoiceResponseDto dto(Invoice invoice, InvoicingSettings current,
