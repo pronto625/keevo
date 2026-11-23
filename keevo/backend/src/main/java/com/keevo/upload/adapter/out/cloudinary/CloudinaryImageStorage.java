@@ -32,15 +32,18 @@ class CloudinaryImageStorage implements ImageStorage {
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
     private static final String TRANSFORMATION = "c_limit,h_1024,w_1024/q_auto";
 
+    private final String apiBase;
     private final String cloudName;
     private final String apiKey;
     private final String apiSecret;
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final ObjectMapper mapper = new ObjectMapper();
 
-    CloudinaryImageStorage(@Value("${keevo.uploads.cloudinary.cloud-name:}") String cloudName,
+    CloudinaryImageStorage(@Value("${keevo.uploads.cloudinary.api-base:https://api.cloudinary.com}") String apiBase,
+                           @Value("${keevo.uploads.cloudinary.cloud-name:}") String cloudName,
                            @Value("${keevo.uploads.cloudinary.api-key:}") String apiKey,
                            @Value("${keevo.uploads.cloudinary.api-secret:}") String apiSecret) {
+        this.apiBase = apiBase.strip().replaceAll("/+$", "");
         this.cloudName = cloudName.strip();
         this.apiKey = apiKey.strip();
         this.apiSecret = apiSecret.strip();
@@ -73,7 +76,7 @@ class CloudinaryImageStorage implements ImageStorage {
         body.writeBytes(content);
         write(body, "\r\n--" + boundary + "--\r\n");
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.cloudinary.com/v1_1/" + cloudName
+        HttpRequest request = HttpRequest.newBuilder(URI.create(apiBase + "/v1_1/" + cloudName
                         + "/image/upload"))
                 .timeout(TIMEOUT)
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)

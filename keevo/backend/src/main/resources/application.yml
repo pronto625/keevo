@@ -347,6 +347,7 @@ keevo:
   # Sans les trois valeurs, POST /api/v1/uploads répond 503 UPLOAD_UNAVAILABLE.
   uploads:
     cloudinary:
+      api-base: ${CLOUDINARY_API_BASE:https://api.cloudinary.com}
       cloud-name: ${CLOUDINARY_CLOUD_NAME:}
       api-key: ${CLOUDINARY_API_KEY:}
       api-secret: ${CLOUDINARY_API_SECRET:}
