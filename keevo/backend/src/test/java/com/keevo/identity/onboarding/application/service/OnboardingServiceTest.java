@@ -141,7 +141,8 @@ class OnboardingServiceTest {
             verify(eventPublisher).publishEvent((Object) argThat(evt ->
                 evt instanceof OnboardingCompletedEvent e
                     && e.sectorType() == SectorKind.FOOD_GROCERY
-                    && e.storeName().equals("Mon Épicerie")));
+                    && e.storeName().equals("Mon Épicerie")
+                    && !e.skipSaleFlowRules())); // 22.19 — /onboarding/complete (V1) keeps the 19.13 rules
         }
     }
 

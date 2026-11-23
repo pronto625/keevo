@@ -75,7 +75,7 @@ public class OnboardingService implements CompleteOnboardingUseCase, SetupSector
         TenantPreferences sectorLess = tenantPreferencesRepository.findByCurrentTenant()
                 .filter(p -> p.sectorType() == null).orElse(null);
         int seededCategories = onboard(tenantId, command.sectorType(), command.storeName(), command.actorId(),
-                command.defaultSaleFlow(), true, sectorLess);
+                command.defaultSaleFlow(), true, sectorLess, true);
 
         return new OnboardingResult(
             tenantId,
@@ -99,7 +99,7 @@ public class OnboardingService implements CompleteOnboardingUseCase, SetupSector
             return false;
         }
         onboard(TenantContext.getCurrentTenant(), sectorType == null ? SectorType.OTHER : sectorType, companyName,
-                actorId, null, false, existing.orElse(null));
+                actorId, null, false, existing.orElse(null), false); // no sale flow chosen: no 19.13 rules
         return true;
     }
 
@@ -111,7 +111,7 @@ public class OnboardingService implements CompleteOnboardingUseCase, SetupSector
      * @return the number of template categories requested
      */
     private int onboard(String tenantId, SectorType sectorType, String storeName, UUID actorId, SaleFlow saleFlow,
-                        boolean renameStore, TenantPreferences existing) {
+                        boolean renameStore, TenantPreferences existing, boolean applySaleFlowRules) {
         // 1. Resolve sector template strategy
         SectorTemplateStrategy strategy = sectorTemplateFactory.create(sectorType);
 
@@ -154,7 +154,8 @@ public class OnboardingService implements CompleteOnboardingUseCase, SetupSector
             storeName,
             seededCategories,
             actorId,
-            now
+            now,
+            !applySaleFlowRules
         ));
 
         return seededCategories;

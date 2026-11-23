@@ -63,4 +63,12 @@ class OnboardingModuleRulesListenerTest {
         verify(txManager).rollback(status);
         verify(txManager, never()).commit(status);
     }
+
+    @Test
+    @DisplayName("22.19: sign-up steps of the app (no sale flow chosen) → no initial rule applied, every module stays on")
+    void noSaleFlowChosenSkipsRules() {
+        listener.on(new OnboardingCompletedEvent(SCHEMA, SectorKind.HARDWARE, "Boutique", 5, UUID.randomUUID(),
+                Instant.now(), true));
+        org.mockito.Mockito.verifyNoInteractions(rules, txManager);
+    }
 }

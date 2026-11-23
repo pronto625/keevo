@@ -35,6 +35,9 @@ public class OnboardingModuleRulesListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void on(OnboardingCompletedEvent event) {
+        if (event.skipSaleFlowRules()) { // Story 22.19 — sign-up steps of the app: no sale flow chosen, nothing turned off
+            return;
+        }
         try {
             requiresNew.executeWithoutResult(status -> rules.applyInitialRules(event.tenantId()));
         } catch (RuntimeException e) {

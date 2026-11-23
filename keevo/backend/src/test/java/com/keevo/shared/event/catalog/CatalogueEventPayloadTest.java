@@ -144,7 +144,7 @@ class CatalogueEventPayloadTest {
         GOLDEN.put("StockAdjustedEvent.audit",
                 "AuditEntry[actorId=11111111-1111-1111-1111-111111111111, tenantId=kv_abc123, action=STOCK_ADJUSTED, entityType=StockMovement, entityId=33333333-3333-3333-3333-333333333333, valueBefore={\"quantityBefore\":10}, valueAfter={\"movementType\":\"TRANSFER_OUT\",\"quantityChange\":-3,\"quantityAfter\":7}, storeId=22222222-2222-2222-2222-222222222222, entityLabel=Riz 5kg, deviceId=null, source=SYSTEM, metadataJson={\"storeId\":\"22222222-2222-2222-2222-222222222222\",\"notes\":\"casse\",\"destinationStoreName\":\"Bonapriso\",\"actorLabel\":\"Awa\"}]");
         GOLDEN.put("OnboardingCompletedEvent.event",
-                "{\"actorId\":\"11111111-1111-1111-1111-111111111111\",\"categoriesCreated\":6,\"occurredAt\":\"2026-10-29T10:15:30Z\",\"sectorType\":\"FOOD_GROCERY\",\"storeName\":\"Mon Épicerie\",\"tenantId\":\"kv_abc123\"}");
+                "{\"actorId\":\"11111111-1111-1111-1111-111111111111\",\"categoriesCreated\":6,\"occurredAt\":\"2026-10-29T10:15:30Z\",\"sectorType\":\"FOOD_GROCERY\",\"skipSaleFlowRules\":false,\"storeName\":\"Mon Épicerie\",\"tenantId\":\"kv_abc123\"}");
         GOLDEN.put("OnboardingCompletedEvent.audit",
                 "AuditEntry[actorId=11111111-1111-1111-1111-111111111111, tenantId=kv_abc123, action=ONBOARDING_COMPLETED, entityType=Tenant, entityId=11111111-1111-1111-1111-111111111111, valueBefore=null, valueAfter={\"sectorType\":\"FOOD_GROCERY\",\"storeName\":\"Mon Épicerie\",\"categoriesCreated\":6}, storeId=null, entityLabel=Mon Épicerie, deviceId=null, source=SYSTEM, metadataJson=null]");
         GOLDEN.put("InventorySessionCreatedEvent.event",

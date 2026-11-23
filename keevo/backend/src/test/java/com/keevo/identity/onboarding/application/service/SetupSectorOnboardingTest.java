@@ -66,7 +66,7 @@ class SetupSectorOnboardingTest {
         verify(events).publishEvent((Object) argThat(e -> e instanceof TenantOnboardedEvent t
                 && t.sectorType() == SectorKind.CLOTHING && !t.templateCategories().isEmpty()));
         verify(events).publishEvent((Object) argThat(e -> e instanceof OnboardingCompletedEvent o
-                && "Boutique Aicha".equals(o.storeName()) && o.actorId().equals(owner)));
+                && "Boutique Aicha".equals(o.storeName()) && o.actorId().equals(owner) && o.skipSaleFlowRules()));
         verifyNoInteractions(stores);
     }
 
