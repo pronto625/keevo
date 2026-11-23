@@ -329,7 +329,7 @@ development_status:
 
   # ─────────────────────────────────────────────────────────
   # MOBILE — parties app des stories livrées côté API (app React Native, dépôt AI/bref, autre développeur)
-  m22-19-corrections-app-e2e-rn: review  # 2026-11-23 corrections app (B1–B6, défauts majeurs) faites par nous — AI/bref branche fix/e2e-corrections-2026-11-23 (268327a, poussée, à fusionner par le dev mobile dans br-migrate-api-to-keevo) ; rejouée sur émulateur contre l'API 5da7357c
+  m22-19-corrections-app-e2e-rn: review  # 2026-11-23 corrections app (B1–B6, défauts majeurs) faites par nous — AI/bref branche fix/e2e-corrections-2026-11-23 (ec985cd, poussée ; rejeu complet émulateur + Redmi, à fusionner par le dev mobile dans br-migrate-api-to-keevo) ; rejouée sur émulateur contre l'API 5da7357c
   # Directives : section « ## Mobile (React Native — dépôt AI/bref) » à la fin de chaque spec.
   # Statuts : backlog → in-progress (dev mobile démarré) → review (livré, à tester ici) → done (testé ici sur appareil).
   # m16-11 porte les conventions d'API ; m16-10 porte le protocole de synchro : à lire en premier.
