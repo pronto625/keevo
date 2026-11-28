@@ -231,13 +231,15 @@ public class EmployeeController {
 
     // ── Story 14.11 — new endpoints ──────────────────────────────────────
 
-    @Operation(summary = "Update employee profile (name, phone, store)")
+    @Operation(summary = "Update employee profile (name, phone, store, username)")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Profile updated"),
             @ApiResponse(responseCode = "403", description = "Not an OWNER"),
             @ApiResponse(responseCode = "404", description = "Employee not found"),
             @ApiResponse(responseCode = "409", description = "Phone already registered by another user, or phone change "
-                    + "on a member whose account is also used elsewhere (MEMBER_ACCOUNT_SHARED, Story 19.6)")
+                    + "on a member whose account is also used elsewhere (MEMBER_ACCOUNT_SHARED, Story 19.6), or "
+                    + "username already used (USERNAME_ALREADY_EXISTS, P02)"),
+            @ApiResponse(responseCode = "422", description = "Invalid username format (P02)")
     })
     @PatchMapping("/{employeeId}")
     public ResponseEntity<ApiResponseWrapper<EmployeeResponseDto>> updateEmployee(
@@ -253,7 +255,7 @@ public class EmployeeController {
         Employee updated = updateEmployeeUseCase.execute(
                 new UpdateEmployeeCommand(actorId, employeeId,
                         request.firstName(), request.lastName(),
-                        request.phoneNumber(), request.storeId()));
+                        request.phoneNumber(), request.storeId(), request.username()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 toDto(updated)));
     }

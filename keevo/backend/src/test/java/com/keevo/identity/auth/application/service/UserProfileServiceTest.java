@@ -55,6 +55,7 @@ class UserProfileServiceTest {
     @Mock private com.keevo.identity.auth.domain.port.out.TenantRepository tenantRepository;
     @Mock private com.keevo.identity.auth.domain.port.out.UserMembershipRepository membershipRepository;
     @Mock private SessionTokenIssuer sessionTokenIssuer;
+    @Mock private com.keevo.identity.auth.domain.port.out.LastLoginQueryPort lastLoginQuery;
 
     private UserProfileService sut;
 
@@ -67,7 +68,7 @@ class UserProfileServiceTest {
     void setUp() {
         // 12.2d: the real store API adapter over the mocked repository
         sut = new UserProfileService(userRepository, employeeRepository, StoreApiTestSupport.queryPort(storeRepository),
-                tenantRepository, membershipRepository, sessionTokenIssuer);
+                tenantRepository, membershipRepository, sessionTokenIssuer, lastLoginQuery);
         userId   = UUID.randomUUID();
         storeId  = UUID.randomUUID();
         tenantId = "kv_test123";
@@ -238,5 +239,54 @@ class UserProfileServiceTest {
 
         assertThatThrownBy(() -> sut.execute(userId, tenantId))
                 .isInstanceOf(DomainException.class);
+    }
+
+    // ── P02 — password flag, real dates, deletion date ──────────────────
+
+    @Test
+    @DisplayName("P02 — hasPassword, memberSince (membership), lastLoginAt; no deletion date while ACTIVE")
+    void p02_fields_activeTenant() {
+        Instant joined = Instant.parse("2025-03-01T08:00:00Z");
+        Instant login = Instant.parse("2026-11-27T10:15:00Z");
+        var tenant = new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-TEST12", tenantId,
+                "Boutique", com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE,
+                Instant.now(), Instant.parse("2026-12-28T00:00:00Z"));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(tenantRepository.findBySchemaName(tenantId)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.UserTenantMembership(UUID.randomUUID(), userId,
+                        tenant.getId(), "EMPLOYEE", true, joined)));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        when(lastLoginQuery.lastLoginAt(userId)).thenReturn(Optional.of(login));
+
+        UserProfileData result = sut.execute(userId, tenantId);
+
+        assertThat(result.hasPassword()).isTrue();
+        assertThat(result.memberSince()).isEqualTo(joined);
+        assertThat(result.lastLoginAt()).isEqualTo(login);
+        assertThat(result.scheduledDeletionAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("P02 — DELETION_PENDING: scheduledDeletionAt from the tenant; no password, no membership → account date")
+    void p02_fields_deletionPending() {
+        Instant created = Instant.parse("2024-01-10T00:00:00Z");
+        Instant scheduled = Instant.parse("2026-12-28T00:00:00Z");
+        User otpOwner = new User(userId, "+237690000001", null, Role.OWNER, true, created);
+        var tenant = new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-TEST12", tenantId,
+                "Boutique", com.keevo.identity.api.TenantStatus.DELETION_PENDING, com.keevo.identity.api.PlanType.FREE,
+                Instant.now(), scheduled);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(otpOwner));
+        when(tenantRepository.findBySchemaName(tenantId)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())).thenReturn(Optional.empty());
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        UserProfileData result = sut.execute(userId, tenantId);
+
+        assertThat(result.hasPassword()).isFalse();
+        assertThat(result.memberSince()).isEqualTo(created);
+        assertThat(result.lastLoginAt()).isNull();
+        assertThat(result.scheduledDeletionAt()).isEqualTo(scheduled);
+        assertThat(result.tenantStatus()).isEqualTo("DELETION_PENDING");
     }
 }

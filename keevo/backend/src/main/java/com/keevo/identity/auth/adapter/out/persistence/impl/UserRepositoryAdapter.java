@@ -104,6 +104,10 @@ public class UserRepositoryAdapter implements UserRepository {
             WHERE id = ? AND email IS NULL
               AND NOT EXISTS (SELECT 1 FROM public.users WHERE lower(email) = lower(?))
             """;
+    /** P02 — the owner gives a sign-in username to a member (unique index = source of truth). */
+    private static final String UPDATE_USERNAME_SQL = """
+            UPDATE public.users SET username = ?, updated_at = now() WHERE id = ?
+            """;
     /** Story 19.4 — bulk load for the employee list (one query, primary key). */
     private static final String BY_IDS_SQL = """
             SELECT id, phone_number, password_hash, role, is_active, created_at, failed_attempts, locked_until,
@@ -178,6 +182,11 @@ public class UserRepositoryAdapter implements UserRepository {
             return 0;
         }
         return jdbcTemplate.update(SET_EMAIL_IF_ABSENT_SQL, normalized, ts(verifiedAt), id, normalized);
+    }
+
+    @Override
+    public int updateUsername(UUID id, String username) {
+        return jdbcTemplate.update(UPDATE_USERNAME_SQL, User.normalizeIdentifier(username), id);
     }
 
     @Override

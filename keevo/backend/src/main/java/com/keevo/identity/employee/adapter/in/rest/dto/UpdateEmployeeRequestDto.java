@@ -25,12 +25,23 @@ public record UpdateEmployeeRequestDto(
         String phoneNumber,
 
         @Schema(description = "Store ID to reassign the employee to")
-        UUID storeId
+        UUID storeId,
+
+        @Size(max = 50, message = "L'identifiant doit contenir au plus 50 caractères")
+        @Schema(description = "P02 — sign-in username (3 to 50 letters, digits, '.', '_' or '-'), unique "
+                + "case-insensitively; optional, lets the owner give an identifier to a member created by phone",
+                example = "awa.ngo")
+        String username
 ) {
+    /** P02 — the V1 4-field shape (no username), kept for existing callers. */
+    public UpdateEmployeeRequestDto(String firstName, String lastName, String phoneNumber, UUID storeId) {
+        this(firstName, lastName, phoneNumber, storeId, null);
+    }
+
     /**
      * Validates that at least one field is non-null (rejects empty body {}).
      */
     public boolean hasAtLeastOneField() {
-        return firstName != null || lastName != null || phoneNumber != null || storeId != null;
+        return firstName != null || lastName != null || phoneNumber != null || storeId != null || username != null;
     }
 }

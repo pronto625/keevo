@@ -273,4 +273,114 @@ class UpdateEmployeeServiceTest {
         verify(userRepository, never()).existsByPhoneNumber(any());
         verifyNoInteractions(eventPublisher);
     }
+
+    // ── P02 — username set by the owner ─────────────────────────────────
+
+    @Test
+    @DisplayName("P02 — sets a username on a phone-only member (stripped, event lists it)")
+    void p02_setsUsername() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByUsername("awa.ngo")).thenReturn(Optional.empty());
+
+        service.execute(new UpdateEmployeeCommand(actorId, employeeId, null, null, null, null, " awa.ngo "));
+
+        verify(sharedAccountGuard).refuseIfShared(userId);
+        verify(userRepository).updateUsername(userId, "awa.ngo");
+        verify(eventPublisher).publishEvent(argThat((Object e) -> e instanceof
+                com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent ev
+                && ev.fieldsChanged().contains("username")));
+    }
+
+    @Test
+    @DisplayName("P02 — same username (other case) → nothing written, no event")
+    void p02_sameUsername_noop() {
+        User withName = user.withUsername("Awa.Ngo");
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(withName));
+
+        service.execute(new UpdateEmployeeCommand(actorId, employeeId, null, null, null, null, "awa.ngo"));
+
+        verify(userRepository, never()).updateUsername(any(), any());
+        verifyNoInteractions(eventPublisher, sharedAccountGuard);
+    }
+
+    @Test
+    @DisplayName("P02 — username of another account → 409 USERNAME_ALREADY_EXISTS, nothing written")
+    void p02_takenUsername_conflict() {
+        User other = new User(UUID.randomUUID(), "+237690000099", "h", Role.EMPLOYEE, true, Instant.now())
+                .withUsername("awa.ngo");
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByUsername("awa.ngo")).thenReturn(Optional.of(other));
+
+        assertThatThrownBy(() -> service.execute(
+                new UpdateEmployeeCommand(actorId, employeeId, null, null, null, null, "awa.ngo")))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode").isEqualTo(ErrorCode.USERNAME_ALREADY_EXISTS.name());
+        verify(userRepository, never()).updateUsername(any(), any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("P02 — race on the unique index (DuplicateKeyException) → 409 USERNAME_ALREADY_EXISTS")
+    void p02_raceOnIndex_conflict() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByUsername("awa.ngo")).thenReturn(Optional.empty());
+        when(userRepository.updateUsername(userId, "awa.ngo"))
+                .thenThrow(new org.springframework.dao.DuplicateKeyException("uq_users_username_lower"));
+
+        assertThatThrownBy(() -> service.execute(
+                new UpdateEmployeeCommand(actorId, employeeId, null, null, null, null, "awa.ngo")))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode").isEqualTo(ErrorCode.USERNAME_ALREADY_EXISTS.name());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("P02 — invalid username → 422 VALIDATION_FAILED with the French message")
+    void p02_invalidUsername() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> service.execute(
+                new UpdateEmployeeCommand(actorId, employeeId, null, null, null, null, "a b")))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode").isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+        assertThatThrownBy(() -> service.execute(
+                new UpdateEmployeeCommand(actorId, employeeId, null, null, null, null, "google-xyz")))
+                .isInstanceOf(DomainException.class);
+        verify(userRepository, never()).updateUsername(any(), any());
+    }
+
+    @Test
+    @DisplayName("P02 — shared account → 409 MEMBER_ACCOUNT_SHARED, nothing written")
+    void p02_sharedAccount_refused() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        doThrow(new DomainException(ErrorCode.MEMBER_ACCOUNT_SHARED)).when(sharedAccountGuard).refuseIfShared(userId);
+
+        assertThatThrownBy(() -> service.execute(
+                new UpdateEmployeeCommand(actorId, employeeId, null, null, null, null, "awa.ngo")))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode").isEqualTo(ErrorCode.MEMBER_ACCOUNT_SHARED.name());
+        verify(userRepository, never()).updateUsername(any(), any());
+    }
+
+    @Test
+    @DisplayName("P02 — phone and username together: the saved user keeps both")
+    void p02_phoneAndUsername_keepsBoth() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByUsername("awa.ngo")).thenReturn(Optional.empty());
+        when(userRepository.existsByPhoneNumber("+237699999999")).thenReturn(false);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new UpdateEmployeeCommand(actorId, employeeId, null, null, "+237699999999", null, "awa.ngo"));
+
+        verify(userRepository).updateUsername(userId, "awa.ngo");
+        verify(userRepository).save(argThat(u -> "+237699999999".equals(u.getPhoneNumber())
+                && "awa.ngo".equals(u.getUsername())));
+    }
 }

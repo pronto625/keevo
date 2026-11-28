@@ -646,7 +646,11 @@ public class AuthController {
             data.tenantStatus(),
             data.onboardingCompleted(),
             data.username(),
-            data.role()
+            data.role(),
+            data.hasPassword(),
+            data.memberSince(),
+            data.lastLoginAt(),
+            data.scheduledDeletionAt()
         );
     }
 

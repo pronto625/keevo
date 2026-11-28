@@ -187,6 +187,7 @@ public final class AuditLabels {
             entry("firstName", "Prénom"),
             entry("lastName", "Nom de famille"),
             entry("phoneNumber", "Téléphone"),
+            entry("username", "Identifiant"), // P02
             entry("storeId", "Boutique"),
             entry("type", "Type"),
             entry("archived", "Archivé"),

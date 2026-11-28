@@ -64,6 +64,15 @@ public interface UserRepository {
     int setEmailIfAbsent(UUID id, String email, Instant verifiedAt);
 
     /**
+     * P02 — sets the username of the account (one {@code UPDATE} by primary key). The case-insensitive unique index
+     * {@code uq_users_username_lower} is the source of truth: a taken username raises Spring's
+     * {@code DuplicateKeyException}.
+     *
+     * @return rows updated (0 for an unknown id)
+     */
+    int updateUsername(UUID id, String username);
+
+    /**
      * Story 19.2 — locks the user row ({@code FOR UPDATE}) until the transaction ends, so two concurrent
      * company creations of the same user run one after the other.
      *

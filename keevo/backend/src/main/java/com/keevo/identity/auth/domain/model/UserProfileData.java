@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.domain.model;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -15,6 +16,11 @@ import java.util.UUID;
  *
  * <p>Story 19.4 — {@code username}: the sign-in username of the account ({@code null} when none, or when it is the
  * technical username of a social account, never shown).
+ *
+ * <p>P02 — additive: {@code hasPassword} (the account can sign in with a password, so may change it),
+ * {@code memberSince} (membership creation, else account creation), {@code lastLoginAt} (last
+ * {@code USER_AUTHENTICATED} in this company, null when none) and {@code scheduledDeletionAt} (only while the company
+ * is {@code DELETION_PENDING}).
  */
 public record UserProfileData(
         UUID userId,
@@ -27,8 +33,20 @@ public record UserProfileData(
         boolean passwordChangeRequired,
         String tenantStatus,
         boolean onboardingCompleted,
-        String username
+        String username,
+        boolean hasPassword,
+        Instant memberSince,
+        Instant lastLoginAt,
+        Instant scheduledDeletionAt
 ) {
+    /** Pre-P02 shape (no password flag nor dates). */
+    public UserProfileData(UUID userId, String phoneNumber, String role, String firstName, String lastName,
+                           String storeId, String storeName, boolean passwordChangeRequired, String tenantStatus,
+                           boolean onboardingCompleted, String username) {
+        this(userId, phoneNumber, role, firstName, lastName, storeId, storeName, passwordChangeRequired, tenantStatus,
+             onboardingCompleted, username, false, null, null, null);
+    }
+
     /** Pre-16.11 shape (tests). */
     public UserProfileData(UUID userId, String phoneNumber, String role, String firstName,
                            String lastName, String storeId, String storeName) {

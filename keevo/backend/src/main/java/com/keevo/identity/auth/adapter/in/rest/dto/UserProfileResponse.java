@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.adapter.in.rest.dto;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -8,7 +9,9 @@ import java.util.UUID;
  * <p>Story 16.11 — the source of role, store, first name, password-change flag, account status and
  * onboarding state for the apps (cached on the device for offline display only). Story 19.4 — {@code username}
  * (additive, null when the account has none). Story 19.5 — {@code role} in the V1 vocabulary (MANAGER and VIEWER
- * show as EMPLOYEE), the real role in the additive {@code memberRole}.
+ * show as EMPLOYEE), the real role in the additive {@code memberRole}. P02 — additive {@code hasPassword},
+ * {@code memberSince}, {@code lastLoginAt} (null when never) and {@code scheduledDeletionAt} (null unless the company
+ * is {@code DELETION_PENDING}).
  */
 public record UserProfileResponse(
         UUID userId,
@@ -22,5 +25,9 @@ public record UserProfileResponse(
         String tenantStatus,
         boolean onboardingCompleted,
         String username,
-        String memberRole
+        String memberRole,
+        boolean hasPassword,
+        Instant memberSince,
+        Instant lastLoginAt,
+        Instant scheduledDeletionAt
 ) {}

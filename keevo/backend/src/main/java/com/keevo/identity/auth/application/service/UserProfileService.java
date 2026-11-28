@@ -6,10 +6,12 @@ import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.Usernames;
 import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.port.in.GetUserProfileUseCase;
+import com.keevo.identity.auth.domain.port.out.LastLoginQueryPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.model.Tenant;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -20,6 +22,7 @@ import com.keevo.store.api.StoreQueryPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,6 +39,10 @@ import java.util.UUID;
  * <p>Story 19.1 — {@code phoneNumber} is never null: a phone-less (email/username-only) account gets {@code ""},
  * because the installed V1 Flutter app parses it as a non-null string.
  *
+ * <p>P02 — {@code hasPassword}, {@code memberSince} (membership already loaded, else account creation),
+ * {@code lastLoginAt} (one indexed query through {@link LastLoginQueryPort}) and {@code scheduledDeletionAt} (tenant
+ * already loaded, only while {@code DELETION_PENDING}).
+ *
  * <p>Open/Closed: adding new profile fields requires only extending {@link UserProfileData}
  * and this service — the port and controller remain unchanged.
  */
@@ -48,19 +55,22 @@ public class UserProfileService implements GetUserProfileUseCase {
     private final TenantRepository tenantRepository;
     private final UserMembershipRepository membershipRepository;
     private final SessionTokenIssuer sessionTokenIssuer;
+    private final LastLoginQueryPort lastLoginQuery;
 
     public UserProfileService(UserRepository userRepository,
                                EmployeeRepository employeeRepository,
                                StoreQueryPort storeQuery,
                                TenantRepository tenantRepository,
                                UserMembershipRepository membershipRepository,
-                               SessionTokenIssuer sessionTokenIssuer) {
+                               SessionTokenIssuer sessionTokenIssuer,
+                               LastLoginQueryPort lastLoginQuery) {
         this.userRepository = userRepository;
         this.employeeRepository = employeeRepository;
         this.storeQuery = storeQuery;
         this.tenantRepository = tenantRepository;
         this.membershipRepository = membershipRepository;
         this.sessionTokenIssuer = sessionTokenIssuer;
+        this.lastLoginQuery = lastLoginQuery;
     }
 
     @Override
@@ -72,10 +82,16 @@ public class UserProfileService implements GetUserProfileUseCase {
         // Story 16.11 — role and account status from the membership / account (never the token).
         Optional<Tenant> tenant = tenantRepository.findBySchemaName(tenantId);
         String tenantStatus = tenant.map(t -> t.getStatus().name()).orElse("ACTIVE");
-        Optional<String> membershipRole = tenant.flatMap(t ->
-                        membershipRepository.findByUserIdAndTenantId(userId, t.getId()))
-                .map(UserTenantMembership::getRole);
+        Optional<UserTenantMembership> membership = tenant.flatMap(t ->
+                membershipRepository.findByUserIdAndTenantId(userId, t.getId()));
+        Optional<String> membershipRole = membership.map(UserTenantMembership::getRole);
         boolean platformAdmin = TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantId);
+        // P02 — real dates and the deletion date (no fake value in the apps).
+        Instant memberSince = membership.map(UserTenantMembership::getCreatedAt).orElse(user.getCreatedAt());
+        Instant lastLoginAt = platformAdmin ? null : lastLoginQuery.lastLoginAt(userId).orElse(null);
+        Instant scheduledDeletionAt = tenant
+                .filter(t -> t.getStatus() == TenantStatus.DELETION_PENDING)
+                .map(Tenant::getDeletionScheduledAt).orElse(null);
         boolean onboardingCompleted = platformAdmin || sessionTokenIssuer.isOnboardingCompleted(tenantId);
 
         Optional<Employee> employeeOpt = platformAdmin ? Optional.empty() : employeeRepository.findByUserId(userId);
@@ -99,7 +115,11 @@ public class UserProfileService implements GetUserProfileUseCase {
                     employeeRole && emp.isPasswordChangeRequired(),
                     tenantStatus,
                     onboardingCompleted,
-                    shownUsername(user)
+                    shownUsername(user),
+                    user.hasPassword(),
+                    memberSince,
+                    lastLoginAt,
+                    scheduledDeletionAt
             );
         }
 
@@ -115,7 +135,11 @@ public class UserProfileService implements GetUserProfileUseCase {
                 false,
                 tenantStatus,
                 onboardingCompleted,
-                shownUsername(user)
+                shownUsername(user),
+                user.hasPassword(),
+                memberSince,
+                lastLoginAt,
+                scheduledDeletionAt
         );
     }
 

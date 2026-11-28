@@ -2,6 +2,7 @@ package com.keevo.identity.employee.application.service;
 
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.Usernames;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -12,12 +13,14 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -31,6 +34,10 @@ import java.util.regex.Pattern;
  *
  * <p>Story 19.6 — a phone change on a shared account ({@link SharedAccountGuard}) is refused with
  * {@code MEMBER_ACCOUNT_SHARED}; name and store live on the employee row and stay allowed.
+ *
+ * <p>P02 — the owner may give a sign-in username to a member (a Keevo V1 employee has a phone and no username): same
+ * format rule as at creation ({@link Usernames}), same shared-account refusal as the phone, unique case-insensitively
+ * (pre-check for the common case, the unique index for the race: the whole update rolls back).
  */
 @Service
 public class UpdateEmployeeService implements UpdateEmployeeUseCase {
@@ -88,7 +95,27 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
             employee = employeeRepository.updateProfile(employee.getId(), newFirstName, newLastName);
         }
 
-        // 4. Apply phoneNumber if provided and different
+        // 4. P02 — username (before the phone: a later JPA save of the user carries it)
+        if (command.username() != null) {
+            String username = Usernames.requireValid(command.username());
+            if (!username.equalsIgnoreCase(user.getUsername() == null ? "" : user.getUsername())) {
+                sharedAccountGuard.refuseIfShared(user.getId());
+                UUID userId = user.getId();
+                if (userRepository.findByUsername(username).filter(other -> !other.getId().equals(userId))
+                        .isPresent()) {
+                    throw new DomainException(ErrorCode.USERNAME_ALREADY_EXISTS);
+                }
+                try {
+                    userRepository.updateUsername(userId, username);
+                } catch (DuplicateKeyException race) {
+                    throw new DomainException(ErrorCode.USERNAME_ALREADY_EXISTS);
+                }
+                user = user.withUsername(username);
+                fieldsChanged.add("username");
+            } // same username, any case: nothing to do
+        }
+
+        // 5. Apply phoneNumber if provided and different
         if (command.phoneNumber() != null) {
             if (!PHONE_PATTERN.matcher(command.phoneNumber()).matches()) {
                 throw new DomainException(ErrorCode.VALIDATION_FAILED, "Invalid phone number format");
@@ -109,7 +136,7 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
             }
         }
 
-        // 5. Apply storeId if provided and different
+        // 6. Apply storeId if provided and different
         if (command.storeId() != null && !command.storeId().equals(employee.getStoreId())) {
             storeEmployeeLimit.checkMove(employee, command.storeId()); // 19.7b — per-store limit
             // No revocation: STORE_REASSIGNED + refresh renews onto the new store.
@@ -118,7 +145,7 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
             fieldsChanged.add("storeId");
         }
 
-        // 6. Publish event if anything changed
+        // 7. Publish event if anything changed
         if (!fieldsChanged.isEmpty()) {
             String tenantSchema = TenantContext.getCurrentTenant();
             eventPublisher.publishEvent(new EmployeeUpdatedEvent(

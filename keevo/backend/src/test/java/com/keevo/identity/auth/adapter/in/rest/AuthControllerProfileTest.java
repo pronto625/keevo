@@ -50,6 +50,7 @@ class AuthControllerProfileTest {
     @Mock TenantRepository tenantRepository;
     @Mock UserMembershipRepository membershipRepository;
     @Mock SessionTokenIssuer sessionTokenIssuer;
+    @Mock com.keevo.identity.auth.domain.port.out.LastLoginQueryPort lastLoginQuery;
 
     MockMvc mockMvc;
     UUID userId;
@@ -58,7 +59,7 @@ class AuthControllerProfileTest {
     void setUp() {
         UserProfileService profile = new UserProfileService(userRepository, employeeRepository,
                 StoreApiTestSupport.queryPort(storeRepository), tenantRepository, membershipRepository,
-                sessionTokenIssuer);
+                sessionTokenIssuer, lastLoginQuery);
         mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(null, null, null, null, null, profile, null, null, null, null, null, null, null))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -111,5 +112,27 @@ class AuthControllerProfileTest {
                 .andExpect(jsonPath("$.role").value("EMPLOYEE"))
                 .andExpect(jsonPath("$.memberRole").value("MANAGER"))
                 .andExpect(jsonPath("$.storeId").value(store.toString()));
+    }
+
+    @Test
+    @DisplayName("P02 — additive hasPassword, memberSince, lastLoginAt, scheduledDeletionAt (DELETION_PENDING)")
+    void p02_additiveFields() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User(userId, "+237690000001", null,
+                Role.OWNER, true, Instant.parse("2024-01-10T00:00:00Z"))));
+        when(tenantRepository.findBySchemaName("kv_prof01")).thenReturn(Optional.of(new com.keevo.identity.auth.domain.model.Tenant(
+                tenantId, "KV-PROF01", "kv_prof01", "Boutique", com.keevo.identity.api.TenantStatus.DELETION_PENDING,
+                com.keevo.identity.api.PlanType.FREE, Instant.now(), Instant.parse("2026-12-28T00:00:00Z"))));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenantId)).thenReturn(Optional.empty());
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        when(lastLoginQuery.lastLoginAt(userId)).thenReturn(Optional.of(Instant.parse("2026-11-27T10:15:00Z")));
+
+        mockMvc.perform(get("/api/v1/auth/profile"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasPassword").value(false))
+                .andExpect(jsonPath("$.memberSince").exists())
+                .andExpect(jsonPath("$.lastLoginAt").exists())
+                .andExpect(jsonPath("$.scheduledDeletionAt").exists())
+                .andExpect(jsonPath("$.tenantStatus").value("DELETION_PENDING"));
     }
 }
