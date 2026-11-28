@@ -123,6 +123,20 @@ class SaleSummaryControllerTest {
     }
 
     @Test
+    @DisplayName("ten-year period (« depuis le début ») accepted; one day longer refused with 422, nothing read")
+    void periodBounds() throws Exception {
+        as("OWNER");
+        when(port.summarize(any(), any(), isNull(), isNull())).thenReturn(Summary.NONE);
+
+        mvc.perform(get("/api/v1/sales/summary").param("from", "2016-11-30").param("to", "2026-11-28"))
+                .andExpect(status().isOk()); // 3 650 days
+        mvc.perform(get("/api/v1/sales/summary").param("from", "2016-11-19").param("to", "2026-11-28"))
+                .andExpect(status().isUnprocessableEntity()); // MAX_DAYS + 1
+
+        verify(port).summarize(any(), any(), isNull(), isNull());
+    }
+
+    @Test
     @DisplayName("inverted or malformed period: 422 with a French message, nothing read")
     void invalidPeriod() throws Exception {
         as("OWNER");
