@@ -330,6 +330,16 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # MOBILE — parties app des stories livrées côté API (app React Native, dépôt AI/bref, autre développeur)
   m22-19-corrections-app-e2e-rn: review  # 2026-11-23 corrections app (B1–B6, défauts majeurs) faites par nous — AI/bref branche fix/e2e-corrections-2026-11-23 (00daac2, poussée, inclut br-migrate-api-to-keevo a52667e — fusion en avance rapide possible ; rejeu complet émulateur + Redmi, points ouverts traités, à fusionner par le dev mobile dans br-migrate-api-to-keevo) ; rejouée sur émulateur contre l'API 5da7357c
+  # 2026-11-28 Epic P — parité Keevo V1 → app RN (demande user : toutes les vues et fonctions Keevo dans Bref) ; spec _bmad-output/planning-artifacts/parite-keevo-v1-bref/ ; code AI/bref branche feat/parite-keevo-v1 ; audit _bmad-output/test-artifacts/parite-v1-bref-2026-11-28/RAPPORT.md
+  mp01-theme-keevo: backlog  # 2026-11-28 thème Keevo (charte graphique V1) choisi dans les Paramètres
+  mp02-comptes-connexion-v1: backlog  # 2026-11-28 employé V1 par téléphone, identifiant, mots de passe, CGU, suppression de compte
+  mp03-ventes-caisse-sans-facturation: backlog  # 2026-11-28 ventes de caisse visibles sans facturation (V50), parité caisse
+  mp04-mes-modules: backlog  # 2026-11-28 activation des modules par le propriétaire (19-13), fonctions selon le plan
+  mp05-notifications-liens: backlog  # 2026-11-28 toucher une notification ouvre sa cible, annonces
+  mp06-catalogue-stock-v1: backlog  # 2026-11-28 archivés, brouillons, catégories, mouvements, accès vendeur
+  mp07-pilotage-rapports-audit: backlog  # 2026-11-28 historique des rapports, classement, rentabilité, exports, accueil, audit
+  mp08-clients-fournisseurs-admin: backlog  # 2026-11-28 clients/fournisseurs archivés, entrepôts, jauges, bandeaux
+  mp09-hors-ligne-durable: backlog  # 2026-11-28 file hors ligne durable, opérations bloquées, conflits, appareils, verrou 7 j
   # Directives : section « ## Mobile (React Native — dépôt AI/bref) » à la fin de chaque spec.
   # Statuts : backlog → in-progress (dev mobile démarré) → review (livré, à tester ici) → done (testé ici sur appareil).
   # m16-11 porte les conventions d'API ; m16-10 porte le protocole de synchro : à lire en premier.

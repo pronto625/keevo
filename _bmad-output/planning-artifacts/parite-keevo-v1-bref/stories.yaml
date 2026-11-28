@@ -1,0 +1,153 @@
+# Epic P — Keevo V1 parity in the Bref Point RN app. See SPEC.md (code location, rules, verification standard).
+# Each story: implement in /var/tmp/keevo-e2e/bref-parite (branch feat/parite-keevo-v1), verify on emulator with videos.
+stories:
+  - id: P01
+    key: mp01-theme-keevo
+    title: Keevo theme (Keevo visual identity) selectable in Settings
+    description: >
+      Add a "Keevo" theme to the app, built from the Keevo V1 visual identity, so V1 users find familiar colours.
+      Source of truth: V1 `keevo/app/lib/core/theme/app_theme.dart` (and any colour/typography constants it uses, plus
+      `keevo/app/assets` logo if relevant) on origin2/release/2.0.x: primary/secondary/accent, surfaces, text, status
+      colours (success/warning/error), radii, typography weights; light and dark variants as V1 defines them.
+      In the app today Settings has a light/dark switch (`features/profile/screens/settings-screen.tsx`,
+      `lib/theme`, `constants/theme.ts`, `global.css` uniwind variables). Replace the switch by a theme choice:
+      "Bref" (current look, default for existing Bref users) or "Keevo" (new), and an appearance choice
+      light / dark / system, persisted on the device (survives restart and logout), applied instantly to every screen
+      (tab bar, headers, buttons, cards, inputs, badges, charts, bottom sheets, dialogs, toasts, status bar, splash
+      background if feasible without a store rebuild). The theme must be a token layer (CSS variables / theme object),
+      not per-screen overrides; audit hard-coded colours in components and route them to tokens so both themes render
+      correctly. Default: "Keevo" for accounts that come from Keevo V1 is desirable but not required — if the API
+      exposes no reliable origin flag, keep "Bref" default and make the choice one tap away in Settings › Apparence;
+      the onboarding/welcome screen may suggest it. Contrast WCAG AA for text on both themes. French labels
+      (fr + en keys). Acceptance (recorded on emulator): switch to Keevo → every main screen (home, sales, POS,
+      products, product form, modules, settings, invoice create, notifications, login screens after logout) shows the
+      Keevo palette in light and dark; restart app → kept; switch back to Bref → original look; no screen with
+      unreadable text or leftover Bref colour. Screenshots of each main screen in both themes saved under
+      videos/P01-screens/.
+
+  - id: P02
+    key: mp02-comptes-connexion-v1
+    title: V1 accounts and login parity (employees by phone, identifiers, passwords, terms, account deletion)
+    description: >
+      Fix every account/login gap of lot A (companion lot-A-compte.md §1–3, §5–9 and "Écarts à retenir" 1,2,4,5,11,
+      12,13,14,16). Must include: (1) "Je suis un commercial" accepts a phone number OR a username: when the input
+      looks like a phone (local Cameroon format or E.164) send `phoneNumber` in E.164, else `username` — a V1
+      employee (Awa Ngo +237690000050 / Vendeur2024) logs in; (2) member edit: username optional when the member has
+      a phone (V1 member), and when entered it is really sent and saved by the API (check `PATCH/PUT /employees/{id}`
+      accepts it; if the API lacks it, add it backend-side additively with tests); the screen never shows a value the
+      server did not store; member phone shown and editable where the API allows; (3) voluntary password change from
+      Profile (`/auth/change-password`) for any member; (4) forgot password flow for phone+password members using
+      `/auth/forgot-password` + `/auth/reset-password` (code by SMS/WhatsApp, noop locally — read code from DB or
+      review mechanism for the test); (5) "Se déconnecter" on the forced password change screen; (6) terms of use:
+      acceptance at registration (checkbox + link) and read-only view from Settings/Help, links to Keevo/Bref terms
+      URLs used by V1 or the app; (7) account deletion: owner stays logged in during the grace period with a visible
+      banner and "Annuler la suppression" (`/account/delete/cancel`), `scheduledDeletionAt` read correctly; hide
+      "Supprimer mon compte" for non-owners; (8) push token unregistered on logout; (9) warn before discarding unsent
+      data of a previous account; (10) profile "Actif depuis" / "Dernière connexion" show real dates; (11) employee
+      activity on member detail (last login, sales today/week from `/sales/history` or reporting) like V1; (12) WhatsApp
+      invitation text for a new member (share via system sheet — emulator only). Videos: V1 employee login by phone,
+      edit member, password change, forgot password, deletion + cancel.
+
+  - id: P03
+    key: mp03-ventes-caisse-sans-facturation
+    title: POS sales history and POS parity without the invoicing module (V1 companies)
+    description: >
+      Lot B (companion lot-B-caisse.md) items 1–9, 13–16, 18–19 plus lot D item 8. With invoicing disabled (V1
+      tenant), the Sales tab, home revenue/sales counters, sale detail, receipt and cancel must work from POS sales
+      (`GET /sales/history`, sale detail, `CANCEL_SALE` / `/sales/{id}/cancel`, `/sales/{id}/correct`), including the
+      V1 historical sales; with invoicing enabled, show both without double counting (sale with its automatic
+      invoice = one line; 20-9 rule: no local summing of sales + invoices — prefer `/dashboard/summary`). Cancel rules
+      as the API allows (if the API refuses older sales, show its French message; if V1 allowed it and the API now
+      forbids, document and align with backend owner rule — do not change business rules silently). POS: amount
+      received + change to give (cash), discount in % or fixed, line price negotiation (if allowed for the role),
+      quantity typed with keyboard, category filter, clear cart, cart kept when leaving the POS, sort by best sellers,
+      Mobile Money reference shown in sale detail, period "Cette semaine", pending sales (list/validate/cancel) if the
+      API still has them, correction of one line. Seller can close their day (Day closure reachable for seller with
+      the right permission), closure preview with cash / mobile money / pending figures before confirming, seller
+      "Mes ventes du jour". Videos: V1 tenant (invoicing off) sale → visible in Sales + home; old sale cancel; change
+      due; % discount; seller closure.
+
+  - id: P04
+    key: mp04-mes-modules
+    title: Owner module activation (Mes modules) and plan-gated features visibility
+    description: >
+      FUS-UX7 / story 19-13: owner can enable/disable plan modules in Settings › Mes modules (API of 19-13:
+      tenant module activation endpoints — find them in keevo/backend `TenantModule*Controller` / `/tenants/me/modules`),
+      e.g. enable Facturation on a V1 tenant; disabled modules hidden from tabs/modules list, read-only/grace states
+      (`graceUntil`, MODULE_READ_ONLY) shown in French; module refresh after change without restart. Also the
+      dead config `features/dashboard/config/coming-soon-modules.ts` removed or wired. Check what a FREE V1 owner keeps:
+      V1 gave free owners reports, CSV exports and stock alerts (lot A item 8, lot D items 7 and 9); compare with the
+      plan catalogue in the backend and record the gap in the story file for the product owner (no business-rule
+      change in code without a decision); the app must at least show why a feature is locked and how to unlock it.
+      Videos: enable invoicing on V1 tenant → invoices tab works; disable → hidden.
+
+  - id: P05
+    key: mp05-notifications-liens
+    title: Notifications open their target (push and list), announcements, server types
+    description: >
+      Lot A §2 and items 6,7,16,19; lot D item 1. Handle the server notification payload (`type` in uppercase,
+      `deepLink` — see keevo/backend `FcmNotificationAdapter`, `ExpoPushAdapter`, notification types enum) for push taps
+      (cold and warm start) and list taps: product, stock/low stock, sales history/sale, reports, pending sales,
+      transfers (open reception), day closure, export ready, WhatsApp message, invoice/payment. Deleting a notification
+      really deletes (or hides persistently) it. Keevo announcements (`/notifications/announcements`) listed.
+      Unread badge from `/notifications/unread-count`. Auto-closure notice. Amounts formatted FCFA in the app when the
+      server text contains XAF (or fix the server text additively). Videos: tap a transfer notification → reception
+      screen; low-stock → product.
+
+  - id: P06
+    key: mp06-catalogue-stock-v1
+    title: Catalogue, stock, inventory and transfers parity (archived, drafts, categories, movements, seller access)
+    description: >
+      Lot C (companion lot-C-stock.md) items 1–17. Seller access to catalogue (read), own store stock, inventory
+      counting, transfer reception per V1 and the 10/11 decision ("membre = stock de sa boutique"), respecting custom
+      roles. Archived products list + restore. Drafts: list/filter/banner, "Valider ce produit" with stock, V1 drafts
+      shown as drafts. Categories management (rename, delete/deactivate). SKU editable. Stock movements screen (owner)
+      with filters type/period/store; product history paginated with filters; transfers shown with their label.
+      Multi-store availability view (cards per store, search all stores, start a transfer from availability).
+      Transfers list filters by status/store, pagination beyond 50. Unsaved-changes confirmation on product form.
+      CSV import column mapping. Inventory: cancel per V1 roles, "écarts seulement" filter, inline count, accent-
+      insensitive search, detailed signed gap report + validate from the report. Offline writes for product
+      create, stock entry/adjust, archive, inventory start/count/validate: queued durably with idempotency keys
+      (coordinate with P09 queue). Verify `GET /stock/stores/{id}/products` behaviour without the inventory option.
+      Videos: restore archived; draft validate; category rename; seller counts inventory; movements filter.
+
+  - id: P07
+    key: mp07-pilotage-rapports-audit
+    title: Reports history, seller leaderboard, profitability detail, exports, home indicators, audit log
+    description: >
+      Lot D items 4–9 and 12; lot B item 12; lot C item 4. Reports sent history (status, text, resend via WhatsApp —
+      emulator only) and fix the misleading "Historique des rapports" link; seller leaderboard screen (period,
+      criterion, owner badge) honouring leaderboard visibility; product profitability detail (prices, costs, applied
+      prices, 7-day curve, best store), sorting, periods incl. today and custom range, store criterion; exports: retry,
+      auto refresh, local CSV offline, export buttons prefilled from other screens, PDF template choice, French labels
+      for datasets and statuses (EXPIRED); home: today vs yesterday, evolution chart, per-store view with status, low
+      stock, least sold; store detail with chart/top products/low stock; report period bounds in Africa/Douala time
+      (not UTC); pull-to-refresh on reports. Audit log: French `actionLabel`, readable before/after (no raw JSON), filters
+      store/employee/action/object/date range, detail screen with "Voir la vente". Videos for each screen.
+
+  - id: P08
+    key: mp08-clients-fournisseurs-admin
+    title: Customers, suppliers, stores, subscription and misc admin parity
+    description: >
+      Lot B items 10, 11, 17; lot A items 9, 10, 15, 17, 18. Customers: archive / show archived / restore, edit
+      offline (queued), phone editable, V1 customers without store visible in every store (fix sync shopId handling in
+      `lib/database/sync.ts`), duplicates check. Suppliers: archived view + unarchive, product picker excludes products
+      of another supplier. Stores: warehouses (create, list, distinct from shops) as V1, delete vs deactivate distinct
+      if the API distinguishes. Subscription: usage gauges (stores/products/employees used / max). Account status
+      banners: suspended, trial expired, deletion pending (`tenantStatus`). Feedback: offline send queued, origin
+      screen attached; report time picker full range, weekly report preview. Videos for each.
+
+  - id: P09
+    key: mp09-hors-ligne-durable
+    title: Durable offline queue, blocked operations, conflicts, devices, 7-day lock banners
+    description: >
+      Lot D items 2, 3, 10, 11 and the offline comparison (e2e-rn-2026-11-23 parite-inventaire.md §E). Replace the
+      24 h persisted mutation cache as the only durable store by a durable outbox (WatermelonDB table or equivalent):
+      every user write (sales, invoices, products, stock, inventory, transfers, closures, customers, suppliers,
+      payments, expenses, members) gets an idempotency key and survives app kill/restart until acknowledged; retries
+      with backoff; rejected operations kept in a "Opérations bloquées" screen with French reason, retry, export,
+      discard (traced). Sync history lists every pending kind with readable labels. Conflicts screen
+      (`/sync/conflicts`), connected devices (`/auth/sessions`, revoke), J5/J6 banners and J7 write lock
+      (423 SYNC_REQUIRED) like V1. Consider encrypting the local DB (SQLCipher) if feasible in Expo without breaking
+      upgrade; if not, document. Videos: kill app with 3 queued writes offline → restart → online → each sent once;
+      a refused sale shown in blocked operations.
