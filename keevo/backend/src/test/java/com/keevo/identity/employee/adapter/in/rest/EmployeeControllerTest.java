@@ -311,6 +311,24 @@ class EmployeeControllerTest {
 
     // ── Story 14.11 — new endpoint tests ─────────────────────────────────
 
+    @Test
+    @DisplayName("P02 — PATCH /employees/{id} with a username only: 200, the command carries the username")
+    void updateEmployee_usernameOnly_passedToUseCase() throws Exception {
+        org.mockito.ArgumentCaptor<com.keevo.identity.employee.domain.port.in.UpdateEmployeeCommand> captor =
+                org.mockito.ArgumentCaptor.forClass(com.keevo.identity.employee.domain.port.in.UpdateEmployeeCommand.class);
+        when(updateEmployeeUseCase.execute(captor.capture())).thenReturn(sampleEmployee);
+
+        mockMvc.perform(patch("/api/v1/employees/" + employeeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"awa.ngo"}
+                                """))
+                .andExpect(status().isOk());
+
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().username()).isEqualTo("awa.ngo");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().employeeId()).isEqualTo(employeeId);
+    }
+
     private void setEmployeeRole() {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(actorId, null,

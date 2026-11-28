@@ -62,6 +62,11 @@ class AuthControllerProfileTest {
                 sessionTokenIssuer, lastLoginQuery);
         mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(null, null, null, null, null, profile, null, null, null, null, null, null, null))
                 .setControllerAdvice(new GlobalExceptionHandler())
+                // As the application (Spring Boot's ObjectMapper): dates as ISO-8601 strings.
+                .setMessageConverters(new org.springframework.http.converter.json.MappingJackson2HttpMessageConverter(
+                        org.springframework.http.converter.json.Jackson2ObjectMapperBuilder.json()
+                                .featuresToDisable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                                .build()))
                 .build();
         userId = UUID.randomUUID();
         TenantContext.setCurrentTenant("kv_prof01");
@@ -130,9 +135,32 @@ class AuthControllerProfileTest {
         mockMvc.perform(get("/api/v1/auth/profile"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.hasPassword").value(false))
-                .andExpect(jsonPath("$.memberSince").exists())
-                .andExpect(jsonPath("$.lastLoginAt").exists())
-                .andExpect(jsonPath("$.scheduledDeletionAt").exists())
+                .andExpect(jsonPath("$.memberSince").value("2024-01-10T00:00:00Z"))
+                .andExpect(jsonPath("$.lastLoginAt").value("2026-11-27T10:15:00Z"))
+                .andExpect(jsonPath("$.scheduledDeletionAt").value("2026-12-28T00:00:00Z"))
                 .andExpect(jsonPath("$.tenantStatus").value("DELETION_PENDING"));
+    }
+
+    @Test
+    @DisplayName("P02 — a member with a password: hasPassword true, memberSince from the membership, no deletion date")
+    void p02_memberWithPassword() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User(userId, "+237690000050", "$2b$12$hash",
+                Role.EMPLOYEE, true, Instant.parse("2024-01-10T00:00:00Z"))));
+        when(tenantRepository.findBySchemaName("kv_prof01")).thenReturn(Optional.of(new com.keevo.identity.auth.domain.model.Tenant(
+                tenantId, "KV-PROF01", "kv_prof01", "Boutique", com.keevo.identity.api.TenantStatus.ACTIVE,
+                com.keevo.identity.api.PlanType.FREE, Instant.now(), Instant.parse("2026-12-28T00:00:00Z"))));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenantId)).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.UserTenantMembership(UUID.randomUUID(), userId, tenantId,
+                        "EMPLOYEE", true, Instant.parse("2026-11-23T04:24:50Z"))));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        when(lastLoginQuery.lastLoginAt(userId)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/auth/profile"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasPassword").value(true))
+                .andExpect(jsonPath("$.memberSince").value("2026-11-23T04:24:50Z"))
+                .andExpect(jsonPath("$.lastLoginAt").doesNotExist())
+                .andExpect(jsonPath("$.scheduledDeletionAt").doesNotExist());
     }
 }

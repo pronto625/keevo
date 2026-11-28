@@ -327,6 +327,7 @@
     "audit_log: CREATE INDEX idx_audit_log_occurred ON audit_log USING btree (occurred_at DESC)",
     "audit_log: CREATE INDEX idx_audit_log_store_occurred ON audit_log USING btree (store_id, occurred_at DESC)",
     "audit_log: CREATE INDEX idx_audit_log_sync_keyset ON audit_log USING btree (occurred_at, ((id)::text))",
+    "audit_log: CREATE INDEX idx_audit_log_user_login ON audit_log USING btree (user_id, occurred_at DESC) WHERE ((action)::text = 'USER_AUTHENTICATED'::text)",
     "audit_log: CREATE INDEX idx_audit_log_user_occurred ON audit_log USING btree (user_id, occurred_at DESC)",
     "audit_log: CREATE UNIQUE INDEX audit_log_pkey ON audit_log USING btree (id)",
     "categories: CREATE INDEX idx_categories_is_active ON categories USING btree (is_active)",

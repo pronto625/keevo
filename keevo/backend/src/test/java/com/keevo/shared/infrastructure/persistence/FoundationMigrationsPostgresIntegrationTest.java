@@ -272,7 +272,7 @@ class FoundationMigrationsPostgresIntegrationTest {
 
         modules.ensureFoundation(schema); // boot upgrade / first request of an existing tenant
 
-        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("4"); // 19.12 core V3 (sale flow), 19.11c core V4 (index) on top
+        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("5"); // 19.12 core V3 (sale flow), 19.11c core V4 (index), P02 core V5 (login index) on top
         assertThat(planTypeChecks(schema)).isEmpty();
         assertThat(planTypeLength(schema)).isEqualTo(30);
         assertThat(jdbc.queryForObject("SELECT plan_type || '/' || expires_at FROM \"" + schema
@@ -353,7 +353,7 @@ class FoundationMigrationsPostgresIntegrationTest {
         modules.ensureFoundation(schema);
 
         assertThat(migrations.currentVersion(schema, "store")).isEqualTo("3"); // 20.2: store V3 (share_clients)
-        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("4"); // 19.11c: core V4 (audit index)
+        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("5"); // 19.11c: core V4 (audit index), P02: core V5 (login index)
         assertThat(storeBrefColumns(schema)).hasSize(6);
         assertThat(jdbc.queryForList("SELECT country FROM \"" + schema + "\".stores", String.class))
                 .isNotEmpty().containsOnly("CM");

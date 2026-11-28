@@ -89,4 +89,22 @@ class UserUsernamePostgresIntegrationTest extends PostgresIntegrationTest {
         User other = User.newEmployee(null, "other_" + suffix(), "$2a$12$y");
         assertThat(users.insertIfAbsent(other)).isTrue(); // the transaction is still usable
     }
+
+    @Test
+    @DisplayName("P02 — updateUsername writes the username (found in any case); a case-only collision raises DuplicateKeyException")
+    void updateUsername() {
+        User member = User.newEmployee(null, "before_" + suffix(), "$2b$12$hash");
+        assertThat(users.insertIfAbsent(member)).isTrue();
+        String name = "awa_n" + suffix();
+
+        assertThat(users.updateUsername(member.getId(), name)).isEqualTo(1);
+        assertThat(users.findByUsername(name.toUpperCase())).map(User::getId).contains(member.getId());
+
+        String upper = "AWA_K" + suffix().toUpperCase();
+        jdbc.update("INSERT INTO public.users (id, username, password_hash, role, is_active, failed_attempts, "
+                + "created_at, updated_at) VALUES (?, ?, '$2b$12$x', 'EMPLOYEE', true, 0, now(), now())",
+                UUID.randomUUID(), upper);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> users.updateUsername(member.getId(), upper.toLowerCase()))
+                .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
+    }
 }

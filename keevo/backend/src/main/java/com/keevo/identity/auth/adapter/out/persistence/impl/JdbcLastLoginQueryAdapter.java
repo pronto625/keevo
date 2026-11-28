@@ -10,15 +10,17 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * JdbcLastLoginQueryAdapter — P02: one indexed {@code MAX(occurred_at)} on the tenant {@code audit_log}
- * ({@code idx_audit_log_user_occurred (user_id, occurred_at DESC)}, O(log n)). The tenant table resolves through the
- * request search_path, as {@code JdbcEmployeeActivityRepository}.
+ * JdbcLastLoginQueryAdapter — P02: the latest sign-in of a user in the tenant {@code audit_log}, read as the first entry of
+ * the partial index {@code idx_audit_log_user_login (user_id, occurred_at DESC) WHERE action = 'USER_AUTHENTICATED'}
+ * (core V5): one index descent, O(log n), whatever the number of other audit rows of the user. The tenant table resolves
+ * through the request search_path, as {@code JdbcEmployeeActivityRepository}.
  */
 @Repository
 public class JdbcLastLoginQueryAdapter implements LastLoginQueryPort {
 
     private static final String SQL =
-            "SELECT MAX(occurred_at) FROM audit_log WHERE user_id = ? AND action = 'USER_AUTHENTICATED'";
+            "SELECT occurred_at FROM audit_log WHERE user_id = ? AND action = 'USER_AUTHENTICATED' "
+                    + "ORDER BY occurred_at DESC LIMIT 1";
 
     private final JdbcTemplate jdbc;
 
@@ -28,7 +30,6 @@ public class JdbcLastLoginQueryAdapter implements LastLoginQueryPort {
 
     @Override
     public Optional<Instant> lastLoginAt(UUID userId) {
-        Timestamp at = jdbc.queryForObject(SQL, Timestamp.class, userId);
-        return Optional.ofNullable(at).map(Timestamp::toInstant);
+        return jdbc.queryForList(SQL, Timestamp.class, userId).stream().findFirst().map(Timestamp::toInstant);
     }
 }
