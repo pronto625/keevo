@@ -93,6 +93,9 @@ stories:
       Unread badge from `/notifications/unread-count`. Auto-closure notice. Amounts formatted FCFA in the app when the
       server text contains XAF (or fix the server text additively). Videos: tap a transfer notification → reception
       screen; low-stock → product.
+      Deferred items routed 2026-11-28 (P02 review):
+      - [ ] [Deferred-from: P02 review, 2026-11-28] Deleted notification comes back on the next refresh (lot A gap 16, second half) [features/notification/api/notification.api.ts deleteOne] — really delete or hide persistently.
+      - [ ] [Deferred-from: P02 review, 2026-11-28] Logout push-token removal has no automated test [features/notification/api/notification.api.ts removePushToken] — extract the storage/HTTP deps and test save → logout → DELETE /devices/token with the same key.
 
   - id: P06
     key: mp06-catalogue-stock-v1
@@ -136,6 +139,9 @@ stories:
       if the API distinguishes. Subscription: usage gauges (stores/products/employees used / max). Account status
       banners: suspended, trial expired, deletion pending (`tenantStatus`). Feedback: offline send queued, origin
       screen attached; report time picker full range, weekly report preview. Videos for each.
+      Deferred items routed 2026-11-28 (P02 review):
+      - [ ] [Deferred-from: P02 review, 2026-11-28] Account deletion confirmation by typing the owner's phone like V1 delete_account_page (lot A §5) [features/profile/screens/settings-screen.tsx delete dialog] — second confirmation step.
+      - [ ] [Deferred-from: P02 review, 2026-11-28] Suspended / trial-expired banners (lot A §6, gap 9); `tenantStatus` is now on the current user (P02) [components/account-deletion-banner.tsx pattern] — same banner pattern.
 
   - id: P09
     key: mp09-hors-ligne-durable
@@ -151,6 +157,8 @@ stories:
       (423 SYNC_REQUIRED) like V1. Consider encrypting the local DB (SQLCipher) if feasible in Expo without breaking
       upgrade; if not, document. Videos: kill app with 3 queued writes offline → restart → online → each sent once;
       a refused sale shown in blocked operations.
+      Deferred items routed 2026-11-28 (P02 review):
+      - [ ] [Deferred-from: P02 review, 2026-11-28] Account-switch cancel path untested (closeNewSession clears tokens, previous data kept, pending-writes predicate) [lib/clear-local-data.ts switchDeviceUserIfNeeded] — inject token/storage/mutation-count deps and test with the durable outbox count.
 
   - id: P10
     key: mp10-contraste-aa-bref

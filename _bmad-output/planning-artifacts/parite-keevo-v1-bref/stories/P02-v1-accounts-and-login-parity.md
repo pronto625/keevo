@@ -2,16 +2,37 @@
 title: 'P02 — V1 accounts and login parity (employees by phone, identifiers, passwords, terms, account deletion)'
 type: 'feature'
 created: '2026-11-28'
-status: 'review'
+status: 'done'
 baseline_revision: '3f95027b97d38e4fa7f419f010e8ae85073da5fc'
 backend_baseline_revision: 'd45c46701177b1b893802307d38e8931718e9001'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/planning-artifacts/parite-keevo-v1-bref/SPEC.md'
   - '{project-root}/_bmad-output/test-artifacts/parite-v1-bref-2026-11-28/lot-A-compte.md'
 warnings: ['multiple-goals', 'oversized']
-deferred: []
+deferred:
+  - summary: >-
+      Deleted notification comes back on refresh (lot A gap 16, second half); deep links and announcements.
+    evidence: |-
+      notification.api.ts deleteOne only marks read; P05 description owns "Deleting a notification really deletes" and deep links. Routed to mp05.
+    location: >-
+      features/notification/api/notification.api.ts
+    severity: low
+  - summary: >-
+      Account deletion confirmation by typing the owner's phone (V1 delete_account_page) and suspended / trial-expired banners.
+    evidence: |-
+      Lot A §5 row 78 and §6 / gap 9; P08 owns account status banners. Routed to mp08.
+    location: >-
+      features/profile/screens/settings-screen.tsx
+    severity: low
+  - summary: >-
+      Account-switch cancel path (closeNewSession, pending-writes predicate) and logout push-token removal have no automated test.
+    evidence: |-
+      Only shouldAskBeforeSwitch is tested; the IO paths need injectable token/storage/mutation-count dependencies (no RN test harness). Routed to mp09 (switch) and mp05 (push token).
+    location: >-
+      lib/clear-local-data.ts, features/notification/api/notification.api.ts
+    severity: medium
 ---
 
 <intent-contract>
@@ -116,6 +137,64 @@ App (`/var/tmp/keevo-e2e/bref-parite`):
 
 ## Review Triage Log
 
+### 2026-11-28 — Review pass
+- verdicts: 54 findings — high 0, medium 12, low 30, false 10, maybe-false 2
+- findings:
+  - `[medium]` `[patch]` NFR11: last-login query filters `action` row by row on `idx_audit_log_user_occurred` (EXPLAIN: Index Scan + Filter), O(rows of the user) per /auth/profile, javadoc claims O(log n) — core V5 partial index `idx_audit_log_user_login (user_id, occurred_at DESC) WHERE action='USER_AUTHENTICATED'`, query `ORDER BY … LIMIT 1`, javadoc fixed.
+  - `[low]` `[patch]` NFR11: member edit reloads the team 2–4 times; onSettled invalidates the detail just written — `['users', id]` excluded from the onSettled invalidation (second `findEmployee` inside `update()` predates P02, left).
+  - `[low]` `[patch]` NFR11: `useMemberActivity` inline `select` re-runs the find each render — wrapped in useCallback.
+  - `[low]` `[defer]` Intent: gap 16 second half (deleted notification comes back) untouched — owned by P05 ("Deleting a notification really deletes"), routed to mp05.
+  - `[low]` `[defer]` Intent: §5 typing the owner's phone to confirm deletion not done — routed to mp08 (account admin parity).
+  - `[low]` `[reject]` Intent: temporary password shown at creation (§8 row 110) — lot A rates the owner-chosen password DIFFÉRENT (acceptable); the phone half is done (phone field on the form).
+  - `[false]` `[reject]` Intent: invitation cannot be re-sent from the activity view — the invite button and the activity card are on the same member detail screen.
+  - `[low]` `[defer]` Intent: suspended / trial-expired banners (§6, gap 9) not rendered — explicitly in P08 scope ("Account status banners"), routed to mp08.
+  - `[low]` `[defer]` Intent: deep links and announcements (§2, §9) — P05 scope, routed to mp05.
+  - `[false]` `[reject]` Intent: item 11 uses `/employees/activity` instead of `/sales/history` — the intent allows "or reporting"; this is the server's per-employee sales reporting (set-based, today/week).
+  - `[low]` `[reject]` Intent: optimistic display before the server answers — the app is offline-first by product rule 2; refusals now restore the server's values and success overwrites with them; a literal "never" would forbid offline edits.
+  - `[low]` `[patch]` Intent: end-to-end claims rest on pure-function tests and videos — same group as the verification-layer patches (controller, adapter and mapping tests added).
+  - `[false]` `[reject]` Intent: push token not removed for devices registered before the update — `app/_layout.tsx:221` re-saves the token at every start, which now stores the key on the first launch of this version.
+  - `[low]` `[patch]` Blind: "Changer mon mot de passe" offered while DELETION_PENDING but the server refuses every write except the cancel — row hidden while a deletion is scheduled (forced mode for a pending tenant is pre-existing server behaviour).
+  - `[low]` `[reject]` Blind: `removePushToken` clears the key when the DELETE fails — spec matrix says offline/403 ignored; the next account signing in re-registers the same device token to itself; a retry queue is more than a direct fix and rarely met.
+  - `[false]` `[reject]` Blind: "Dernière connexion" shows the current session — it is the account's last sign-in (USER_AUTHENTICATED), true by definition; V1's account page has no such field to diverge from (lot A §5).
+  - `[medium]` `[patch]` Blind: index claim wrong / no adapter test — grouped with the NFR11 index row; Postgres IT added.
+  - `[medium]` `[patch]` Blind: terms skipped when a company is created from the login screen via Google/Apple, asked twice on register — acceptance persisted on the device; register-organization asks only when not yet accepted; already-accepted screens start ticked.
+  - `[false]` `[reject]` Blind: new keys only in fr/en — the spec states fr + en with fallback for other locales (same rule as P01).
+  - `[low]` `[patch]` Blind: orphaned `profile.recoveryDialog.*` keys — removed from the 7 locales.
+  - `[low]` `[patch]` Blind: no download link in invitations (`EXPO_PUBLIC_APP_DOWNLOAD_URL` never defined) — Play Store link by default; French-only text rejected (V1 invitation is French only, recipients are Cameroonian members).
+  - `[false]` `[reject]` Blind: pending-writes check ignores local DB unsynced changes — the app has no WatermelonDB `synchronize`; every user write goes through a keyed react-query mutation (`lib/sdk/mutation-defaults.ts`), same definition as the logout warning.
+  - `[low]` `[patch]` Blind: member creation password checked with min 6 vs server 8+digit — `isStrongPassword` used in the form and by `assertStrongPassword`.
+  - `[low]` `[reject]` Blind: `toUser` writes '' dates / memberSince in updatedAt — only consumers are profile-screen (guards falsy) and reports-screen (falls back to now on falsy); nothing reads updatedAt of the current user.
+  - `[low]` `[patch]` Blind: forgot-password gaps (hardware back, stale fields, username-only member, no prefill) — back handled, fields cleared, hint added; prefill rejected (one field to retype, not worth state passing).
+  - `[low]` `[patch]` Blind: username identical to a valid phone routes sign-in to the phone path — form refuses such a username; return-value-0 claim false (user row loaded in the same transaction); controller 409/422 mapping covered by GlobalExceptionHandler entries already tested.
+  - `[low]` `[patch]` Blind: several pieces untested — grouped with the verification-layer patches.
+  - `[medium]` `[patch]` Verification: profile JSON only checks `.exists()` / hasPassword=false — exact values and a hasPassword=true fixture added.
+  - `[medium]` `[patch]` Verification: PATCH /employees username never sent through the controller — username-only PATCH controller test added.
+  - `[medium]` `[patch]` Verification: `JdbcLastLoginQueryAdapter` SQL untested — Postgres IT added.
+  - `[medium]` `[patch]` Verification: `updateUsername` SQL and DuplicateKeyException path untested — cases added to UserUsernamePostgresIntegrationTest.
+  - `[medium]` `[patch]` Verification: app profile mapping (DELETION_PENDING gate, hasPassword) untested — pure helper extracted and tested.
+  - `[medium]` `[defer]` Verification: account switch cancel path (closeNewSession, predicate) untested — needs injectable token/storage/mutation deps; routed to mp09.
+  - `[medium]` `[patch]` Verification: PATCH body diff untested — pure builder extracted and tested; logout token-removal test deferred to mp05 (push token lifecycle, needs AsyncStorage/apiClient injection).
+  - `[false]` `[reject]` Verification (other): last login = current session — same refutation as the Blind row.
+  - `[medium]` `[patch]` Edge: activity request failure shows "Jamais connecté / 0 FCFA" — error line instead of defaults.
+  - `[low]` `[patch]` Edge: unchanged stored username re-validated in edit — rule skipped when unchanged.
+  - `[low]` `[patch]` Edge: clearing an existing phone silently kept — French error shown.
+  - `[low]` `[patch]` Edge: all-digit username equal to a valid phone — same group as the Blind row (form refusal).
+  - `[false]` `[reject]` Edge: devices registered before the update — same refutation as the Intent row (`_layout.tsx:221`).
+  - `[low]` `[reject]` Edge: key removed on failed DELETE — same as the Blind row.
+  - `[low]` `[patch]` Edge: re-sending to the same number within 60 s — returns to the code step without a request.
+  - `[low]` `[patch]` Edge: second sign-in screen stacked after reset — `router.back()` when possible.
+  - `[low]` `[patch]` Edge: username-only member has no recovery path — hint to ask the owner.
+  - `[low]` `[patch]` Edge: invite shown on owner/manager detail — hidden for owner and superadmin targets.
+  - `[low]` `[reject]` Edge: a second confirmDialog replacing the account-switch question leaves the promise pending — nothing else opens a dialog during sign-in; a queue in the shared host is more than a direct fix.
+  - `[low]` `[reject]` Edge: deletion request succeeds but the profile refetch fails — needs a network drop in the same second; the next profile read (pull-to-refresh, start) shows the banner.
+  - `[low]` `[reject]` Edge: DELETION_PENDING with a null date — `AccountDeletionService.requestDeletion` always sets the date; only the legacy-import parking (+100 years) differs and it has a date too.
+  - `[maybe-false]` `[reject]` Edge: audit query failure → /auth/profile 500 — audit_log is a foundation table of every tenant (ensureFoundation before each request); if true it would be low.
+  - `[false]` `[reject]` Edge: "Dernière connexion" current session — same refutation as the Blind row.
+  - `[false]` `[reject]` Edge: technical social username overwritten breaks social mapping — social sign-in maps through `user_authenticators (provider, subject) → user_id`, not the username.
+  - `[medium]` `[patch]` Edge: company created via login Google/Apple without terms — same group as the Blind terms row.
+  - `[low]` `[patch]` Edge: O(log n) claim — same group as the NFR11 index row.
+  - `[maybe-false]` `[reject]` Edge: persisted paused mutations not hydrated at a cold-start login count 0 — PersistQueryClientProvider restores before the sign-in screens are usable; would be low if true.
+
 ## Design Notes
 
 Patterns. App: **adapter/mapper** at the API boundary (`auth.api.ts`, `user.api.ts`) keeps screens on app types; **pure functions** for every decision (identifier detection, invitation text, account-switch decision) so they are unit-tested without React; **promise-returning dialog host** (`confirmDialog` wrapped) for the account-switch question, same pattern as `chooseCompany`. Backend: **ports and adapters** — a read port for the last login keeps SQL out of the service; **constraint as source of truth** for username uniqueness (pre-check for the common case, unique index + `DuplicateKeyException` mapping for the race; the whole update rolls back).
@@ -134,3 +213,27 @@ Identifier rule (`toLoginIdentifier`): strip spaces, dots, dashes, parentheses; 
 
 **Manual checks (if no CLI):**
 - Release APK on `emulator-5554`, backend restarted with messaging off, scenarios filmed (`videos/P02-*.mp4`, index `videos/P02.md`), DB effects checked, screenshots read.
+
+## Auto Run Result
+
+**Summary.** Keevo V1 account/login parity in the RN app: V1 employees sign in by phone or username ("Je suis un commercial"), the owner gives an optional username to a phone-only member (really stored, server value written back), member phone shown and editable, voluntary password change (Profil), forgot password (code + new password), "Se déconnecter" on the forced change, terms checkbox at registration (kept on the device, also asked on the company step after a Google/Apple creation from the login screen) and read-only legal pages in Aide, account deletion keeps the owner signed in with a banner and "Annuler la suppression" (danger zone owner-only), push token removed at logout, question before erasing a previous account's unsent writes, real "Actif depuis" / "Dernière connexion", member activity card, invitation through the system share sheet (no password, Play Store link).
+
+**Commits.**
+- App (AI/bref `feat/parite-keevo-v1`, pushed to origin): `1f7220edd35cb5c591535871537b4f02a4657f31` (implementation), `c0dcff8685cc4def41754c6a0766308bcd9f0023` (server values written back), `c5400dc4173575379ab7a65392861eaa47df5b4a` (review fixes).
+- Backend (`refonte/modulaire`): `d9ceb068987b07eec81c45ced793f647a6df8688` (PATCH /employees username; profile hasPassword, memberSince, lastLoginAt, scheduledDeletionAt), `4b8cc5cc5950c893f09c6c5959c3caad3e2f1958` (review: core V5 partial index `idx_audit_log_user_login`, controller and Postgres tests).
+
+**Files changed (main).**
+- Backend: `UpdateEmployeeRequestDto/Command/Service` (username step), `UserRepository(Adapter).updateUsername`, `AuditLabels` ("Identifiant"), `UserProfileData/Service/Response`, `AuthController.toProfileResponse`, `LastLoginQueryPort` + `JdbcLastLoginQueryAdapter`, `db/modules/core/V5__audit_log_user_login_index.sql`; tests `UpdateEmployeeServiceTest`, `UserProfileServiceTest`, `AuthControllerProfileTest`, `EmployeeControllerTest`, `JdbcLastLoginQueryAdapterPostgresIntegrationTest`, `UserUsernamePostgresIntegrationTest`, `FoundationMigrationsPostgresIntegrationTest`, tenant shape.
+- App: `lib/utils/login-identifier.ts`, `lib/utils/profile-fields.ts`, `lib/utils/password-rule.ts`, `lib/account-switch.ts`, `lib/previous-account-dialog.ts`, `lib/clear-local-data.ts`; `features/authentication/{api,hooks,screens}` (forgot-password screen, change-password modes, login label + link, register terms); `components/{account-deletion-banner,terms-acceptance}.tsx` (watcher removed); `constants/legal.ts`; `features/notification/api` (push token kept/removed); `features/user/{api,hooks,screens,utils}` (phone/username form, PATCH builder, server write-back, activity card, invitation); profile/settings/help/dashboard screens; fr + en keys; scripts `login-identifier`, `account-switch`, `invite-message`, `profile-fields`, `employee-patch` tests.
+
+**Review findings.** 54 rows (medium 12, low 30, false 10, maybe-false 2): 29 patch rows applied (index + adapter IT, controller/Postgres/mapping/PATCH-body tests, terms persistence and company-step gate, activity error state, form rules, forgot-password navigation, invite link/target, deletion-pending password row, orphan keys, refetch and select tidy-ups); 5 deferred (notification deletion and deep links → mp05; typed-phone deletion confirmation and suspended/trial banners → mp08; account-switch cancel-path and logout token tests → mp09 / mp05); 20 rejected with reasons in the triage log (fallback locales by spec, last login = last sign-in by definition, no WatermelonDB sync to count, devices re-save the token at each start, rare low cases needing more than a direct fix).
+
+**Follow-up review recommendation: true.** Patched medium entries: 7 groups (index, terms gate, activity error, profile JSON, PATCH username controller, adapter SQL, updateUsername SQL, profile mapping, PATCH body); high 0. Unverified risk: the terms gate on the company step after a Google/Apple creation from the login screen was not played on a device (no Google account on the emulator); the push-token removal and the previous-account question were only code-reviewed and unit-tested (no push token on the emulator, no reliable way to keep a write pending across a session loss).
+
+**Verification.**
+- Backend, one class at a time: UpdateEmployeeServiceTest 19, UserProfileServiceTest 11, AuthControllerProfileTest 4, EmployeeControllerTest 30, JdbcLastLoginQueryAdapterPostgresIntegrationTest 2, UserUsernamePostgresIntegrationTest 5, FoundationMigrationsPostgresIntegrationTest and TenantShapePostgresIntegrationTest green.
+- App: `pnpm test` 33/33; `tsc` 42 errors, all in untouched pre-existing files (baseline 43); `pnpm lint` 5 problems (baseline 6), none new.
+- Device: release APK (x86_64 + arm64) of `c5400dc` on emulator-5554, backend restarted with WhatsApp noop (log: "provider noop: stub (nothing sent)"), V5 index present in `kv_6s0qob`. Videos P02-01..10 (pre-review build) and P02-11..12 (review build), index `test-artifacts/parite-v1-bref-2026-11-28/videos/P02.md`, all OK. DB: Awa `username` NULL, phone `+237690000050`, `Vendeur2024` accepted by `/auth/login`, no forced change; `kv_6s0qob` ACTIVE.
+
+**Residual risks.** Awa's last name is "Ngono" in `keevo_e2e` (changed on 2026-11-28 04:37 UTC, before this story's run); the SPEC calls her "Awa Ngo". Bref light link colour on the terms line is the pre-existing Bref yellow (contrast tracked in mp10). iOS not tested.
+
