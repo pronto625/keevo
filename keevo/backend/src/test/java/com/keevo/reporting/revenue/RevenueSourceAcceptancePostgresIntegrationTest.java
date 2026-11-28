@@ -253,6 +253,35 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("P03 — /sales/summary: bridged sale once, pending / cancelled / other day not counted, store and "
+            + "seller filters")
+    void salesSummaryBridgedOnce() {
+        UUID bridged = sale(TODAY_10H, 3000, "COMPLETED");
+        invoiceIn(store, "ISSUED", TODAY, 3000, bridged, line(product, 1, 3000)); // its automatic invoice
+        sale(TODAY_10H, 2000, "COMPLETED");
+        sale(TODAY_10H, 7000, "PENDING_VALIDATION");
+        sale(TODAY_10H, 9000, "CANCELLED");
+        sale(TODAY_10H.minusSeconds(86_400), 500, "COMPLETED"); // yesterday
+        Instant from = Instant.parse("2026-11-10T23:00:00Z"); // 11/11 00:00 WAT
+        Instant to = Instant.parse("2026-11-11T23:00:00Z");
+        var summary = new com.keevo.commerce.sale.adapter.out.persistence.impl.JdbcSalesSummary(jdbc,
+                FixedRevenueSource.ALL);
+
+        var every = summary.summarize(from, to, null, null);
+        assertThat(every.amount()).isEqualTo(5000);
+        assertThat(every.count()).isEqualTo(2);
+        assertThat(every.paidAmount()).isEqualTo(5000);
+        assertThat(every.amount()).isEqualTo(dashboard(FixedRevenueSource.ALL).todayCA()); // same as the dashboard
+        assertThat(summary.summarize(from, to, store, seller).amount()).isEqualTo(5000);
+        assertThat(summary.summarize(from, to, store, UUID.randomUUID()).count()).isZero();
+        assertThat(summary.summarize(from, to, UUID.randomUUID(), null).amount()).isZero();
+        // a V1 tenant (sales only): the same figure
+        assertThat(new com.keevo.commerce.sale.adapter.out.persistence.impl.JdbcSalesSummary(jdbc,
+                FixedRevenueSource.POS_ONLY).summarize(from, to, null, null).amount()).isEqualTo(5000);
+        assertThat(summary.summarize(from.minusSeconds(86_400), to, null, null).amount()).isEqualTo(5500);
+    }
+
+    @Test
     @DisplayName("mixed tenant: POS sale + document + bridged invoice + credit note, every consumer agrees")
     void mixedEveryConsumerAgrees() {
         UUID sale = sale(TODAY_10H, 3000, "COMPLETED");
