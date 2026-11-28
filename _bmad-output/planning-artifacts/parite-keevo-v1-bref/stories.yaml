@@ -151,3 +151,20 @@ stories:
       (423 SYNC_REQUIRED) like V1. Consider encrypting the local DB (SQLCipher) if feasible in Expo without breaking
       upgrade; if not, document. Videos: kill app with 3 queued writes offline → restart → online → each sent once;
       a refused sale shown in blocked operations.
+
+  - id: P10
+    key: mp10-contraste-aa-bref
+    title: WCAG AA contrast of the Bref palette (pre-existing colours used as text)
+    description: >
+      Routed from the P01 review (2026-11-28). P01 keeps the Bref look unchanged (decision of 2026-11-28: Bref pixels
+      must not move), so the Bref palette's pre-existing low-contrast colours were left as they were. Scope: decide
+      with the Bref owner whether to darken the Bref colours that are used as text, then route them through the
+      existing tokens (`constants/theme.ts` Themes.bref, `global.css` light/dark) without touching Keevo.
+      Items:
+      - [ ] [Deferred-from: P01 review, 2026-11-28] Bref light status/brand colours used as text fail AA on the light
+        background: successStrong #16A34A 3.3:1, warningStrong #D97706 3.2:1, primaryStrong #B38000 3.5:1,
+        success #34C759 2.2:1, primary #FFBD18 1.7:1 (e.g. date-picker action) [constants/theme.ts brefLight]
+      - [ ] [Deferred-from: P01 review, 2026-11-28] Bref dark error #DC3545 on the dark background is 3.9:1
+        [constants/theme.ts brefDark.error]
+      Interim AC: every Bref text token used as text reaches 4.5:1 (3:1 for icons / ≥ 18 pt) on its background in light
+      and dark, Keevo unchanged, screenshots of the affected screens before/after.
